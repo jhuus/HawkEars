@@ -14,11 +14,12 @@ class Test001(base_config.BaseConfig):
     def __init__(self):
         self.train.num_epochs = 2
 
-# map config names to configs
-configs = {
-    "base": base_config.BaseConfig(),
-    "test001": Test001()
-}
+# list for checking command-line argument
+configs = ["base", "test001"]
 
+# set a configuration based on the name
 def set_config(name):
-    cfg = configs[name]
+    if name == "base":
+        cfg = base_config.BaseConfig()
+    elif name == "test001":
+        cfg = Test001()
