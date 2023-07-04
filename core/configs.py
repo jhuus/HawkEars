@@ -1,6 +1,6 @@
 # Each configuration is a dataclass that sets the members it needs,
 # as in the Test001 example below. To add a config, add a new dataclass here
-# and then add it to the configs dict at the bottom so it can be selected.
+# and then add it to the configs list and the set_config method at the bottom.
 # This approach supports typeahead and error-checking, which are very useful.
 
 from dataclasses import dataclass
