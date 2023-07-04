@@ -1,0 +1,23 @@
+Noise,Noise
+
+American Crow,AMCR
+American Robin,AMRO
+Baltimore Oriole,BAOR
+Black-capped Chickadee,BCCH
+Blue Jay,BLJA
+Canada Goose,CANG
+Cedar Waxwing,CEDW
+Common Grackle,COGR
+Common Yellowthroat,COYE
+Eastern Wood-Pewee,EAWP
+Gray Catbird,GRCA
+Great Crested Flycatcher,GCFL
+Northern Flicker,NOFL
+Ovenbird,OVEN
+Red-eyed Vireo,REVI
+Red-winged Blackbird,RWBL
+Scarlet Tanager,SCTA
+Tufted Titmouse,TUTI
+Veery,VEER
+Wood Thrush,WOTH
+
