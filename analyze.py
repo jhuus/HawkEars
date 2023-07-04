@@ -3,21 +3,17 @@
 # with the class predictions.
 
 import argparse
-import gc
 import logging
-from multiprocessing import Process
 import os
 import sys
 import time
 
 import numpy as np
-import timm
 import torch
 import torch.nn.functional as F
 
 from core import audio
 from core import cfg
-from core import data_module
 from core import util
 from model import main_model
 
@@ -97,10 +93,9 @@ class Analyzer:
 
     def _call_model(self, specs):
         start_idx = 0
-        max_count = 400
         merged_predictions = None
         while start_idx < len(specs):
-            end_idx = min(start_idx + max_count, len(specs))
+            end_idx = min(start_idx + cfg.infer.analyze_group_size, len(specs))
             with torch.no_grad():
                 torch_specs = torch.Tensor(specs[start_idx:end_idx]).to(self.device)
                 predictions = self.model(torch_specs)
@@ -114,7 +109,7 @@ class Analyzer:
                 else:
                     merged_predictions = np.concatenate((merged_predictions, predictions))
 
-                start_idx += max_count
+                start_idx += cfg.infer.analyze_group_size
 
         return merged_predictions
 
@@ -264,7 +259,7 @@ class Analyzer:
 if __name__ == '__main__':
     # command-line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-b', '--band', default=False, action='store_true', help="Flag to use banding codes instead of species names in labels.")
+    parser.add_argument('-b', '--band', default=cfg.infer.use_banding_codes, action='store_true', help="Flag to use banding codes instead of species names in labels.")
     parser.add_argument('-c', '--ckpt', type=str, default=cfg.misc.main_ckpt_path, help=f"Checkpoint path. Default = {cfg.misc.main_ckpt_path}.")
     parser.add_argument('-d', '--debug', default=False, action='store_true', help='Flag for debug mode (analyze one spectrogram only, and output several top candidates).')
     parser.add_argument('-e', '--end', type=str, default='', help="Optional end time in hh:mm:ss format, where hh and mm are optional.")
