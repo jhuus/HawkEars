@@ -10,36 +10,21 @@ currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentfram
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 
-from core import config as cfg
-from core import plot
+from core import cfg
+from core import metrics
 from core import util
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' # 1 = no info, 2 = no warnings, 3 = no errors
-os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
+from model import main_model
+from core import plot
 
 import numpy as np
 import pandas as pd
 import pickle
 from sklearn import metrics
-import tensorflow as tf
-from tensorflow import keras
-
-# BirdCLEF-2023 used this metric with pad_rows=5.
-# See https://www.kaggle.com/competitions/birdclef-2023/overview/evaluation.
-# Smaller padding factors make sense for more balanced data, but using pad_rows=0
-# causes problems if any label columns have no ones (i.e. a class with no occurrences).
-def padded_cmap(solution, submission, pad_rows=1):
-    if pad_rows > 0:
-        ones = np.ones((1, solution.shape[1]))
-    for i in range(pad_rows):
-        solution = np.append(solution, ones, axis=0)
-        submission = np.append(submission, ones, axis=0)
-
-    return metrics.average_precision_score(solution, submission, average='macro')
+import torch
 
 # generate one-hot labels from a spectrogram dataframe;
 # if multi_label, some entries might have multiple labels
-def _one_hot(spec_df, num_classes, multi_label=False):
+def one_hot(spec_df, num_classes, multi_label=False):
     num_specs = len(spec_df)
     label = np.zeros((num_specs, num_classes), dtype=np.int32)
 
@@ -94,62 +79,85 @@ def _one_hot(spec_df, num_classes, multi_label=False):
 
     return spec_df, label
 
+# normalize so max value is 1
+def normalize_spec(spec):
+    max = spec.max()
+    if max > 0:
+        spec = spec / max
+
+    return spec
+
 parser = argparse.ArgumentParser()
-parser.add_argument('-c', type=str, default='ckpt_m', help='Checkpoint name. Default = ckpt_m.')
+parser.add_argument('-c', type=str, default='../data/main.ckpt', help='Checkpoint path.')
 args = parser.parse_args()
-ckpt_path = f"../data/{args.c}"
+ckpt_path = args.c
 
 # load the test dataframe and generate one-hot labels
-classes = util.get_class_list("../data/classes.txt")
-pickle_file = open("/home/jhuus/code/torch/HawkEars/data/ssw0-test.pickle", 'rb')
+pickle_file = open("../data/ssw0-test.pickle", 'rb')
 spec_dict = pickle.load(pickle_file)
 test_df = spec_dict['spec']
 
 class_df = spec_dict['class']
-num_classes = len(class_df)
-test_df, labels = _one_hot(test_df, num_classes, multi_label=True)
+test_classes = class_df['name'].to_list()
+test_df, labels = one_hot(test_df, len(test_classes), multi_label=True)
 specs = test_df['spec']
 
 # get predictions, one block at a time to avoid running out of GPU memory
-model = keras.models.load_model(ckpt_path, compile=False)
+if torch.cuda.is_available():
+    device = 'cuda'
+    print(f"Using GPU")
+else:
+    device = 'cpu'
+    print(f"Using CPU")
+
+model = main_model.MainModel.load_from_checkpoint(ckpt_path)
+model.eval() # set inference mode
 
 block_size = 100
-predictions = np.zeros((len(specs), num_classes))
+train_classes = util.get_class_list("../data/classes.txt")
+predictions = np.zeros((len(specs), len(train_classes)))
 for start_idx in range(0, len(specs), block_size):
     end_idx = start_idx + min(block_size, len(specs) - start_idx)
     curr_len = end_idx - start_idx
-    spec_array = np.zeros((curr_len, cfg.spec_height, cfg.spec_width, 1))
+    spec_array = np.zeros((curr_len, 1, cfg.audio.spec_height, cfg.audio.spec_width))
     for i in range(curr_len):
-        spec_array[i] = util.expand_spectrogram(specs[start_idx + i])
+        spec = util.expand_spectrogram(specs[start_idx + i])
+        spec_array[i] = spec.reshape((1, cfg.audio.spec_height, cfg.audio.spec_width)).astype(np.float32)
 
-    curr_predictions = model.predict(spec_array, verbose=0)
-    for i in range(start_idx, end_idx):
-        predictions[i] = curr_predictions[i - start_idx]
+    with torch.no_grad():
+        torch_specs = torch.Tensor(spec_array).to(device)
+        curr_predictions = model(torch_specs)
+        curr_predictions = torch.sigmoid(curr_predictions).cpu().numpy()
 
-# remove the 1st column (Noise), since there are not test labels for that,
-# and we want to calculate cMAP for bird species only
-for i in range(1): # change 1 to 3 to remove 1st three columns e.g.
-    labels = np.delete(labels, 0, axis=1)
-    predictions = np.delete(predictions, 0, axis=1)
+        for i in range(start_idx, end_idx):
+            predictions[i] = curr_predictions[i - start_idx]
 
-# calculate and print the cMAP metric
-cmap = padded_cmap(labels, predictions, pad_rows=0)
-print(f"Overall cMAP = {cmap:.4f}")
+# ignore classes that appear in training data but not in test data
+num_deleted = 0
+for i, name in enumerate(train_classes):
+    if name not in test_classes:
+        predictions = np.delete(predictions, i - num_deleted, axis=1)
+        num_deleted += 1
 
-# calculate each species' individual cMAP
-species_cmap = {}
-for i, class_name in enumerate(classes):
-    if class_name in ['Noise', 'Other']:
-        continue
+# save labels and predictions for analysis / debugging
+label_df = pd.DataFrame(labels)
+label_df.to_csv('labels.csv', index=False)
 
-    species_labels = labels[:, i - 2] # since we deleted the first two columns
-    print(class_name, np.sum(species_labels))
-    species_preds = predictions[:, i - 2]
-    species_cmap[class_name] = padded_cmap(species_labels, species_preds, pad_rows=0)
+pred_df = pd.DataFrame(predictions)
+pred_df.to_csv('predictions.csv', index=False)
 
-with open("species_cmap.csv", 'w') as out_file:
-    out_file.write("Species,cMAP\n")
-    for species_name in sorted(species_cmap.keys()):
-        out_file.write(f"{species_name},{species_cmap[species_name]:.4f}\n")
+# calculate and print the MAP metric
+map = metrics.average_precision_score(labels, predictions)
+print(f"Overall MAP = {map:.4f}")
 
-print("See species_cmap.csv for cMAP per species")
+# output each species' individual AP
+ap = metrics.average_precision_score(labels, predictions, average=None)
+with open("species_ap.csv", 'w') as out_file:
+    out_file.write("Species,AP\n")
+    i = 0
+    for species_name in test_classes:
+        if species_name != "Other":
+            out_file.write(f"{species_name},{ap[i]:.4f}\n")
+            i += 1
+
+print("See species_ap.csv for AP per species")
