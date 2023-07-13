@@ -46,7 +46,7 @@ class Training:
 
     # data augmentation
     augmentation = True
-    prob_mixup = 0
+    prob_mixup = 0.35
     actual_mixup = False    # if true, use actual mixup logic, else do a simple unweighted merge
     prob_white_noise = 0
     prob_real_noise = 0.35
@@ -68,18 +68,17 @@ class Inference:
     min_location_freq = .0001    # ignore if species frequency less than this for location/week
     file_date_regex = '\S+_(\d+)_.*' # regex to extract date from file name (e.g. HNCAM015_20210529_161122.mp3)
     file_date_regex_group = 1    # use group at offset 1
-    analyze_group_size = 100     # do this many files, then reset to avoid running out of GPU memory
+    analyze_group_size = 200     # do this many spectrograms at a time to avoid running out of GPU memory
     frequency_db = 'frequency'   # eBird barchart data, i.e. species report frequencies
 
 @dataclass
 class Miscellaneous:
-    main_ckpt_path = None               # multi-label model checkpoint used in inference
+    main_ckpt_path = 'data/main.ckpt'   # multi-label model checkpoint used in inference
     search_ckpt_path = None             # single-label model checkpoint used in searching and clustering
-    classes_file = 'data/classes.txt'   # list of classes used in training and analysis
+    classes_file = 'data/classes.txt'   # list of classes used to generate pickle files
     ignore_file = 'data/ignore.txt'     # classes listed in this file are ignored in analysis
     train_pickle = 'data/ssw0-train.pickle'
     test_pickle = 'data/ssw0-test.pickle'
-    test_ignore_classes = [0]           # ignore these class indexes for test metric
 
 @dataclass
 class BaseConfig:
