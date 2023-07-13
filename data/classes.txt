@@ -1,4 +1,6 @@
 Noise,Noise
+Mashup,Mashup
+Other,Other
 
 American Crow,AMCR
 American Robin,AMRO
@@ -9,15 +11,28 @@ Canada Goose,CANG
 Cedar Waxwing,CEDW
 Common Grackle,COGR
 Common Yellowthroat,COYE
+Eastern Kingbird,EAKI
+Eastern Towhee,EATO
 Eastern Wood-Pewee,EAWP
+Field Sparrow,FISP
 Gray Catbird,GRCA
 Great Crested Flycatcher,GCFL
+Hermit Thrush,HETH
+Herring Gull,HERG
 Northern Flicker,NOFL
 Ovenbird,OVEN
+Palm Warbler,PAWA
+Pine Grosbeak,PIGR
+Red Crossbill,RECR
 Red-eyed Vireo,REVI
 Red-winged Blackbird,RWBL
+Ring-billed Gull,RBGU
 Scarlet Tanager,SCTA
+Swamp Sparrow,SWSP
 Tufted Titmouse,TUTI
 Veery,VEER
+White-throated Sparrow,WTSP
 Wood Thrush,WOTH
+Yellow Warbler,YEWA
+Yellow-rumped Warbler,YRWA
 
