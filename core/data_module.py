@@ -21,45 +21,58 @@ class DataModule(pl.LightningDataModule):
     def load_data(self):
         pickle_file = open(cfg.misc.train_pickle, 'rb')
         spec_dict = pickle.load(pickle_file)
-        self.spec_df = spec_dict['spec']
-        self.class_df = spec_dict['class']
+        self.train_spec_df = spec_dict['spec']
+        self.train_class_df = spec_dict['class']
+        self.train_class_names = self.train_class_df['name'].to_list()
+        self.train_class_codes = self.train_class_df['code'].to_list() # used by analyze.py
 
         # convert class indexes to one-hot labels
-        self.num_specs = len(self.spec_df)
-        self.num_classes = len(self.class_df)
-        self.spec_df, self.label = self._one_hot(self.spec_df, self.num_classes)
+        self.num_train_specs = len(self.train_spec_df)
+        self.num_train_classes = len(self.train_class_df)
+        self.train_spec_df, self.train_label = self._one_hot(self.train_spec_df, test=False)
 
         # assign to folds
         if cfg.train.num_folds > 1:
-            self.spec_df['fold'] = np.zeros(self.num_specs)
+            self.train_spec_df['fold'] = np.zeros(self.num_train_specs)
             fold = 0
-            for i in range(self.num_specs):
-                self.spec_df.loc[i, 'fold'] = fold
+            for i in range(self.num_train_specs):
+                self.train_spec_df.loc[i, 'fold'] = fold
                 fold = (fold + 1) % cfg.train.num_folds
 
         # load test data, if any is provided
         if cfg.misc.test_pickle is None:
             self.test_set = None
             self.test_loader = None
+            self.test_class_names = None
         else:
             pickle_file = open(cfg.misc.test_pickle, 'rb')
             spec_dict = pickle.load(pickle_file)
             test_df = spec_dict['spec']
-            test_df, test_label = self._one_hot(test_df, self.num_classes, multi_label=True)
+            test_class_df = spec_dict['class']
+            self.test_class_names = test_class_df['name'].to_list()
+            test_df, test_label = self._one_hot(test_df, test=True)
             test_indexes = np.arange(len(test_df), dtype=np.int32)
-            self.test_set = dataset.CustomDataset(test_df, test_label, self.class_df, test_indexes, training=False)
+            self.test_set = dataset.CustomDataset(test_df, test_label, self.train_class_df, test_indexes, training=False)
             self.test_loader = DataLoader(self.test_set, batch_size=cfg.train.batch_size, num_workers=4, shuffle=False)
 
     # generate one-hot labels from a spectrogram dataframe;
     # if multi_label, some entries might have multiple labels
-    def _one_hot(self, spec_df, num_classes, multi_label=False):
+    def _one_hot(self, spec_df, test=False, multi_label=False):
         num_specs = len(spec_df)
-        label = np.zeros((num_specs, num_classes), dtype=np.int32)
+        label = np.zeros((num_specs, self.num_train_classes), dtype=np.int32)
+
+        # map class indexes to training class indexes
+        class_indexes = [i for i in range(self.num_train_classes)]
+        if test:
+            train_classes = self.train_class_df['name'].to_list()
+            for i, name in enumerate(self.test_class_names):
+                class_indexes[i] = train_classes.index(name)
 
         if not multi_label:
             # easy case: one label per entry
             for i in range(num_specs):
                 class_index = spec_df.loc[i, 'class_index']
+                class_index = class_indexes[class_index]
                 label[i][class_index] = 1
 
             return spec_df, label
@@ -82,7 +95,7 @@ class DataModule(pl.LightningDataModule):
         new_spec = [0 for i in range(num_specs)]
         new_rec_name = ['' for i in range(num_specs)]
         new_offset = [0 for i in range(num_specs)]
-        label = np.zeros((num_specs, num_classes), dtype=np.int32)
+        label = np.zeros((num_specs, self.num_train_classes), dtype=np.int32)
 
         for i, spec_name in enumerate(sorted(spec_names.keys())):
             # get the common fields from the first spec
@@ -94,6 +107,7 @@ class DataModule(pl.LightningDataModule):
             # create the one-hot label
             for spec_idx in spec_names[spec_name]:
                 class_idx = spec_df.loc[spec_idx, 'class_index']
+                class_idx = class_indexes[class_idx]
                 label[i][class_idx] = 1
 
         spec_df = pd.DataFrame(columns=['spec', 'rec_name', 'offset', 'spec_index'])
@@ -107,23 +121,23 @@ class DataModule(pl.LightningDataModule):
     def prepare_fold(self, k, num_folds):
         if num_folds > 1:
             # assign to val if spec_index % num_folds == k, else assign to train
-            train_df = self.spec_df.loc[(self.spec_df['spec_index'] % cfg.train.num_folds) != k]
-            val_df = self.spec_df.loc[(self.spec_df['spec_index'] % cfg.train.num_folds) == k]
+            train_df = self.train_spec_df.loc[(self.train_spec_df['spec_index'] % cfg.train.num_folds) != k]
+            val_df = self.train_spec_df.loc[(self.train_spec_df['spec_index'] % cfg.train.num_folds) == k]
 
             train_indexes = train_df['spec_index'].to_numpy()
             val_indexes = val_df['spec_index'].to_numpy()
         else:
             if cfg.train.val_portion == 0:
                 # assign all specs to training and none to validation
-                train_indexes = np.arange(self.num_specs, dtype=np.int32)
+                train_indexes = np.arange(self.num_train_specs, dtype=np.int32)
                 val_indexes = np.zeros((0,), dtype=np.int32)
             else:
                 # split each class into train/val based on val_portion
                 train_indexes = np.zeros((0,), dtype=np.int32)
                 val_indexes = np.zeros((0,), dtype=np.int32)
                 total = 0 # number of spectrograms in preceding classes
-                for i in range(self.num_classes):
-                    num_class_specs = len(self.spec_df.loc[self.spec_df['class_index'] == i])
+                for i in range(self.num_train_classes):
+                    num_class_specs = len(self.train_spec_df.loc[self.train_spec_df['class_index'] == i])
                     val_count =  int(num_class_specs * (cfg.train.val_portion))
                     train_count = num_class_specs - val_count
                     permutation = np.random.permutation(np.arange(total, total + num_class_specs))
@@ -132,14 +146,14 @@ class DataModule(pl.LightningDataModule):
                     total += num_class_specs
 
         # datasets get complete dataframe and list of relevant indexes
-        self.train_set = dataset.CustomDataset(self.spec_df, self.label, self.class_df, train_indexes, training=True)
+        self.train_set = dataset.CustomDataset(self.train_spec_df, self.train_label, self.train_class_df, train_indexes, training=True)
         self.train_loader = DataLoader(self.train_set, batch_size=cfg.train.batch_size, num_workers=4, shuffle=True)
 
-        self.val_set = dataset.CustomDataset(self.spec_df, self.label, self.class_df, val_indexes, training=False)
+        self.val_set = dataset.CustomDataset(self.train_spec_df, self.train_label, self.train_class_df, val_indexes, training=False)
         self.val_loader = DataLoader(self.val_set, batch_size=cfg.train.batch_size, num_workers=4, shuffle=False)
 
     def class_weights(self):
-        labels = self.spec_df['class_index'].to_numpy()
+        labels = self.train_spec_df['class_index'].to_numpy()
         class_weights=sklearn.utils.class_weight.compute_class_weight('balanced', classes=np.unique(labels), y=labels)
         class_weights = np.sqrt(class_weights) # even out the weights a little
         return torch.tensor(class_weights, dtype=torch.float)
@@ -162,4 +176,4 @@ class DataModule(pl.LightningDataModule):
         return
 
     def class_index(self):
-        return self.spec_df['class_index'].to_numpy()
+        return self.train_spec_df['class_index'].to_numpy()
