@@ -59,8 +59,6 @@ class Analyzer:
         elif not os.path.exists(self.output_path):
             os.makedirs(self.output_path)
 
-        self.class_infos = self._get_class_infos()
-
         if torch.cuda.is_available():
             self.device = 'cuda'
             logging.info(f"Using GPU")
@@ -80,14 +78,15 @@ class Analyzer:
             logging.error(f"Error: {input_path} is not a directory or an audio file")
             quit()
 
+    # get class names and codes from the model, which gets them from the checkpoint
     def _get_class_infos(self):
-        classes = util.get_class_list(class_file_path=cfg.misc.classes_file)
-        class_dict = util.get_class_dict(class_file_path=cfg.misc.classes_file)
+        class_names = self.model.train_class_names
+        class_codes = self.model.train_class_codes
         ignore_list = util.get_file_lines(cfg.misc.ignore_file)
 
         class_infos = []
-        for class_name in classes:
-            class_infos.append(ClassInfo(class_name, class_dict[class_name], class_name in ignore_list))
+        for i, class_name in enumerate(class_names):
+            class_infos.append(ClassInfo(class_name, class_codes[i], class_name in ignore_list))
 
         return class_infos
 
@@ -252,6 +251,7 @@ class Analyzer:
 
     def run(self, file_list):
         self.model = main_model.MainModel.load_from_checkpoint(cfg.misc.main_ckpt_path)
+        self.class_infos = self._get_class_infos()
         self.model.eval() # set inference mode
         for file_path in file_list:
             self._analyze_file(file_path)
@@ -259,7 +259,7 @@ class Analyzer:
 if __name__ == '__main__':
     # command-line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-b', '--band', default=cfg.infer.use_banding_codes, action='store_true', help="Flag to use banding codes instead of species names in labels.")
+    parser.add_argument('-b', '--band', type=int, default=1 * cfg.infer.use_banding_codes, help="If 1, use banding codes labels. If 0, use common names. Default = {1 * cfg.infer.use_banding_codes}.")
     parser.add_argument('-c', '--ckpt', type=str, default=cfg.misc.main_ckpt_path, help=f"Checkpoint path. Default = {cfg.misc.main_ckpt_path}.")
     parser.add_argument('-d', '--debug', default=False, action='store_true', help='Flag for debug mode (analyze one spectrogram only, and output several top candidates).')
     parser.add_argument('-e', '--end', type=str, default='', help="Optional end time in hh:mm:ss format, where hh and mm are optional.")
