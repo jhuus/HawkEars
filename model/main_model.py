@@ -27,18 +27,22 @@ def get_loss_fn(weights):
         return torch.nn.CrossEntropyLoss(weight=weights, label_smoothing=cfg.train.label_smoothing)
 
 class MainModel(LightningModule):
-    def __init__(self, model_name=cfg.train.model_name, pretrained=cfg.train.pretrained, num_classes=0, weights=None):
+    def __init__(self, train_class_names, train_class_codes, test_class_names, weights, model_name=cfg.train.model_name, pretrained=cfg.train.pretrained):
         super().__init__()
         self.save_hyperparameters()
-        self.num_classes = num_classes
+        self.num_train_classes = len(train_class_names)
+        self.train_class_names = train_class_names
+        self.train_class_codes = train_class_codes
+
+        self.test_class_names = test_class_names
         self.weights = weights
         self.labels = None
         self.predictions = None
 
         if model_name.startswith('custom_efficientnetv2'):
-            self.base_model = efficientnet_v2.get_model(model_name[-2:], num_classes=num_classes)
+            self.base_model = efficientnet_v2.get_model(model_name[-2:], num_classes=self.num_train_classes)
         else:
-            self.base_model = timm.create_model(model_name, pretrained=pretrained, in_chans=1, num_classes=num_classes)
+            self.base_model = timm.create_model(model_name, pretrained=pretrained, in_chans=1, num_classes=self.num_train_classes)
 
     # run a batch through the model
     def forward(self, x):
@@ -64,10 +68,10 @@ class MainModel(LightningModule):
 
         if cfg.train.multi_label:
             preds = torch.sigmoid(logits)
-            acc = accuracy(preds, y, task='multilabel', num_labels=self.num_classes)
+            acc = accuracy(preds, y, task='multilabel', num_labels=self.num_train_classes)
         else:
             preds = logits
-            acc = accuracy(preds, y, task='multiclass', num_classes=self.num_classes)
+            acc = accuracy(preds, y, task='multiclass', num_classes=self.num_train_classes)
 
         self.log(f"val_loss", loss, prog_bar=True)
         self.log(f"val_acc", acc, prog_bar=True)
@@ -108,21 +112,30 @@ class MainModel(LightningModule):
         if self.labels is None:
             return
 
-        for i in range(len(cfg.misc.test_ignore_classes)):
-            index = cfg.misc.test_ignore_classes[i] - i # subtract i to account for previous deletions
-            self.labels = np.delete(self.labels, index, axis=1)
-            self.predictions = np.delete(self.predictions, index, axis=1)
+        # ignore classes that appear in training data but not in test data
+        num_deleted = 0
+        for i, name in enumerate(self.train_class_names):
+            if name not in self.test_class_names:
+                self.labels = np.delete(self.labels, i - num_deleted, axis=1)
+                self.predictions = np.delete(self.predictions, i - num_deleted, axis=1)
+                num_deleted += 1
 
+        label_df = pd.DataFrame(self.labels)
+        label_df.to_csv('labels.csv', index=False)
 
-        test_cmap = metrics.padded_cmap(self.labels, self.predictions, pad_rows=0)
-        self.log(f"test_cmap", test_cmap, prog_bar=True)
+        pred_df = pd.DataFrame(self.predictions)
+        pred_df.to_csv('predictions.csv', index=False)
+
+        # "map" stands for "macro-averaged average precision"
+        test_map = metrics.average_precision_score(self.labels, self.predictions)
+        self.log(f"test_map", test_map, prog_bar=True)
 
     def on_train_epoch_end(self):
         if self.labels is None:
             return
 
-        val_cmap = metrics.padded_cmap(self.labels, self.predictions)
-        self.log(f"val_cmap", val_cmap, prog_bar=True)
+        val_map = metrics.average_precision_score(self.labels, self.predictions)
+        self.log(f"val_map", val_map, prog_bar=True)
 
     # define optimizers and LR schedulers
     def configure_optimizers(self):
