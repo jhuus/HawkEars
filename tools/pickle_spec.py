@@ -40,7 +40,13 @@ else:
     print(f"Configuration '{cfg_name}' not found.")
     quit()
 
-classes = util.get_class_list(f"../data/{args.classes}.txt")
+# get list of class names and list of class codes and ensure order is retained
+class_names = util.get_class_list(f"../data/{args.classes}.txt")
+classes_dict = util.get_class_dict(f"../data/{args.classes}.txt")
+class_codes = []
+for name in class_names:
+    class_codes.append(classes_dict[name])
+
 db_path = f"../data/{args.dbname}.db"
 logging.info(f'Opening database {db_path}')
 db = database.Database(db_path)
@@ -55,9 +61,9 @@ for r in results:
 logging.info('Counting spectrograms per class')
 total_specs = 0
 num_spectrograms = []
-for i in range(len(classes)):
-    count = db.get_spectrogram_count(classes[i])
-    logging.info(f'# spectrograms for {classes[i]}: {count}')
+for i in range(len(class_names)):
+    count = db.get_spectrogram_count(class_names[i])
+    logging.info(f'# spectrograms for {class_names[i]}: {count}')
     num_spectrograms.append(count)
     total_specs += count
 
@@ -71,8 +77,8 @@ spec_index = [i for i in range(total_specs)]
 class_index = np.zeros((total_specs, ), dtype=np.int32)
 
 idx = 0
-for i in range(len(classes)):
-    results = db.get_recording_by_subcat_name(classes[i])
+for i in range(len(class_names)):
+    results = db.get_recording_by_subcat_name(class_names[i])
     for r in results:
         results2 = db.get_spectrogram('RecordingID', r.id)
         for r2 in results2:
@@ -84,7 +90,7 @@ for i in range(len(classes)):
 
 # create dataframes, then pickle a dict containing them
 spec_df = pd.DataFrame({'spec': spec, 'spec_index': spec_index, 'rec_name': rec_name, 'offset': offset, 'class_index': class_index})
-class_df = pd.DataFrame({'name': classes})
+class_df = pd.DataFrame({'name': class_names, 'code': class_codes})
 save_dict = {'spec': spec_df, 'class': class_df}
 
 pickle_file = open(args.output, 'wb')
