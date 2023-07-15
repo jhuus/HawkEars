@@ -46,7 +46,7 @@ model = main_model.MainModel.load_from_checkpoint(ckpt_path)
 model.eval() # set inference mode
 
 block_size = 100
-train_classes = util.get_class_list("../data/classes.txt")
+train_classes = model.train_class_names
 predictions = np.zeros((len(specs), len(train_classes)))
 for start_idx in range(0, len(specs), block_size):
     end_idx = start_idx + min(block_size, len(specs) - start_idx)
