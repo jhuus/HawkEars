@@ -26,20 +26,21 @@ class Audio:
 
 @dataclass
 class Training:
-    compile=False
+    compile = False
     mixed_precision = True  # usually improves performance, especially with larger models
     multi_label = True
     deterministic = True
     seed = 1
     learning_rate = .0025   # base learning rate
     batch_size = 32
-    #model_name = 'custom_efficientnetv2_a0' # 148K parameters
-    #model_name = 'custom_efficientnetv2_a3' # 1.4M parameters
     model_name = 'tf_efficientnetv2_b0' # 5.9M parameters
     pretrained = False
-    dropout = 0.2
+    dropout = None          # dropout, drop_rate and drop_path_rate are passed to model only if not None
+    drop_rate = None
+    drop_path_rate = None
     num_epochs = 10
-    label_smoothing = 0.1
+    save_last_n = 3         # save checkpoints for this many last epochs
+    label_smoothing = 0.15
     training_db = 'training' # name of training database
     num_folds = 1           # for k-fold cross-validation
     val_portion = 0         # used only if num_folds = 1
