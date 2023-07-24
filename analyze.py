@@ -160,7 +160,7 @@ class Analyzer:
     # get the list of spectrograms
     def _get_specs(self, start_seconds, end_seconds):
         self.offsets = np.arange(start_seconds, end_seconds + 1.0, 1.0).tolist()
-        specs = self.audio.get_spectrograms(self.offsets)
+        specs = self.audio.get_spectrograms(self.offsets, segment_len=cfg.audio.segment_len)
 
         spec_array = np.zeros((len(specs), 1, cfg.audio.spec_height, cfg.audio.spec_width))
         for i in range(len(specs)):
