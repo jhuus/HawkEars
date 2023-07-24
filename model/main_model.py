@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 
 from core import cfg, metrics
+from model import dla
 from model import efficientnet_v2
+from model import vovnet
 
 import numpy as np
 import pandas as pd
@@ -27,22 +29,44 @@ def get_loss_fn(weights):
         return torch.nn.CrossEntropyLoss(weight=weights, label_smoothing=cfg.train.label_smoothing)
 
 class MainModel(LightningModule):
-    def __init__(self, train_class_names, train_class_codes, test_class_names, weights, model_name=cfg.train.model_name, pretrained=cfg.train.pretrained):
+    def __init__(self, train_class_names, train_class_codes, test_class_names, weights, model_name, pretrained):
         super().__init__()
         self.save_hyperparameters()
         self.num_train_classes = len(train_class_names)
         self.train_class_names = train_class_names
         self.train_class_codes = train_class_codes
+        self.model_name = model_name # so it can be accessed after loading a checkpoint
 
         self.test_class_names = test_class_names
         self.weights = weights
         self.labels = None
         self.predictions = None
+        self.epoch_num = 0
 
-        if model_name.startswith('custom_efficientnetv2'):
-            self.base_model = efficientnet_v2.get_model(model_name[-2:], num_classes=self.num_train_classes)
+        # create a dict of optional keyword arguments to pass to base model
+        kwargs = {}
+        if cfg.train.dropout is not None:
+            kwargs.update(dict(dropout=cfg.train.dropout))
+
+        if cfg.train.drop_rate is not None:
+            kwargs.update(dict(drop_rate=cfg.train.drop_rate))
+
+        if cfg.train.drop_path_rate is not None:
+            kwargs.update(dict(drop_path_rate=cfg.train.drop_path_rate))
+
+        # create base model
+        if model_name.startswith('custom_dla'):
+            tokens = model_name.split('_')
+            self.base_model = dla.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
+        elif model_name.startswith('custom_efficientnetv2'):
+            tokens = model_name.split('_')
+            self.base_model = efficientnet_v2.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
+        elif model_name.startswith('custom_vovnet'):
+            tokens = model_name.split('_')
+            self.base_model = vovnet.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
         else:
-            self.base_model = timm.create_model(model_name, pretrained=pretrained, in_chans=1, num_classes=self.num_train_classes)
+            self.base_model = timm.create_model(model_name, pretrained=pretrained, in_chans=1,
+                                                num_classes=self.num_train_classes, **kwargs)
 
     # run a batch through the model
     def forward(self, x):
@@ -131,6 +155,9 @@ class MainModel(LightningModule):
         self.log(f"test_map", test_map, prog_bar=True)
 
     def on_train_epoch_end(self):
+        epoch_num = torch.tensor(self.epoch_num).type(torch.float32) # eliminates warning
+        self.log(f"epoch_num", epoch_num, prog_bar=False) # so we can save checkpoints for the last n epochs
+        self.epoch_num += 1
         if self.labels is None:
             return
 
