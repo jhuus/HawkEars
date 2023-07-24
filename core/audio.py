@@ -61,16 +61,16 @@ class Audio:
 
     # version of get_spectrograms that calls _get_raw_spectrogram separately per offset,
     # which is faster when just getting a few spectrograms from a large recording
-    def _get_spectrograms_multi_spec(self, signal, offsets, low_band=False):
-        last_offset = (len(signal) / cfg.audio.sampling_rate) - cfg.audio.segment_len
+    def _get_spectrograms_multi_spec(self, signal, offsets, segment_len, low_band=False):
+        last_offset = (len(signal) / cfg.audio.sampling_rate) - segment_len
         specs = []
         for offset in offsets:
             index = int(offset*cfg.audio.sampling_rate)
             if offset <= last_offset:
-                segment = signal[index:index + cfg.audio.segment_len * cfg.audio.sampling_rate]
+                segment = signal[index:index + segment_len * cfg.audio.sampling_rate]
             else:
                 segment = signal[index:]
-                pad_amount = cfg.audio.segment_len * cfg.audio.sampling_rate - segment.shape[0]
+                pad_amount = segment_len * cfg.audio.sampling_rate - segment.shape[0]
                 segment = np.pad(segment, ((0, pad_amount)), 'constant', constant_values=0)
 
             spec = self._get_raw_spectrogram(segment, low_band=low_band)
@@ -130,18 +130,18 @@ class Audio:
     # return list of spectrograms for the given offsets (i.e. starting points in seconds);
     # you have to call load() before calling this;
     # if raw_spectrograms array is specified, populate it with spectrograms before normalization
-    def get_spectrograms(self, offsets, segment_len=cfg.audio.segment_len, spec_exponent=cfg.audio.spec_exponent, low_band=False, multi_spec=False, raw_spectrograms=None):
+    def get_spectrograms(self, offsets, segment_len, low_band=False, multi_spec=False, raw_spectrograms=None):
         if not self.have_signal:
             return None
 
         if multi_spec:
             # call _get_raw_spectrogram separately per offset, which is faster when just getting a few spectrograms from a large recording
-            specs = self._get_spectrograms_multi_spec(self.signal, offsets)
+            specs = self._get_spectrograms_multi_spec(self.signal, offsets, segment_len)
         else:
             # call _get_raw_spectrogram for the whole signal, then break it up into spectrograms;
             # this is faster when getting overlapping spectrograms for a whole recording
             spectrogram = None
-            spec_width_per_sec = int(cfg.audio.spec_width / cfg.audio.segment_len)
+            spec_width_per_sec = int(cfg.audio.spec_width / segment_len)
             # create in blocks so we don't run out of GPU memory
             block_length = cfg.audio.spec_block_seconds * cfg.audio.sampling_rate
             start = 0
@@ -157,7 +157,7 @@ class Audio:
 
                 start += length
 
-            last_offset = (spectrogram.shape[1] / spec_width_per_sec) - cfg.audio.segment_len
+            last_offset = (spectrogram.shape[1] / spec_width_per_sec) - segment_len
 
             specs = []
             for offset in offsets:
@@ -173,9 +173,9 @@ class Audio:
                 raw_spectrograms[i] = spec
 
         self._normalize(specs)
-        if spec_exponent != 1:
+        if cfg.audio.spec_exponent != 1:
             for i in range(len(specs)):
-                specs[i] = specs[i] ** spec_exponent
+                specs[i] = specs[i] ** cfg.audio.spec_exponent
 
         return specs
 
