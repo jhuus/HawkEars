@@ -30,7 +30,8 @@ class Trainer:
             # save_top_k=1 in ModelCheckpoint triggers save at every epoch
             trainer = pl.Trainer(
                 accelerator='auto',
-                callbacks=[ModelCheckpoint(save_top_k=-1), TQDMProgressBar(refresh_rate=10)],
+                callbacks=[ModelCheckpoint(save_top_k=cfg.train.save_last_n, mode='max', monitor='epoch_num'),
+                           TQDMProgressBar(refresh_rate=10)],
                 deterministic=cfg.train.deterministic,
                 devices=1 if torch.cuda.is_available() else None,
                 max_epochs=cfg.train.num_epochs,
@@ -41,7 +42,7 @@ class Trainer:
 
             # create model inside loop so parameters are reset for each fold,
             # and so metrics are tracked correctly
-            model = main_model.MainModel(dm.train_class_names, dm.train_class_codes, dm.test_class_names, weights)
+            model = main_model.MainModel(dm.train_class_names, dm.train_class_codes, dm.test_class_names, weights, cfg.train.model_name, cfg.train.pretrained)
             if cfg.train.compile:
                 # skip compile for short tests
                 model = torch.compile(model)
