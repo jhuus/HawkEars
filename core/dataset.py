@@ -8,7 +8,7 @@ from core import util
 import numpy as np
 import pytorch_lightning as pl
 import skimage
-import torch
+import torchaudio
 from torch.utils.data import Dataset
 from torchvision import transforms
 
@@ -43,8 +43,20 @@ class CustomDataset(Dataset):
                 self.speckle[i] = self._get_white_noise(cfg.train.speckle_variance)
 
             # get indexes to real noise spectrograms
-            real_noise_df = self.spec_df[self.spec_df['class_index'] == 0] # assume Noise is the first class
-            self.real_noise_indexes = real_noise_df['spec_index'].to_numpy()
+            class_names = self.class_df['name'].to_list()
+            noise_index = -1
+            for i, name in enumerate(class_names):
+                if name == 'Noise':
+                    noise_index = i
+                    break
+
+            if noise_index != -1:
+                real_noise_df = self.spec_df[self.spec_df['class_index'] == noise_index]
+                self.real_noise_indexes = real_noise_df['spec_index'].to_numpy()
+            else:
+                logging.warning("Warning: noise class not found in input.")
+                cfg.train.prob_real_noise = 0
+                self.real_noise_indexes = None
 
     def __getitem__(self, idx):
         idx = self.indexes[idx] # convert to a spec_df index
@@ -73,9 +85,6 @@ class CustomDataset(Dataset):
                         spec = self._speckle(spec)
 
         spec = self._normalize_spec(spec)
-        if self.training and cfg.train.augmentation and cfg.train.enable_fade:
-            spec *= random.uniform(cfg.train.min_fade, cfg.train.max_fade)
-
         spec = self.transform(spec)
 
         # apply label smoothing here for multi-label case
