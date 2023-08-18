@@ -397,6 +397,19 @@ class Database:
         except sqlite3.Error as e:
             print(f'Error in database get_recording_by_src_subcat_file: {e}')
 
+    def update_recording(self, id, field, value):
+        try:
+            query = f'''
+                UPDATE Recording SET {field} = ? WHERE ID = ?
+            '''
+            cursor = self.conn.cursor()
+            cursor.execute(query, (value, id))
+
+            self.conn.commit()
+            return cursor.lastrowid
+        except sqlite3.Error as e:
+            print(f'Error in database update_recording: {e}')
+
 # ------------------------------- #
 # Spectrogram
 # ------------------------------- #
