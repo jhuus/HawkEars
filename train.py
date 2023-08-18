@@ -7,7 +7,7 @@ import random
 import time
 
 from core import cfg, configs, data_module, set_config
-from model import main_model, efficientnet_v2
+from model import main_model
 
 import numpy as np
 import pytorch_lightning as pl
