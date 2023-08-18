@@ -18,6 +18,7 @@ import torch.nn.functional as F
 
 class Trainer:
     def __init__(self):
+        torch.set_float32_matmul_precision('medium') # may improve performance a little
         pl.seed_everything(cfg.train.seed)
 
     def run(self):
@@ -42,7 +43,7 @@ class Trainer:
 
             # create model inside loop so parameters are reset for each fold,
             # and so metrics are tracked correctly
-            model = main_model.MainModel(dm.train_class_names, dm.train_class_codes, dm.test_class_names, weights, cfg.train.model_name, cfg.train.pretrained)
+            model = main_model.MainModel(dm.train_class_names, dm.train_class_codes, dm.test_class_names, weights, cfg.train.model_name, cfg.train.load_weights)
             if cfg.train.compile:
                 # skip compile for short tests
                 model = torch.compile(model)
