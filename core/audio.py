@@ -13,18 +13,17 @@ import torchaudio as ta
 from core import cfg
 
 class Audio:
-    def __init__(self, device='cuda', path_prefix=''):
+    def __init__(self, device='cuda'):
         self.have_signal = False
         self.signal = None
         self.device = device
-        self.path_prefix = path_prefix
 
         self.linear_transform = ta.transforms.Spectrogram(
             n_fft=2*cfg.audio.win_length,
             win_length=cfg.audio.win_length,
             hop_length=cfg.audio.hop_length,
             power=1
-        )
+        ).to(self.device)
 
         self.mel_transform = ta.transforms.MelSpectrogram(
             sample_rate=cfg.audio.sampling_rate,
@@ -34,21 +33,18 @@ class Audio:
             f_min=cfg.audio.min_audio_freq,
             f_max=cfg.audio.max_audio_freq,
             n_mels=cfg.audio.spec_height,
-            power=1,
-            normalized=False,
-            )
+            power=cfg.audio.power,
+            ).to(self.device)
 
     # width of spectrogram is determined by input signal length, and height = cfg.audio.spec_height
     def _get_raw_spectrogram(self, signal, low_band=False):
         signal = signal.reshape((1, signal.shape[0]))
         if cfg.audio.mel_scale:
-            transform = self.mel_transform.to(self.device)
             tensor = torch.from_numpy(signal).to(self.device)
-            spec = transform(tensor).cpu().numpy()[0]
+            spec = self.mel_transform(tensor).cpu().numpy()[0]
         else:
-            transform = self.linear_transform.to(self.device)
             tensor = torch.from_numpy(signal).to(self.device)
-            spec = transform(tensor).cpu().numpy()[0]
+            spec = self.linear_transform(tensor).cpu().numpy()[0]
 
         if not cfg.audio.mel_scale:
             # clip frequencies above max_audio_freq and below min_audio_freq
@@ -95,6 +91,9 @@ class Audio:
         right_signal = scale * np.frombuffer(right_channel, '<i2').astype(np.float32)
         recording_seconds = int(len(left_signal) / cfg.audio.sampling_rate)
         check_seconds = min(recording_seconds, cfg.audio.check_seconds)
+        if check_seconds == 0:
+            return right_signal, right_channel # make an arbitrary choice
+
         offsets = [0]
         self.signal = left_signal
         left_spec = self.get_spectrograms(offsets, segment_len=check_seconds)[0]
@@ -130,9 +129,14 @@ class Audio:
     # return list of spectrograms for the given offsets (i.e. starting points in seconds);
     # you have to call load() before calling this;
     # if raw_spectrograms array is specified, populate it with spectrograms before normalization
-    def get_spectrograms(self, offsets, segment_len, low_band=False, multi_spec=False, raw_spectrograms=None):
+    def get_spectrograms(self, offsets, segment_len=None, low_band=False, multi_spec=False, raw_spectrograms=None):
         if not self.have_signal:
             return None
+
+        if segment_len is None:
+            # this is not the same as segment_len=cfg.audio.segment_len in the parameter list,
+            # since cfg.audio.segment_len can be modified after the parameter list is evaluated
+            segment_len = cfg.audio.segment_len
 
         if multi_spec:
             # call _get_raw_spectrogram separately per offset, which is faster when just getting a few spectrograms from a large recording
@@ -173,9 +177,6 @@ class Audio:
                 raw_spectrograms[i] = spec
 
         self._normalize(specs)
-        if cfg.audio.spec_exponent != 1:
-            for i in range(len(specs)):
-                specs[i] = specs[i] ** cfg.audio.spec_exponent
 
         return specs
 
