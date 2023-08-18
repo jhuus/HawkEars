@@ -46,10 +46,10 @@ def get_model(model_name, **kwargs):
             block=dla.DlaBottle2neck
         )
     elif model_name == '4':
-        # dla34 but last channels are smaller (M with 23 classes)
+        # model 1 but last three channels are smaller (3.4M with 23 classes)
         config = dict(
-            levels=[1, 1, 1, 2, 2, 1],
-            channels=[16, 32, 64, 128, 128, 128],
+            levels=[1, 1, 1, 1, 1, 1],
+            channels=[16, 32, 64, 96, 128, 256],
             block=dla.DlaBasic
         )
     else:
