@@ -3,6 +3,7 @@
 # with the class predictions.
 
 import argparse
+import glob
 import logging
 import os
 import sys
@@ -80,8 +81,8 @@ class Analyzer:
 
     # get class names and codes from the model, which gets them from the checkpoint
     def _get_class_infos(self):
-        class_names = self.model.train_class_names
-        class_codes = self.model.train_class_codes
+        class_names = self.models[0].train_class_names
+        class_codes = self.models[0].train_class_codes
         ignore_list = util.get_file_lines(cfg.misc.ignore_file)
 
         class_infos = []
@@ -90,27 +91,43 @@ class Analyzer:
 
         return class_infos
 
-    def _call_model(self, specs):
-        start_idx = 0
-        merged_predictions = None
-        while start_idx < len(specs):
-            end_idx = min(start_idx + cfg.infer.analyze_group_size, len(specs))
-            with torch.no_grad():
-                torch_specs = torch.Tensor(specs[start_idx:end_idx]).to(self.device)
-                predictions = self.model(torch_specs)
-                if cfg.train.multi_label:
-                    predictions = torch.sigmoid(predictions).cpu().numpy()
-                else:
-                    predictions = F.softmax(predictions, dim=1).cpu().numpy()
+    # return the average prediction of all models in the ensemble
+    def _call_models(self, specs):
+        # get predictions for each model
+        predictions = []
+        for model in self.models:
+            model.to(self.device)
+            start_idx = 0
+            merged_pred = None
+            while start_idx < len(specs):
+                end_idx = min(start_idx + cfg.infer.analyze_group_size, len(specs))
+                with torch.no_grad():
+                    torch_specs = torch.Tensor(specs[start_idx:end_idx]).to(self.device)
+                    curr_pred = model(torch_specs)
+                    if cfg.train.multi_label:
+                        curr_pred = torch.sigmoid(curr_pred).cpu().numpy()
+                    else:
+                        curr_pred = F.softmax(curr_pred, dim=1).cpu().numpy()
 
-                if merged_predictions is None:
-                    merged_predictions = predictions
-                else:
-                    merged_predictions = np.concatenate((merged_predictions, predictions))
+                    if merged_pred is None:
+                        merged_pred = curr_pred
+                    else:
+                        merged_pred = np.concatenate((merged_pred, curr_pred))
 
-                start_idx += cfg.infer.analyze_group_size
+                    start_idx += cfg.infer.analyze_group_size
 
-        return merged_predictions
+            predictions.append(merged_pred)
+
+        # calculate and return the average across models
+        avg_pred = None
+        for pred in predictions:
+            if avg_pred is None:
+                avg_pred = pred
+            else:
+                avg_pred += pred
+
+        avg_pred /= len(predictions)
+        return avg_pred
 
     def _get_predictions(self, signal, rate):
         # if needed, pad the signal with zeros to get the last spectrogram
@@ -129,7 +146,7 @@ class Analyzer:
         logging.debug(f"Analyzing from {start_seconds} to {end_seconds} seconds")
         logging.debug(f"Retrieved {len(specs)} spectrograms")
 
-        predictions = self._call_model(specs)
+        predictions = self._call_models(specs)
 
         if self.debug_mode:
             self._log_predictions(predictions)
@@ -250,9 +267,18 @@ class Analyzer:
         logging.info("")
 
     def run(self, file_list):
-        self.model = main_model.MainModel.load_from_checkpoint(cfg.misc.main_ckpt_path)
+        model_paths = glob.glob(os.path.join(cfg.misc.main_ckpt_folder, "*.ckpt"))
+        if len(model_paths) == 0:
+            logging.error(f"Error: no checkpoints found in {cfg.misc.main_ckpt_folder}")
+            quit()
+
+        self.models = []
+        for model_path in model_paths:
+            model = main_model.MainModel.load_from_checkpoint(model_path)
+            model.eval() # set inference mode
+            self.models.append(model)
+
         self.class_infos = self._get_class_infos()
-        self.model.eval() # set inference mode
         for file_path in file_list:
             self._analyze_file(file_path)
 
@@ -260,7 +286,6 @@ if __name__ == '__main__':
     # command-line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', '--band', type=int, default=1 * cfg.infer.use_banding_codes, help="If 1, use banding codes labels. If 0, use common names. Default = {1 * cfg.infer.use_banding_codes}.")
-    parser.add_argument('-c', '--ckpt', type=str, default=cfg.misc.main_ckpt_path, help=f"Checkpoint path. Default = {cfg.misc.main_ckpt_path}.")
     parser.add_argument('-d', '--debug', default=False, action='store_true', help='Flag for debug mode (analyze one spectrogram only, and output several top candidates).')
     parser.add_argument('-e', '--end', type=str, default='', help="Optional end time in hh:mm:ss format, where hh and mm are optional.")
     parser.add_argument('-i', '--input', type=str, default='', help="Input path (single audio file or directory). No default.")
@@ -275,14 +300,6 @@ if __name__ == '__main__':
     logging.info("Initializing")
 
     cfg.infer.use_banding_codes = args.band
-    cfg.misc.main_ckpt_path = args.ckpt
-    if cfg.misc.main_ckpt_path is None:
-        logging.error("Error: no checkpoint path specified")
-        quit()
-    elif not os.path.exists(cfg.misc.main_ckpt_path):
-        logging.error(f"Error: checkpoint path {cfg.misc.main_ckpt_path} does not exist")
-        quit()
-
     cfg.infer.min_prob = args.prob
     if cfg.infer.min_prob < 0:
         logging.error("Error: min_prob must be >= 0")
