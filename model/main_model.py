@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchmetrics.functional import accuracy
+import torchvision
 
 def get_learning_rate(optimizer):
     for param_group in optimizer.param_groups:
@@ -38,7 +39,8 @@ class MainModel(LightningModule):
     # 5) loading a model to be used in inference
     #
     # 'pretrained' is passed to timm.create_model to indicate whether weights should be loaded;
-    # 'was_pretrained' is True iff we are loading a model that we trained using transfer learning or fine-tuning
+    # 'was_pretrained' is True iff we are loading a model that we trained using transfer learning or fine-tuning;
+    # the 'weights' argument refers to class weights, which should be renamed to avoid confusion
     def __init__(self, train_class_names, train_class_codes, test_class_names, weights, model_name, pretrained, was_pretrained=False):
         super().__init__()
         self.save_hyperparameters()
@@ -63,15 +65,20 @@ class MainModel(LightningModule):
             load_ckpt_path = cfg.train.load_ckpt_path
             cfg.train.load_ckpt_path = None # so it isn't used recursively
             backbone = self.load_from_checkpoint(load_ckpt_path)
+            self.model_name = backbone.model_name
+            self.hparams.model_name = self.model_name
+            self.hparams.was_pretrained = True
 
             if not cfg.train.fine_tuning:
                 backbone.freeze()
 
-            self.model_name = backbone.model_name
-            self.hparams.model_name = self.model_name
-            self.base_model = self._update_classifier(backbone.base_model)
+            if backbone.hparams.was_pretrained:
+                # if it was already pretrained once, don't keep updating the classifier,
+                # which would result in an unloadable model
+                self.base_model = backbone.base_model
+            else:
+                self.base_model = self._update_classifier(backbone.base_model)
 
-            self.hparams.was_pretrained = True
         else:
             # create a basic model for training or inference
             self.base_model = self._create_model(model_name, pretrained)
