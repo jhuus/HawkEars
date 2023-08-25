@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from core import cfg, metrics
 from model import dla
+from model import mobilenet
 from model import repvit
 from model import vovnet
 
@@ -104,6 +105,9 @@ class MainModel(LightningModule):
         if model_name.startswith('custom_dla'):
             tokens = model_name.split('_')
             model = dla.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
+        elif model_name.startswith('custom_mobilenet'):
+            tokens = model_name.split('_')
+            model = mobilenet.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
         elif model_name.startswith('custom_vovnet'):
             tokens = model_name.split('_')
             model = vovnet.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
@@ -119,7 +123,7 @@ class MainModel(LightningModule):
     # I tried to implement a general solution but it got very complex,
     # so instead we handle it based on the model name
     def _update_classifier(self, model):
-        if self.model_name.startswith('tf_eff') or self.model_name.startswith('mobile'):
+        if self.model_name.startswith('tf_eff') or 'mobilenet' in self.model_name:
             # replace the final layer, which is Linear
             layers = list(model.children())
             in_features = layers[-1].in_features
