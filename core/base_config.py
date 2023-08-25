@@ -51,13 +51,15 @@ class Training:
     # data augmentation
     augmentation = True
     prob_mixup = 0.35
-    actual_mixup = False    # if true, use actual mixup logic, else do a simple unweighted merge
-    prob_white_noise = 0
-    prob_real_noise = 0.35
+    prob_real_noise = 0.3
     prob_speckle = .1
-    min_white_noise_variance = 0.0009 # larger variances lead to more noise
-    max_white_noise_variance = 0.0011
+    prob_fade = .2
+    prob_exponent = .25
+    min_fade = .1
+    max_fade = .8
     speckle_variance = .009
+    min_exponent = 1
+    max_exponent = 1.6
 
 @dataclass
 class Inference:
