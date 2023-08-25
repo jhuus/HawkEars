@@ -2,6 +2,7 @@ import logging
 import random
 import sys
 
+from core import audio
 from core import cfg
 from core import util
 
@@ -31,12 +32,6 @@ class CustomDataset(Dataset):
         self._create_transforms()
 
         if self.training:
-            # create some white noise
-            self.white_noise = np.zeros((CACHE_LEN, cfg.audio.spec_height, cfg.audio.spec_width, 1))
-            for i in range(CACHE_LEN):
-                variance = random.uniform(cfg.train.min_white_noise_variance, cfg.train.max_white_noise_variance)
-                self.white_noise[i] = self._get_white_noise(variance)
-
             # create some speckle images (higher density white noise)
             self.speckle = np.zeros((CACHE_LEN, cfg.audio.spec_height, cfg.audio.spec_width, 1))
             for i in range(CACHE_LEN):
@@ -68,21 +63,16 @@ class CustomDataset(Dataset):
         if self.training and cfg.train.augmentation:
             class_index = self.spec_df.loc[idx, 'class_index'] # could also get this from label
             class_name = self.class_df.loc[class_index, 'name']
-            prob = random.uniform(0, 1)
-            if prob < cfg.train.prob_mixup and class_name != 'Noise':
+            if random.uniform(0, 1) < cfg.train.prob_mixup and class_name != 'Noise':
                 spec, label = self._merge_specs(spec, label, class_name)
+            elif random.uniform(0, 1) < cfg.train.prob_real_noise:
+                spec = self._add_real_noise(spec)
+            elif random.uniform(0, 1) < cfg.train.prob_speckle:
+                spec = self._speckle(spec)
 
-            prob = random.uniform(0, 1)
-            if prob < cfg.train.prob_white_noise:
-                spec = self._add_white_noise(spec)
-            else:
-                prob = random.uniform(0, 1)
-                if prob < cfg.train.prob_real_noise:
-                    spec = self._add_real_noise(spec)
-                else:
-                    prob = random.uniform(0, 1)
-                    if prob < cfg.train.prob_speckle:
-                        spec = self._speckle(spec)
+            # raise to an exponent so smaller values are relatively reduced
+            if random.uniform(0, 1) < cfg.train.prob_exponent:
+                spec = spec ** random.uniform(cfg.train.min_exponent, cfg.train.max_exponent)
 
         spec = self._normalize_spec(spec)
         spec = self.transform(spec)
@@ -105,18 +95,17 @@ class CustomDataset(Dataset):
             transforms.ToTensor(),
         ])
 
-    # add white noise to the spectrogram
-    def _add_white_noise(self, spec):
-        index = random.randint(0, len(self.white_noise) - 1)
-        spec += self.white_noise[index]
-        return spec
-
     # add real noise to the spectrogram, i.e. add an actual noise spectrogram but,
     # unlike merge / mixup, do not update the label
     def _add_real_noise(self, spec):
         index = random.randint(0, len(self.real_noise_indexes) - 1)
         index = self.real_noise_indexes[index]
         noise_spec = util.expand_spectrogram(self.spec_df.loc[index, 'spec'])
+
+        # fade the spec sometimes if it's not too noisy (so not too many pixels < .05)
+        if random.uniform(0, 1) < cfg.train.prob_fade and np.sum(spec > .05) < 2500:
+            spec *= random.uniform(cfg.train.min_fade, cfg.train.max_fade)
+
         spec += noise_spec
         return spec
 
@@ -145,16 +134,9 @@ class CustomDataset(Dataset):
 
         other_spec = util.expand_spectrogram(self.spec_df.loc[other_idx, 'spec'])
 
-        # combine the two spectrograms and the two labels
-        if cfg.train.actual_mixup:
-            alpha = 0.2
-            lambda_ = np.random.beta(alpha, alpha)
-            spec = lambda_ * spec + (1 - lambda_) * other_spec
-            label = lambda_ * label + (1 - lambda_) * self.label[other_idx]
-        else:
-            # simple unweighted merge
-            spec += other_spec
-            label += self.label[other_idx]
+        # combine the two spectrograms and the two labels, using a simple unweighted merge
+        spec += other_spec
+        label += self.label[other_idx]
 
         return spec, label
 
