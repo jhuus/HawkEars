@@ -53,6 +53,7 @@ class Audio:
             spec = spec[:high_clip_idx, low_clip_idx:]
             spec = cv2.resize(spec, dsize=(spec.shape[1], cfg.audio.spec_height), interpolation=cv2.INTER_AREA)
 
+        spec = spec[:cfg.audio.spec_height, :cfg.audio.spec_width] # there is sometimes an extra pixel
         return spec
 
     # version of get_spectrograms that calls _get_raw_spectrogram separately per offset,
@@ -70,7 +71,6 @@ class Audio:
                 segment = np.pad(segment, ((0, pad_amount)), 'constant', constant_values=0)
 
             spec = self._get_raw_spectrogram(segment, low_band=low_band)
-            spec = spec[:cfg.audio.spec_height, :cfg.audio.spec_width] # there is sometimes an extra pixel
             specs.append(spec)
 
         return specs
@@ -107,22 +107,12 @@ class Audio:
             # more noise in the right channel
             return left_signal, left_channel
 
-    # return a white noise spectrogram with values in range [0, 1]
-    def white_noise(self, mean=0, stdev=1):
-        samples = cfg.audio.segment_len * cfg.audio.sampling_rate
-        segment = np.random.normal(loc=mean, scale=.0001, size=samples).astype(np.float32)
-        spec = self._get_raw_spectrogram(segment)
-        spec = spec[:cfg.audio.spec_height, :cfg.audio.spec_width] # there is sometimes an extra pixel
-        spec = spec / spec.max() # normalize to [0, 1]
-        return spec.reshape((cfg.audio.spec_height, cfg.audio.spec_width, 1))
-
     # return a spectrogram with a sin wave of the given frequency
     def sin_wave(self, frequency):
         samples = cfg.audio.segment_len * cfg.audio.sampling_rate
         t = np.linspace(0, 2*np.pi, samples)
         segment = np.sin(t*frequency*cfg.audio.segment_len)
         spec = self._get_raw_spectrogram(segment)
-        spec = spec[:cfg.audio.spec_height, :cfg.audio.spec_width] # there is sometimes an extra pixel
         spec = spec / spec.max() # normalize to [0, 1]
         return spec.reshape((1, cfg.audio.spec_height, cfg.audio.spec_width))
 
