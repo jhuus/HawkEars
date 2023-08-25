@@ -282,6 +282,7 @@ def repvit_m1(pretrained=False, num_classes = 1000, distillation=False):
     ]
     return RepViT(cfgs, num_classes=num_classes, distillation=distillation)
 
+# ~7.8M parameters
 @register_model
 def repvit_m2(pretrained=False, num_classes = 1000, distillation=False):
     """
@@ -316,6 +317,7 @@ def repvit_m2(pretrained=False, num_classes = 1000, distillation=False):
     ]
     return RepViT(cfgs, num_classes=num_classes, distillation=distillation)
 
+# ~9.7M parameters
 @register_model
 def repvit_m3(pretrained=False, num_classes = 1000, distillation=False):
     """
