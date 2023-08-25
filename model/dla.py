@@ -23,33 +23,50 @@ config = dict(
 #    global_pool='avg',
 #    output_stride=32,
 #    drop_rate=0.,
+#
+# The following are all smaller variations of dla34.
+#
 def get_model(model_name, **kwargs):
     if model_name == '1':
-        # dla34 but all levels are 1 (12.0M with 23 classes)
+        # levels are 1 and last 3 channels are smaller (~3.4M parameters)
         config = dict(
             levels=[1, 1, 1, 1, 1, 1],
-            channels=[16, 32, 64, 128, 256, 512],
+            channels=[16, 32, 64, 96, 128, 256],
             block=dla.DlaBasic
         )
     elif model_name == '2':
-        # dla34 but DlaBottleneck (4.0M with 23 classes)
+        # DlaBottleneck (~4.0M parameters)
         config = dict(
             levels=[1, 1, 1, 2, 2, 1],
             channels=[16, 32, 64, 128, 256, 512],
             block=dla.DlaBottleneck
         )
     elif model_name == '3':
-        # dla34 but DlaBottle2neck (10.2M with 23 classes)
+        # DlaBottle2Neck and adjusted levels & channels (~6.0M parameters)
+        config = dict(
+            levels=[1, 1, 1, 2, 1, 1],
+            channels=[16, 32, 64, 128, 256, 384],
+            block=dla.DlaBottle2neck
+        )
+    elif model_name == '4':
+        # DlaBottle2Neck (~8.2M parameters)
+        config = dict(
+            levels=[1, 1, 1, 1, 1, 1],
+            channels=[16, 32, 64, 128, 256, 512],
+            block=dla.DlaBottle2neck
+        )
+    elif model_name == '5':
+        # dla34 but DlaBottle2neck (~10.2M parameters)
         config = dict(
             levels=[1, 1, 1, 2, 2, 1],
             channels=[16, 32, 64, 128, 256, 512],
             block=dla.DlaBottle2neck
         )
-    elif model_name == '4':
-        # model 1 but last three channels are smaller (3.4M with 23 classes)
+    elif model_name == '6':
+        # levels are 1 (~12.0M parameters)
         config = dict(
             levels=[1, 1, 1, 1, 1, 1],
-            channels=[16, 32, 64, 96, 128, 256],
+            channels=[16, 32, 64, 128, 256, 512],
             block=dla.DlaBasic
         )
     else:
