@@ -8,9 +8,9 @@ class Audio:
     sampling_rate = 40960
     hop_length = 320
     win_length = 2048
-    spec_height = 128        # spectrogram height
+    spec_height = 128       # spectrogram height
     spec_width = 384        # spectrogram width (3 * 128)
-    check_seconds = 6       # check prefix of this length when picking cleanest channel
+    check_seconds = 5       # check prefix of this length when picking cleanest channel
     min_audio_freq = 200
     max_audio_freq = 10500
     mel_scale = True
@@ -73,6 +73,18 @@ class Inference:
     file_date_regex_group = 1    # use group at offset 1
     analyze_group_size = 200     # do this many spectrograms at a time to avoid running out of GPU memory
     frequency_db = "frequency"   # eBird barchart data, i.e. species report frequencies
+
+    # Soundalike groups are used in analysis / inference when a location is given.
+    # For each soundalike species, eBird barchart data is accessed to get the maximum
+    # frequency across all weeks (i.e. maximum portion of checklists that include the species).
+    # If the maximum frequency for a species in a soundalike group is <= soundalike_cutoff,
+    # it is replaced by the species with the highest frequency > soundalike_cutoff in the group.
+    # For instance, if a Mountain Chickadee is ID'd in a county where it's never been seen,
+    # but Black-capped Chickadees are common there, it will be reported as a Black-capped Chickadee.
+    soundalike_cutoff = .005
+    soundalikes = [['Black-capped Chickadee', 'Boreal Chickadee', 'Mountain Chickadee'],
+                ['Pacific Wren', 'Winter Wren'],
+                ['Pine Warbler', 'Dark-eyed Junco']]
 
 @dataclass
 class Miscellaneous:
