@@ -53,7 +53,6 @@ class Audio:
             spec = spec[:high_clip_idx, low_clip_idx:]
             spec = cv2.resize(spec, dsize=(spec.shape[1], cfg.audio.spec_height), interpolation=cv2.INTER_AREA)
 
-        spec = spec[:cfg.audio.spec_height, :cfg.audio.spec_width] # there is sometimes an extra pixel
         return spec
 
     # version of get_spectrograms that calls _get_raw_spectrogram separately per offset,
@@ -71,6 +70,7 @@ class Audio:
                 segment = np.pad(segment, ((0, pad_amount)), 'constant', constant_values=0)
 
             spec = self._get_raw_spectrogram(segment, low_band=low_band)
+            spec = spec[:cfg.audio.spec_height, :cfg.audio.spec_width] # there is sometimes an extra pixel
             specs.append(spec)
 
         return specs
@@ -92,13 +92,20 @@ class Audio:
         recording_seconds = int(len(left_signal) / cfg.audio.sampling_rate)
         check_seconds = min(recording_seconds, cfg.audio.check_seconds)
         if check_seconds == 0:
-            return right_signal, right_channel # make an arbitrary choice
+            return left_signal, left_channel # make an arbitrary choice
 
-        offsets = [0]
+        offsets = [1] # skip the first second
         self.signal = left_signal
         left_spec = self.get_spectrograms(offsets, segment_len=check_seconds)[0]
         self.signal = right_signal
         right_spec = self.get_spectrograms(offsets, segment_len=check_seconds)[0]
+
+        if left_spec.sum() == 0 and right_spec.sum() > 0:
+            # left channel is null
+            return right_signal, right_channel
+        elif right_spec.sum() == 0 and left_spec.sum() > 0:
+            # right channel is null
+            return left_signal, left_channel
 
         if left_spec.sum() > right_spec.sum():
             # more noise in the left channel
@@ -113,6 +120,7 @@ class Audio:
         t = np.linspace(0, 2*np.pi, samples)
         segment = np.sin(t*frequency*cfg.audio.segment_len)
         spec = self._get_raw_spectrogram(segment)
+        spec = spec[:cfg.audio.spec_height, :cfg.audio.spec_width] # there is sometimes an extra pixel
         spec = spec / spec.max() # normalize to [0, 1]
         return spec.reshape((1, cfg.audio.spec_height, cfg.audio.spec_width))
 
@@ -136,6 +144,7 @@ class Audio:
             # this is faster when getting overlapping spectrograms for a whole recording
             spectrogram = None
             spec_width_per_sec = int(cfg.audio.spec_width / segment_len)
+
             # create in blocks so we don't run out of GPU memory
             block_length = cfg.audio.spec_block_seconds * cfg.audio.sampling_rate
             start = 0
@@ -144,6 +153,7 @@ class Audio:
                 i += 1
                 length = min(block_length, len(self.signal) - start)
                 block = self._get_raw_spectrogram(self.signal[start:start+length], low_band=low_band)
+
                 if spectrogram is None:
                     spectrogram = block
                 else:
