@@ -60,7 +60,8 @@ class CustomDataset(Dataset):
 
         spec = util.expand_spectrogram(spec)
 
-        if self.training and cfg.train.augmentation:
+        # skip augmentation if np.max(spec) == 0, i.e. null spectrograms
+        if self.training and cfg.train.augmentation and np.max(spec) > 0:
             class_index = self.spec_df.loc[idx, 'class_index'] # could also get this from label
             class_name = self.class_df.loc[class_index, 'name']
             if random.uniform(0, 1) < cfg.train.prob_mixup and class_name != 'Noise':
