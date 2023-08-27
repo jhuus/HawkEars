@@ -13,6 +13,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+import species_handlers
 from core import audio
 from core import cfg
 from core import frequency_db
@@ -296,7 +297,8 @@ class Analyzer:
     # get the list of spectrograms
     def _get_specs(self, start_seconds, end_seconds):
         self.offsets = np.arange(start_seconds, end_seconds + 1.0, 1.0).tolist()
-        specs = self.audio.get_spectrograms(self.offsets, segment_len=cfg.audio.segment_len)
+        self.raw_spectrograms = [0 for i in range(len(self.offsets))]
+        specs = self.audio.get_spectrograms(self.offsets, segment_len=cfg.audio.segment_len, raw_spectrograms=self.raw_spectrograms)
 
         spec_array = np.zeros((len(specs), 1, cfg.audio.spec_height, cfg.audio.spec_width))
         for i in range(len(specs)):
@@ -335,6 +337,15 @@ class Analyzer:
             return
 
         self._get_predictions(signal, rate)
+
+        # do pre-processing for individual species
+        self.species_handlers.reset(self.class_infos, self.offsets, self.raw_spectrograms, self.audio)
+        for class_info in self.class_infos:
+            if class_info.ignore or class_info.ebird_frequency_too_low:
+                continue
+
+            if class_info.code in self.species_handlers.handlers:
+                self.species_handlers.handlers[class_info.code](class_info)
 
         # generate labels for one class at a time
         labels = []
@@ -418,6 +429,7 @@ class Analyzer:
         self.audio = audio.Audio(device=self.device)
         self.class_infos = self._get_class_infos()
         self._process_location_and_date()
+        self.species_handlers = species_handlers.Species_Handlers()
 
         for file_path in file_list:
             self._analyze_file(file_path)
