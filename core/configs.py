@@ -1,5 +1,5 @@
 # Each configuration is a dataclass that sets the members it needs,
-# as in the Test001 example below. To add a config, add a new dataclass here
+# as in the examples below. To add a config, add a new dataclass here
 # and then add it to the configs dictionary below so it has a name.
 # This approach supports typeahead and error-checking, which are very useful.
 
@@ -9,14 +9,36 @@ from core import base_config
 
 cfg : base_config.BaseConfig = base_config.BaseConfig()
 
+# Low band classifier for Ruffed Grouse drumming
 @dataclass
-class Test001(base_config.BaseConfig):
+class Low_Band(base_config.BaseConfig):
     def __init__(self):
-        self.train.num_epochs = 2
+        self.audio.spec_height = self.audio.low_band_spec_height
+        self.misc.train_pickle = "data/low-band-train.pickle"
+        self.misc.test_pickle = None
+        self.train.model_name = "ghostnet_050"
+        self.train.multi_label = False
+        self.train.model_print_path = None
+        self.train.augmentation = False
+        self.train.deterministic = False
+        self.train.learning_rate = .0025
+        self.train.num_epochs = 15
+
+# All tf_efficientnetv2_b0 from scratch
+@dataclass
+class All_Eff(base_config.BaseConfig):
+    def __init__(self):
+        self.misc.train_pickle = "data/all-train.pickle"
+        self.misc.test_pickle = "data/ssw0-test.pickle"
+        self.train.model_name = "tf_efficientnetv2_b0"
+        self.train.deterministic = False
+        self.train.learning_rate = .0025
+        self.train.num_epochs = 20
 
 # map names to configurations
 configs = {"base": base_config.BaseConfig,
-           "test001": Test001}
+           "low_band": Low_Band,
+           "all_eff": All_Eff}
 
 # set a configuration based on the name
 def set_config(name):
