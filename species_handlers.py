@@ -5,18 +5,20 @@ import os
 from types import SimpleNamespace
 
 import numpy as np
-from tensorflow import keras
+import torch
+import torch.nn.functional as F
 
 from core import cfg
+from model import main_model
 
 class Species_Handlers:
-    def __init__(self):
+    def __init__(self, device):
         # update this dictionary to enable/disable handlers
         self.handlers = {
             'BWHA': self.check_soundalike,
             'LALO': self.check_amplitude,
             'PIGR': self.check_amplitude,
-            #'RUGR': self.ruffed_grouse,
+            'RUGR': self.ruffed_grouse,
         }
 
         # handler parameters, so it's easy to use the same logic for multiple species
@@ -29,6 +31,7 @@ class Species_Handlers:
             'BWHA': SimpleNamespace(soundalike_code='WTSP', min_prob=.25)
         }
 
+        self.device = device
         self.low_band_model = None
 
     # Prepare for next recording
@@ -42,10 +45,9 @@ class Species_Handlers:
         self.highest_amplitude = None
         self.low_band_specs = audio.get_spectrograms(offsets=offsets, low_band=True)
 
-        '''
         if self.low_band_model is None:
-            self.low_band_model = keras.models.load_model(os.path.join('data', cfg.low_band_ckpt_name), compile=False)
-        '''
+            self.low_band_model = main_model.MainModel.load_from_checkpoint(cfg.audio.low_band_ckpt_path)
+            self.low_band_model.eval() # set inference mode
 
     # Handle cases where a faint vocalization is mistaken for another species.
     # For example, distant songs of American Robin and similar-sounding species are sometimes mistaken for Pine Grosbeak,
@@ -98,15 +100,18 @@ class Species_Handlers:
     # The frequency is too low to detect properly with the normal spectrogram,
     # and splitting it helps to keep low frequency noise out of the latter.
     def ruffed_grouse(self, class_info):
-        spec_array = np.zeros((len(self.low_band_specs), cfg.audio.low_band_spec_height, cfg.audio.spec_width, 1))
+        spec_array = np.zeros((len(self.low_band_specs), 1, cfg.audio.low_band_spec_height, cfg.audio.spec_width))
         for i in range(len(self.low_band_specs)):
-            spec_array[i] = self.low_band_specs[i].reshape((cfg.audio.low_band_spec_height, cfg.audio.spec_width, 1)).astype(np.float32)
+            spec_array[i] = self.low_band_specs[i].reshape((1, cfg.audio.low_band_spec_height, cfg.audio.spec_width)).astype(np.float32)
 
-        predictions = self.low_band_model.predict(spec_array, verbose=0)
-        for i in range(len(self.offsets)):
-            class_info.probs[i] = max(class_info.probs[i], predictions[i][0])
-            if class_info.probs[i] >= cfg.infer.min_prob:
-                class_info.has_label = True
+        with torch.no_grad():
+            torch_specs = torch.Tensor(spec_array).to(self.device)
+            predictions = self.low_band_model(torch_specs)
+            predictions = F.softmax(predictions, dim=1).cpu().numpy()
+            for i in range(len(self.offsets)):
+                class_info.probs[i] = max(class_info.probs[i], predictions[i][0])
+                if class_info.probs[i] >= cfg.infer.min_prob:
+                    class_info.has_label = True
 
     # Return the highest amplitude from the raw spectrograms.
     # Since they overlap, just check every 3rd one.
