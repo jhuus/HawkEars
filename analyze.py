@@ -429,7 +429,7 @@ class Analyzer:
         self.audio = audio.Audio(device=self.device)
         self.class_infos = self._get_class_infos()
         self._process_location_and_date()
-        self.species_handlers = species_handlers.Species_Handlers()
+        self.species_handlers = species_handlers.Species_Handlers(self.device)
 
         for file_path in file_list:
             self._analyze_file(file_path)
