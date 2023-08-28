@@ -36,22 +36,33 @@ class Audio:
             power=cfg.audio.power,
             ).to(self.device)
 
-    # width of spectrogram is determined by input signal length, and height = cfg.audio.spec_height
+    # width of spectrogram is determined by input signal length, and height = cfg.audio.spec_height;
+    # low_band = True gets a low-frequency spectrogam used to detect Ruffed Grouse drumming
     def _get_raw_spectrogram(self, signal, low_band=False):
+        if low_band:
+            min_audio_freq = cfg.audio.low_band_min_audio_freq
+            max_audio_freq = cfg.audio.low_band_max_audio_freq
+            spec_height = cfg.audio.low_band_spec_height
+            mel_scale = cfg.audio.low_band_mel_scale
+        else:
+            min_audio_freq = cfg.audio.min_audio_freq
+            max_audio_freq = cfg.audio.max_audio_freq
+            spec_height = cfg.audio.spec_height
+            mel_scale = cfg.audio.mel_scale
+
         signal = signal.reshape((1, signal.shape[0]))
-        if cfg.audio.mel_scale:
-            tensor = torch.from_numpy(signal).to(self.device)
+        tensor = torch.from_numpy(signal).to(self.device)
+        if mel_scale:
             spec = self.mel_transform(tensor).cpu().numpy()[0]
         else:
-            tensor = torch.from_numpy(signal).to(self.device)
             spec = self.linear_transform(tensor).cpu().numpy()[0]
 
-        if not cfg.audio.mel_scale:
+        if not mel_scale:
             # clip frequencies above max_audio_freq and below min_audio_freq
-            high_clip_idx = int(2 * spec.shape[0] * cfg.audio.max_audio_freq / cfg.audio.sampling_rate)
-            low_clip_idx = int(2 * spec.shape[0] * cfg.audio.min_audio_freq / cfg.audio.sampling_rate)
+            high_clip_idx = int(2 * spec.shape[0] * max_audio_freq / cfg.audio.sampling_rate)
+            low_clip_idx = int(2 * spec.shape[0] * min_audio_freq / cfg.audio.sampling_rate)
             spec = spec[:high_clip_idx, low_clip_idx:]
-            spec = cv2.resize(spec, dsize=(spec.shape[1], cfg.audio.spec_height), interpolation=cv2.INTER_AREA)
+            spec = cv2.resize(spec, dsize=(spec.shape[1], spec_height), interpolation=cv2.INTER_AREA)
 
         return spec
 
