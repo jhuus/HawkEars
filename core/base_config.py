@@ -35,6 +35,7 @@ class Training:
     batch_size = 32
     model_name = "tf_efficientnetv2_b0" # 5.9M parameters
     load_weights = False    # passed as "weights" to timm.create_model
+    use_class_weights = True
     load_ckpt_path = None   # for transfer learning or fine-tuning
     fine_tuning = False     # if true, don't freeze the feature extractor
     dropout = None          # dropout, drop_rate and drop_path_rate are passed to model only if not None
@@ -55,6 +56,8 @@ class Training:
     prob_speckle = .1
     prob_fade = .2
     prob_exponent = .25
+    prob_shift = 0
+    max_shift = 8           # number of pixels (samples)
     min_fade = .1
     max_fade = .8
     speckle_variance = .009
