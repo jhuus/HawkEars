@@ -64,12 +64,14 @@ class CustomDataset(Dataset):
         if self.training and cfg.train.augmentation and np.max(spec) > 0:
             class_index = self.spec_df.loc[idx, 'class_index'] # could also get this from label
             class_name = self.class_df.loc[class_index, 'name']
-            if random.uniform(0, 1) < cfg.train.prob_mixup and class_name != 'Noise':
+            if cfg.train.multi_label and random.uniform(0, 1) < cfg.train.prob_mixup and class_name != 'Noise':
                 spec, label = self._merge_specs(spec, label, class_name)
             elif random.uniform(0, 1) < cfg.train.prob_real_noise:
                 spec = self._add_real_noise(spec)
             elif random.uniform(0, 1) < cfg.train.prob_speckle:
                 spec = self._speckle(spec)
+            elif random.uniform(0, 1) < cfg.train.prob_shift:
+                spec = self._shift_horizontal(spec)
 
             # raise to an exponent so smaller values are relatively reduced
             if random.uniform(0, 1) < cfg.train.prob_exponent:
@@ -140,6 +142,15 @@ class CustomDataset(Dataset):
         label += self.label[other_idx]
 
         return spec, label
+
+    # perform a random horizontal shift of the spectrogram
+    def _shift_horizontal(self, spec):
+        if cfg.train.max_shift == 0:
+            return spec
+
+        pixels = random.randint(-cfg.train.max_shift, cfg.train.max_shift)
+        spec = np.roll(spec, shift=pixels, axis=1)
+        return spec
 
     # add a copy multiplied by random pixels (larger variances lead to more speckling)
     def _speckle(self, spec):
