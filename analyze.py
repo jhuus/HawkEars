@@ -415,6 +415,7 @@ class Analyzer:
         logging.info("")
 
     def run(self, file_list):
+        torch.cuda.empty_cache()
         model_paths = glob.glob(os.path.join(cfg.misc.main_ckpt_folder, "*.ckpt"))
         if len(model_paths) == 0:
             logging.error(f"Error: no checkpoints found in {cfg.misc.main_ckpt_folder}")
