@@ -153,9 +153,13 @@ class DataModule(pl.LightningDataModule):
         self.val_loader = DataLoader(self.val_set, batch_size=cfg.train.batch_size, num_workers=4, shuffle=False)
 
     def class_weights(self):
-        labels = self.train_spec_df['class_index'].to_numpy()
-        class_weights=sklearn.utils.class_weight.compute_class_weight('balanced', classes=np.unique(labels), y=labels)
-        class_weights = np.sqrt(class_weights) # even out the weights a little
+        if cfg.train.use_class_weights:
+            labels = self.train_spec_df['class_index'].to_numpy()
+            class_weights=sklearn.utils.class_weight.compute_class_weight('balanced', classes=np.unique(labels), y=labels)
+            class_weights = np.sqrt(class_weights) # even out the weights a little
+        else:
+            class_weights = np.ones(self.num_train_classes)
+
         return torch.tensor(class_weights, dtype=torch.float)
 
     def train_dataloader(self):
