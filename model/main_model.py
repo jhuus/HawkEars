@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from core import cfg, metrics
 from model import dla
+from model import efficientnet_v2
 from model import mobilenet
 from model import repvit
 from model import vovnet
@@ -105,6 +106,9 @@ class MainModel(LightningModule):
         if model_name.startswith('custom_dla'):
             tokens = model_name.split('_')
             model = dla.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
+        elif model_name.startswith('custom_efficientnet'):
+            tokens = model_name.split('_')
+            model = efficientnet_v2.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
         elif model_name.startswith('custom_mobilenet'):
             tokens = model_name.split('_')
             model = mobilenet.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
