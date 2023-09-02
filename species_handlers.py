@@ -17,14 +17,18 @@ class Species_Handlers:
         self.handlers = {
             'BWHA': self.check_soundalike,
             'LALO': self.check_amplitude,
+            'HOLA': self.check_amplitude,
             'PIGR': self.check_amplitude,
+            'RUBL': self.check_amplitude,
             'RUGR': self.ruffed_grouse,
         }
 
         # handler parameters, so it's easy to use the same logic for multiple species
         self.check_amplitude_config = {
             'LALO': SimpleNamespace(low_freq=.58, high_freq=.80, min_ratio=.15),
-            'PIGR': SimpleNamespace(low_freq=.58, high_freq=.67, min_ratio=.15)
+            'HOLA': SimpleNamespace(low_freq=.64, high_freq=.82, min_ratio=.15),
+            'PIGR': SimpleNamespace(low_freq=.58, high_freq=.67, min_ratio=.15),
+            'RUBL': SimpleNamespace(low_freq=.62, high_freq=.75, min_ratio=.15),
         }
 
         self.check_soundalike_config = {
@@ -105,11 +109,26 @@ class Species_Handlers:
             spec_array[i] = self.low_band_specs[i].reshape((1, cfg.audio.low_band_spec_height, cfg.audio.spec_width)).astype(np.float32)
 
         with torch.no_grad():
-            torch_specs = torch.Tensor(spec_array).to(self.device)
-            predictions = self.low_band_model(torch_specs)
-            predictions = F.softmax(predictions, dim=1).cpu().numpy()
+            # process in chunks to avoid running out of GPU memory
+            predictions = None
+            start_idx = 0
+            while start_idx < len(spec_array):
+                end_idx = min(start_idx + cfg.infer.analyze_group_size, len(spec_array))
+                torch_specs = torch.Tensor(spec_array[start_idx:end_idx]).to(self.device)
+                curr_pred = self.low_band_model(torch_specs)
+                curr_pred = F.softmax(curr_pred, dim=1).cpu().numpy()
+
+                if predictions is None:
+                    predictions = curr_pred
+                else:
+                    predictions = np.concatenate((predictions, curr_pred))
+
+                start_idx += cfg.infer.analyze_group_size
+
+            # merge with main predictions (drumming is detected here, other RUGR sounds are detected by the main ensemble)
+            exponent = 1.7 # lower the drumming predictions a bit to reduce false positives
             for i in range(len(self.offsets)):
-                class_info.probs[i] = max(class_info.probs[i], predictions[i][0])
+                class_info.probs[i] = max(class_info.probs[i], predictions[i][0] ** exponent)
                 if class_info.probs[i] >= cfg.infer.min_prob:
                     class_info.has_label = True
 
