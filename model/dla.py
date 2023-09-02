@@ -27,7 +27,14 @@ config = dict(
 # The following are all smaller variations of dla34.
 #
 def get_model(model_name, **kwargs):
-    if model_name == '1':
+    if model_name == '0':
+        # levels are 1 and last 3 channels are much smaller (~630K parameters)
+        config = dict(
+            levels=[1, 1, 1, 1, 1, 1],
+            channels=[16, 32, 64, 64, 64, 64],
+            block=dla.DlaBasic
+        )
+    elif model_name == '1':
         # levels are 1 and last 3 channels are smaller (~3.4M parameters)
         config = dict(
             levels=[1, 1, 1, 1, 1, 1],
