@@ -57,7 +57,7 @@ This will analyze the recording(s) included in the test directory. There are als
 python analyze.py -h
 ```
 
-Additional arguments include options for specifying latitude and longitude (or region) and recording date. These are useful for reducing false positives.
+Additional arguments include options for specifying latitude and longitude (or region) and recording date. These are useful for reducing false positives. Classes listed (by common name) in data/ignore.txt are ignored during analysis. If you encounter a species that occurs as a frequent false positive, adding it to ignore.txt will ensure that it no longer appears.
 
 If you don't have access to additional recordings for testing, one good source is [xeno-canto](https://xeno-canto.org/). Recordings there are generally single-species, however, and therefore somewhat limited. A source of true field recordings, generally with multiple species, is the [Hamilton Bioacoustics Field Recordings](https://archive.org/details/hamiltonbioacousticsfieldrecordings).
 
