@@ -8,21 +8,22 @@ This project is licensed under the terms of the MIT license.
 To install HawkEars on Linux or Windows:
 
 1.	Install [Python 3](https://www.python.org/downloads/), if you do not already have it installed.
-2.	Download a copy of this repository. If you have Git installed, type:
+2.	Install git and git-lfs ("sudo apt-get install git-lfs" on Linux). LFS is used to get the model checkpoints, which are too large to save as regular github files.
+3.  Type
 
 ```
  git clone https://github.com/jhuus/HawkEars
+ cd HawkEars
+ git lfs pull
 ```
 
-Otherwise you can click on the Code link at the top, select “Download ZIP” and unzip it after it’s been downloaded.
-
-3.	Install required Python libraries:
+4.	Install required Python libraries:
 
 ```
 pip install -r requirements.txt
 ```
 
-4.	Install ffmpeg. On Linux, type:
+5.	Install ffmpeg. On Linux, type:
 
 ```
 sudo apt install ffmpeg
@@ -30,9 +31,9 @@ sudo apt install ffmpeg
 
 On Windows, download [this zip file](https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip), then unzip it, move it somewhere and add the bin directory to your path. For instance, you could move it to "C:\Program Files\ffmpeg", and then add "C:\Program Files\ffmpeg\bin" to your path by opening Settings, entering "Environment Variables" in the "Find a Setting" box, clicking the Environment Variables button, selecting Path, clicking Edit and adding "C:\Program Files\ffmpeg\bin" at the bottom (without the quotes).
 
-5. If you have a [CUDA-compatible NVIDIA GPU](https://developer.nvidia.com/cuda-gpus), such as a Geforce RTX, you can gain about a major performance improvement by installing [CUDA](https://docs.nvidia.com/cuda/). CUDA 11.7 is recommended. Read the installation instructions carefully, since additional steps are needed after running the installer.
+6. If you have a [CUDA-compatible NVIDIA GPU](https://developer.nvidia.com/cuda-gpus), such as a Geforce RTX, you can gain about a major performance improvement by installing [CUDA](https://docs.nvidia.com/cuda/). CUDA 11.7 is recommended. Read the installation instructions carefully, since additional steps are needed after running the installer.
 
-6. If you plan to train your own models, you will need to install SQLite. On Windows, follow [these instructions](https://www.sqlitetutorial.net/download-install-sqlite/). On Linux, type:
+7. If you plan to train your own models, you will need to install SQLite. On Windows, follow [these instructions](https://www.sqlitetutorial.net/download-install-sqlite/). On Linux, type:
 
 ```
 sudo apt install sqlite3
