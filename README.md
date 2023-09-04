@@ -1,5 +1,5 @@
 ## Introduction
-HawkEars is a desktop program that scans audio recordings for bird sounds and generates [Audacity](https://www.audacityteam.org/) label files. It is inspired by [BirdNET](https://github.com/kahst/BirdNET), and intended as an improved productivity tool for analyzing field recordings. This repository includes the source code and a trained model for a list of species found in Canada. The complete list is found [here](https://github.com/jhuus/HawkEars/blob/main/data/classes.txt). The repository does not include the raw data or spectrograms used to train the model.
+HawkEars is a desktop program that scans audio recordings for bird sounds and generates [Audacity](https://www.audacityteam.org/) label files. It is inspired by [BirdNET](https://github.com/kahst/BirdNET), and intended as an improved productivity tool for analyzing field recordings. This repository includes the source code and trained models for a list of 259 species found in Canada. The complete list is found [here](https://github.com/jhuus/HawkEars/blob/main/data/classes.txt). The repository does not include the raw data or spectrograms used to train the model.
 
 This project is licensed under the terms of the MIT license.
 
@@ -57,6 +57,8 @@ This will analyze the recording(s) included in the test directory. There are als
 python analyze.py -h
 ```
 
+Additional arguments include options for specifying latitude and longitude (or region) and recording date. These are useful for reducing false positives.
+
 If you don't have access to additional recordings for testing, one good source is [xeno-canto](https://xeno-canto.org/). Recordings there are generally single-species, however, and therefore somewhat limited. A source of true field recordings, generally with multiple species, is the [Hamilton Bioacoustics Field Recordings](https://archive.org/details/hamiltonbioacousticsfieldrecordings).
 
 After running analysis, you can view the output by opening an audio file in Audacity, clicking File / Import / Labels and selecting the generated label file. Audacity should then look something like this:
@@ -72,7 +74,7 @@ You can click a label to view or listen to that segment. You can also edit a lab
 ## Limitations
 Some bird species are difficult to identify by sound alone. This includes mimics, for obvious reasons, which is why Northern Mockingbird is not currently included in the species list. European Starlings are included, but often mimic other birds and are therefore sometimes challenging to identify. Hoary Redpoll is excluded because it sounds too much like Common Redpoll.
 
-HawkEars is currently trained on 259 species that occur in Canada. Missing species are primarily shorebirds and waterfowl, and additional species will be added over time. A range of sound types is included for each species, but juvenile begging sounds are mostly missing. That's partly due to difficulty getting enough good recordings of these sounds, but it's certainly an area for further work.
+As noted above, HawkEars is currently trained on 259 species that occur in Canada. Missing species are primarily shorebirds and waterfowl, and additional species will be added over time. A range of sound types is included for each species, but juvenile begging sounds are mostly missing. That's partly due to difficulty getting enough good recordings of these sounds, but it's certainly an area for further work.
 
 ## Training Your Own Model
 Setting up your own model mostly consists of finding good recordings, selecting segments within the recordings, and converting them to spectrograms stored in a SQLite database (see Implementation Notes below). Model training is performed by train.py. To see available parameters, type:
