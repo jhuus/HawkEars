@@ -91,3 +91,6 @@ HawkEars is implemented using PyTorch, with a primary model ensemble and a separ
 
 ### Spectrograms
 Spectrograms are extracted from audio files in core/audio.py. Training spectrograms are then compressed and saved to a SQLite database, but this is not done during inference. The primary models use a mel transform, but the low band model uses linear spectrograms. Spectrogram parameters are specified in core/base_config.py.
+
+### TensorFlow Version
+HawkEars was initially developed using TensorFlow. That code is still available [here](https://github.com/jhuus/HawkEars-TensorFlow). The TensorFlow version is no longer maintained though.
