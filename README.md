@@ -91,7 +91,10 @@ If this is something you want to do, and you would like some help, please contac
 HawkEars is implemented using PyTorch, with a primary model ensemble and a separate low-band model (data/low_band.ckpt) to detect Ruffed Grouse drumming. The primary ensemble consists of a group of *.ckpt files stored in data/ckpt. During analysis, predictions are generated using all models in the primary ensemble, and then a simple average of those predictions is used. To improve performance, simply rename one of them to change the suffix. Note that the file name corresponds to the model type specified during training.
 
 ### Spectrograms
-Spectrograms are extracted from audio files in core/audio.py. Training spectrograms are then compressed and saved to a SQLite database, but this is not done during inference. The primary models use a mel transform, but the low band model uses linear spectrograms. Spectrogram parameters are specified in core/base_config.py.
+Spectrograms are extracted from audio files in core/audio.py. The primary models use a mel transform, but the low band model uses linear spectrograms. Spectrogram parameters are specified in core/base_config.py. Training spectrograms are compressed and saved to a SQLite database, but this is not done during inference. The script tools/pickle_spec.py generates a pickle file from spectrograms in a database, given a list of classes. The training code gets input from the pickle file. This improves training performance and makes it easier to share datasets.
+
+### Configuration Management
+Configuration parameters, including training hyperparameters, are specified with default settings in core/base_config.py. Groups of alternate settings are specified in core/configs.py. Each group is given a name, so it can be selected using a command-line parameter.
 
 ### TensorFlow Version
 HawkEars was initially developed using TensorFlow. That code is still available [here](https://github.com/jhuus/HawkEars-TensorFlow). The TensorFlow version is no longer maintained though.
