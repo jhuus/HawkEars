@@ -20,27 +20,6 @@ AUDIO_EXTS = [
   '.ra', '.rm', '.raw', '.rf64', '.sln', '.tta', '.voc', '.vox', '.wav', '.wma', '.wv', '.webm', '.x-m4a',
 ]
 
-# center a spectrogram horizontally
-def center_spec(image):
-    image = image.reshape((cfg.audio.spec_height, cfg.audio.spec_width))
-    centered = image.transpose()
-    width = centered.shape[0]
-    midpoint = int(width / 2)
-    half = centered.sum() / 2
-    sum = 0
-    for i in range(width):
-        sum += np.sum(centered[i])
-        if sum >= half:
-            centered = np.roll(centered, midpoint - i, axis=0)
-            if i < midpoint:
-                centered[:(midpoint - i), :] = 0
-            else:
-                centered[width - (i - midpoint):, :] = 0
-
-            break
-
-    return centered.transpose()
-
 # compress a spectrogram in preparation for inserting into database
 def compress_spectrogram(data):
     data = data * 255
