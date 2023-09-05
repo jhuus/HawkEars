@@ -1,0 +1,8 @@
+runtest.py
+data/classes-*.txt
+data/*.db
+data/*.pickle
+logs/*
+test-*
+tools/_*.*
+wildtrax/*
