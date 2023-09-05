@@ -41,8 +41,7 @@ class Label:
         self.end_time = end_time
 
 class Analyzer:
-    def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region, debug_mode):
-
+    def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region, debug_mode, merge):
         self.input_path = input_path.strip()
         self.output_path = output_path.strip()
         self.start_seconds = self._get_seconds_from_time_string(start_time)
@@ -52,6 +51,7 @@ class Analyzer:
         self.longitude = longitude
         self.region = region
         self.debug_mode = debug_mode
+        self.merge_labels = (merge == 1)
 
         if self.start_seconds is not None and self.end_seconds is not None and self.end_seconds < self.start_seconds + cfg.audio.segment_len:
                 logging.error(f"Error: end time must be >= start time + {cfg.audio.segment_len} seconds")
@@ -375,7 +375,7 @@ class Analyzer:
                     if cfg.infer.check_adjacent and probs[i - 1] < min_adj_prob and probs[i + 1] < min_adj_prob:
                         continue
 
-                if prev_label != None and prev_label.end_time >= self.offsets[i]:
+                if self.merge_labels and prev_label != None and prev_label.end_time >= self.offsets[i]:
                     # extend the previous label's end time (i.e. merge)
                     prev_label.end_time = end_time
                     prev_label.probability = max(use_prob, prev_label.probability)
@@ -443,6 +443,7 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--end', type=str, default='', help="Optional end time in hh:mm:ss format, where hh and mm are optional.")
     parser.add_argument('-i', '--input', type=str, default='', help="Input path (single audio file or directory). No default.")
     parser.add_argument('-o', '--output', type=str, default='', help="Output directory to contain label files. Default is input path, if that is a directory.")
+    parser.add_argument('-m', '--merge', type=int, default=1, help=f'Specify 0 to not merge adjacent labels of same species. Default = 1, i.e. merge.')
     parser.add_argument('-p', '--prob', type=float, default=cfg.infer.min_prob, help=f"Generate label if probability >= this. Default = {cfg.infer.min_prob}.")
     parser.add_argument('-s', '--start', type=str, default='', help="Optional start time in hh:mm:ss format, where hh and mm are optional.")
     parser.add_argument('--date', type=str, default=None, help=f'Date in yyyymmdd, mmdd, or file. Specifying file extracts the date from the file name, using the reg ex defined in config.py.')
@@ -463,7 +464,7 @@ if __name__ == '__main__':
         quit()
 
     file_list = Analyzer._get_file_list(args.input)
-    analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.debug)
+    analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.debug, args.merge)
     analyzer.run(file_list)
 
     elapsed = time.time() - start_time
