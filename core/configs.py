@@ -16,13 +16,18 @@ class Low_Band(base_config.BaseConfig):
         self.audio.spec_height = self.audio.low_band_spec_height
         self.misc.train_pickle = "data/low-band-train.pickle"
         self.misc.test_pickle = None
-        self.train.model_name = "ghostnet_050"
+        self.train.model_name = "custom_dla_0"
         self.train.multi_label = False
-        self.train.model_print_path = None
-        self.train.augmentation = False
+        self.train.use_class_weights = False
+        self.train.augmentation = True
+        self.train.prob_real_noise = 0
+        self.prob_shift = .2
+        self.train.prob_exponent = 0
+        self.train.label_smoothing = 0.15
         self.train.deterministic = False
-        self.train.learning_rate = .0025
-        self.train.num_epochs = 15
+        self.train.learning_rate = .001
+        self.train.num_epochs = 18
+        self.train.save_last_n = 4
 
 # All tf_efficientnetv2_b0 from scratch
 @dataclass
