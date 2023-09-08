@@ -109,21 +109,7 @@ class Species_Handlers:
             spec_array[i] = self.low_band_specs[i].reshape((1, cfg.audio.low_band_spec_height, cfg.audio.spec_width)).astype(np.float32)
 
         with torch.no_grad():
-            # process in chunks to avoid running out of GPU memory
-            predictions = None
-            start_idx = 0
-            while start_idx < len(spec_array):
-                end_idx = min(start_idx + cfg.infer.analyze_group_size, len(spec_array))
-                torch_specs = torch.Tensor(spec_array[start_idx:end_idx]).to(self.device)
-                curr_pred = self.low_band_model(torch_specs)
-                curr_pred = F.softmax(curr_pred, dim=1).cpu().numpy()
-
-                if predictions is None:
-                    predictions = curr_pred
-                else:
-                    predictions = np.concatenate((predictions, curr_pred))
-
-                start_idx += cfg.infer.analyze_group_size
+            predictions = self.low_band_model.get_predictions(spec_array, self.device, use_softmax=True)
 
             # merge with main predictions (drumming is detected here, other RUGR sounds are detected by the main ensemble)
             exponent = 1.7 # lower the drumming predictions a bit to reduce false positives
