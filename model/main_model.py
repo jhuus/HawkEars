@@ -297,3 +297,28 @@ class MainModel(LightningModule):
         self.weights = self.weights.to(self.device) # now we can move weights to device too
 
         return [self.optimizer], [self.scheduler]
+
+    # get predictions one block at a time to avoid running out of GPU memory;
+    # block size is cfg.infer.block_size
+    def get_predictions(self, specs, device, use_softmax=False):
+        start_idx = 0
+        predictions = None
+        while start_idx < len(specs):
+            end_idx = min(start_idx + cfg.infer.block_size, len(specs))
+            with torch.no_grad():
+                torch_specs = torch.Tensor(specs[start_idx:end_idx]).to(device)
+                block_predictions = self.base_model(torch_specs)
+                if use_softmax:
+                    block_predictions = F.softmax(block_predictions, dim=1).cpu().numpy()
+                else:
+                    block_predictions = torch.sigmoid(block_predictions).cpu().numpy()
+
+                if predictions is None:
+                    predictions = block_predictions
+                else:
+                    predictions = np.concatenate((predictions, block_predictions))
+
+                start_idx += cfg.infer.block_size
+
+        return predictions
+
