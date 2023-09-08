@@ -74,7 +74,7 @@ class Inference:
     min_location_freq = .0001    # ignore if species frequency less than this for location/week
     file_date_regex = "\S+_(\d+)_.*" # regex to extract date from file name (e.g. HNCAM015_20210529_161122.mp3)
     file_date_regex_group = 1    # use group at offset 1
-    analyze_group_size = 200     # do this many spectrograms at a time to avoid running out of GPU memory
+    block_size = 200             # do this many spectrograms at a time to avoid running out of GPU memory
     frequency_db = "frequency"   # eBird barchart data, i.e. species report frequencies
 
     # Soundalike groups are used in analysis / inference when a location is given.
