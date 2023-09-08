@@ -217,26 +217,7 @@ class Analyzer:
         predictions = []
         for model in self.models:
             model.to(self.device)
-            start_idx = 0
-            merged_pred = None
-            while start_idx < len(specs):
-                end_idx = min(start_idx + cfg.infer.analyze_group_size, len(specs))
-                with torch.no_grad():
-                    torch_specs = torch.Tensor(specs[start_idx:end_idx]).to(self.device)
-                    curr_pred = model(torch_specs)
-                    if cfg.train.multi_label:
-                        curr_pred = torch.sigmoid(curr_pred).cpu().numpy()
-                    else:
-                        curr_pred = F.softmax(curr_pred, dim=1).cpu().numpy()
-
-                    if merged_pred is None:
-                        merged_pred = curr_pred
-                    else:
-                        merged_pred = np.concatenate((merged_pred, curr_pred))
-
-                    start_idx += cfg.infer.analyze_group_size
-
-            predictions.append(merged_pred)
+            predictions.append(model.get_predictions(specs, self.device, use_softmax=False))
 
         # calculate and return the average across models
         avg_pred = None
