@@ -298,6 +298,21 @@ class MainModel(LightningModule):
 
         return [self.optimizer], [self.scheduler]
 
+    # get embeddings for use in searching and clustering
+    def get_embeddings(self, specs, device):
+        if 'mobilenetv3' in self.model_name:
+            # timm mobilenetv3 checkpoint
+            with torch.no_grad():
+                torch_specs = torch.Tensor(specs).to(device)
+                x = self.base_model.forward_features(torch_specs)
+                x = self.base_model.global_pool(x)
+                x = self.base_model.conv_head(x)
+                x = self.base_model.act2(x)
+                x = self.base_model.flatten(x)
+                return x.cpu().detach().numpy()
+        else:
+            raise Exception(f"Embeddings not supported for {self.model_name}")
+
     # get predictions one block at a time to avoid running out of GPU memory;
     # block size is cfg.infer.block_size
     def get_predictions(self, specs, device, use_softmax=False):
