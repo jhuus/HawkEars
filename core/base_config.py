@@ -22,7 +22,6 @@ class Audio:
     low_band_min_audio_freq = 0
     low_band_max_audio_freq = 200
     low_band_mel_scale = False
-    low_band_ckpt_path = "data/low_band.ckpt"
 
 @dataclass
 class Training:
@@ -92,7 +91,8 @@ class Inference:
 @dataclass
 class Miscellaneous:
     main_ckpt_folder = "data/ckpt"      # use an ensemble of all checkpoints in this folder for inference
-    search_ckpt_path = None             # single-label model checkpoint used in searching and clustering
+    low_band_ckpt_path = "data/low_band.ckpt"
+    search_ckpt_path = "data/search.ckpt" # single-label model checkpoint used in searching and clustering
     classes_file = "data/classes.txt"   # list of classes used to generate pickle files
     ignore_file = "data/ignore.txt"     # classes listed in this file are ignored in analysis
     train_pickle = "data/ssw0-train.pickle"
