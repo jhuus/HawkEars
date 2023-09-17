@@ -15,6 +15,7 @@ from core import cfg
 class Audio:
     def __init__(self, device='cuda'):
         self.have_signal = False
+        self.path = None
         self.signal = None
         self.device = device
 
@@ -201,6 +202,7 @@ class Audio:
 
         try:
             self.have_signal = True
+            self.path = path
 
             scale = 1.0 / float(1 << ((16) - 1))
             info = ffmpeg.probe(path)
@@ -236,6 +238,7 @@ class Audio:
 
         except ffmpeg.Error as e:
             self.have_signal = False
+            self.path = None
             tokens = e.stderr.decode().split('\n')
             if len(tokens) >= 2:
                 logging.error(f'Caught exception in audio load: {tokens[-2]}')
