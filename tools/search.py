@@ -13,7 +13,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.spatial.distance
 import torch
-import torch.nn.functional as F
 
 # this is necessary before importing from a peer directory
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
