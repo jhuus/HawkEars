@@ -59,8 +59,7 @@ class ExtractByImage(extractor.Extractor):
                 continue
 
             print(f"Processing {recording_path}")
-            self.insert_spectrograms(recording_path, self.offsets[filename])
-            num_inserted += len(self.offsets[filename])
+            num_inserted += self.insert_spectrograms(recording_path, self.offsets[filename])
 
         print(f"Inserted {num_inserted} spectrograms.")
 
