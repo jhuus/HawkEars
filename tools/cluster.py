@@ -134,7 +134,7 @@ class Main:
             specs[i] = self.specs[offset].reshape((1, cfg.audio.spec_height, cfg.audio.spec_width))
 
         if shuffle:
-            indexes = util.get_rand_list(num_to_plot, num_to_plot - 1)
+            indexes = np.random.permutation(np.arange(len(clusters[cluster_num])))[:num_to_plot]
         else:
             indexes = [i for i in range(num_to_plot)]
 
@@ -178,7 +178,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', type=int, default=None, help='If specified, plot spectrograms for this cluster. Default = None.')
     parser.add_argument('-d', type=str, default='../data/training.db', help='Database path.')
     parser.add_argument('-n', type=int, default=None, help='If -c is specified, optionally plot only this many spectrograms. Default is all.')
-    parser.add_argument('-p1', type=int, default=15, help='min_cluster_size parameter to HDBSCAN algorithm. Default = 10.')
+    parser.add_argument('-p1', type=int, default=15, help='min_cluster_size parameter to HDBSCAN algorithm. Default = 15.')
     parser.add_argument('-p2', type=int, default=7, help='min_samples parameter to HDBSCAN algorithm. Default = 7.')
     parser.add_argument('-p3', type=int, default=10, help='number of samples to try when finding good representative of each cluster. Default = 10.')
     parser.add_argument('-o', type=str, default='clusters', help='Output directory name.')
