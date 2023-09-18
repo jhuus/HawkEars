@@ -294,7 +294,7 @@ class Analyzer:
         if self.check_frequency:
             check_frequency = True
             if self.get_date_from_file_name:
-                result = re.split('\S+_(\d+)_.*', os.path.basename(file_path))
+                result = re.split(cfg.infer.file_date_regex, os.path.basename(file_path))
                 if len(result) > cfg.infer.file_date_regex_group:
                     date_str = result[cfg.infer.file_date_regex_group]
                     self.week_num = self._get_week_num_from_date_str(date_str)
