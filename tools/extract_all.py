@@ -32,8 +32,7 @@ class ExtractAll(extractor.Extractor):
                 continue # recording is too short
 
             offsets = np.arange(0, seconds - self.increment, self.increment)
-            self.insert_spectrograms(recording_path, offsets)
-            num_inserted += len(offsets)
+            num_inserted += self.insert_spectrograms(recording_path, offsets)
 
         print(f"Inserted {num_inserted} spectrograms.")
 
