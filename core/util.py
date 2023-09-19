@@ -1,9 +1,8 @@
 # Utility functions
 
-import math
 import os
+import re
 from posixpath import splitext
-import random
 import sys
 import zlib
 
@@ -113,26 +112,16 @@ def get_class_list(class_file_path=cfg.misc.classes_file):
 # return a source name given a file name
 def get_source_name(filename):
     if filename is None or len(filename) == 0:
-        return 'Unknown'
+        return "Unknown"
 
     if '.' in filename:
         filename, _ = splitext(filename)
 
-    if len(filename) > 5 and filename[0:4].isupper() and filename[4] == '_':
-        filename = filename[5:] # special case for validation files like RBGR_XC45678.mp3
+    for pattern, source in cfg.misc.source_regexes:
+        if re.match(pattern, filename):
+            return source
 
-    if filename.startswith('HNC'):
-        return 'HNC'
-    elif filename.startswith('XC'):
-        return 'Xeno-Canto'
-    elif filename[0] == 'N' and len(filename) > 1 and filename[1].isdigit():
-        return 'iNaturalist'
-    elif filename[0].isalpha():
-        return 'Cornell Guide'
-    elif filename.isnumeric():
-        return 'Macaulay Library'
-    else:
-        return 'Youtube'
+    return "Unknown"
 
 # return True iff given path is an audio file
 def is_audio_file(file_path):
