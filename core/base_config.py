@@ -98,6 +98,14 @@ class Miscellaneous:
     train_pickle = "data/ssw0-train.pickle"
     test_pickle = "data/ssw0-test.pickle"
 
+    # when running extract and no source is defined, get source by matching these regexes in order;
+    # this assumes iNaturalist downloads were renamed by adding an N prefix
+    source_regexes = [
+        ("XC\d+", "Xeno-Canto"),
+        ("N\d+", "iNaturalist"),
+        ("\d+", "Macaulay Library"),
+        (".*", "Other")]
+
 @dataclass
 class BaseConfig:
     audio = Audio()
