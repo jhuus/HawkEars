@@ -300,8 +300,13 @@ class MainModel(LightningModule):
 
     # get embeddings for use in searching and clustering
     def get_embeddings(self, specs, device):
-        if 'mobilenetv3' in self.model_name:
-            # timm mobilenetv3 checkpoint
+        if 'efficientnetv2' in self.model_name:
+            with torch.no_grad():
+                torch_specs = torch.Tensor(specs).to(device)
+                x = self.base_model.forward_features(torch_specs)
+                x = self.base_model.global_pool(x)
+                return x.cpu().detach().numpy()
+        elif 'mobilenetv3' in self.model_name:
             with torch.no_grad():
                 torch_specs = torch.Tensor(specs).to(device)
                 x = self.base_model.forward_features(torch_specs)
@@ -309,6 +314,18 @@ class MainModel(LightningModule):
                 x = self.base_model.conv_head(x)
                 x = self.base_model.act2(x)
                 x = self.base_model.flatten(x)
+                return x.cpu().detach().numpy()
+        elif 'repvit' in self.model_name:
+            with torch.no_grad():
+                torch_specs = torch.Tensor(specs).to(device)
+                self.base_model.classifier = nn.Identity()
+                x = self.base_model(torch_specs)
+                return x.cpu().detach().numpy()
+        elif 'vovnet' in self.model_name:
+            with torch.no_grad():
+                torch_specs = torch.Tensor(specs).to(device)
+                x = self.base_model.forward_features(torch_specs)
+                x = self.base_model.head.global_pool(x)
                 return x.cpu().detach().numpy()
         else:
             raise Exception(f"Embeddings not supported for {self.model_name}")
