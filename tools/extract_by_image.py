@@ -11,6 +11,7 @@ import argparse
 import inspect
 import os
 import re
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -24,9 +25,10 @@ from core import extractor
 from core import util
 
 class ExtractByImage(extractor.Extractor):
-    def __init__(self, audio_path, images_path, db_name, source, category, species_name, species_code, low_band):
+    def __init__(self, audio_path, images_path, db_name, source, category, species_name, species_code, low_band, dest_dir):
         super().__init__(audio_path, db_name, source, category, species_name, species_code, low_band)
         self.images_path = images_path
+        self.dest_dir = dest_dir
 
     # get list of specs from directory of images
     def _process_image_dir(self):
@@ -58,6 +60,11 @@ class ExtractByImage(extractor.Extractor):
             if filename not in self.offsets:
                 continue
 
+            if self.dest_dir is not None:
+                dest_path = os.path.join(self.dest_dir, Path(recording_path).name)
+                if not os.path.exists(dest_path):
+                    shutil.copy(recording_path, dest_path)
+
             print(f"Processing {recording_path}")
             num_inserted += self.insert_spectrograms(recording_path, self.offsets[filename])
 
@@ -71,6 +78,7 @@ if __name__ == '__main__':
     parser.add_argument('-b', type=str, default='bird', help='Category. Default = "bird"')
     parser.add_argument('-c', type=str, default=None, help='Species code (required)')
     parser.add_argument('-d', type=str, default=None, help='Directory containing recordings (required).')
+    parser.add_argument('-e', type=str, default=None, help='Directory to copy recordings to (optional).')
     parser.add_argument('-f', type=str, default='training', help='Database name or full path ending in ".db". Default = "training"')
     parser.add_argument('-i', type=str, default=None, help='Directory containing spectrogram images (required).')
     parser.add_argument('-l', type=int, default=0, help='1 = low band (default=0)')
@@ -103,7 +111,7 @@ if __name__ == '__main__':
 
     run_start_time = time.time()
 
-    ExtractByImage(audio_path, image_path, args.f, args.a, args.b, species_name, species_code, args.l).run()
+    ExtractByImage(audio_path, image_path, args.f, args.a, args.b, species_name, species_code, args.l, args.e).run()
 
     elapsed = time.time() - run_start_time
     print(f'elapsed seconds = {elapsed:.1f}')
