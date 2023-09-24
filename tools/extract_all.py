@@ -26,8 +26,17 @@ class ExtractAll(extractor.Extractor):
     def run(self):
         num_inserted = 0
         for recording_path in self.get_recording_paths():
+            filename = Path(recording_path).stem
+            if filename in self.filenames:
+                continue # don't process ones that exist in database already
+
             print(f"Processing {recording_path}")
-            seconds = self.load_audio(recording_path)
+            try:
+                seconds = self.load_audio(recording_path)
+            except Exception as e:
+                print(f"Caught exception: {e}")
+                continue
+
             if seconds < self.increment:
                 continue # recording is too short
 
