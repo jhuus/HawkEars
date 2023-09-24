@@ -22,6 +22,7 @@ class Extractor:
 
         self._get_category_id()
         self._get_subcategory_id()
+        self._get_db_recordings()
         self._get_db_specs()
 
     # If db_name ends in ".db", treat it as a full path.
@@ -43,6 +44,14 @@ class Extractor:
             self.category_id = results[0].id
 
         return self.category_id
+
+    # get existing recordings
+    def _get_db_recordings(self):
+        self.filenames = {}
+        results = self.db.get_recording_by_subcat_name(self.species_name)
+        for r in results:
+            if r.filename not in self.filenames:
+                self.filenames[r.filename] = 1
 
     # get existing spectrograms, so we don't insert duplicates
     def _get_db_specs(self):
