@@ -28,48 +28,69 @@ config = dict(
 #
 def get_model(model_name, **kwargs):
     if model_name == '0':
-        # levels are 1 and last 3 channels are much smaller (~630K parameters)
+        # ~630K parameters
         config = dict(
             levels=[1, 1, 1, 1, 1, 1],
             channels=[16, 32, 64, 64, 64, 64],
             block=dla.DlaBasic
         )
     elif model_name == '1':
-        # levels are 1 and last 3 channels are smaller (~3.4M parameters)
+        # ~1.5M parameters
         config = dict(
             levels=[1, 1, 1, 1, 1, 1],
-            channels=[16, 32, 64, 96, 128, 256],
+            channels=[16, 32, 64, 64, 128, 128],
             block=dla.DlaBasic
         )
     elif model_name == '2':
+        # ~3.0M parameters
+        config = dict(
+            levels=[1, 1, 1, 1, 1, 1],
+            channels=[16, 32, 64, 96, 96, 256],
+            block=dla.DlaBasic
+        )
+    elif model_name == '3':
         # DlaBottleneck (~4.0M parameters)
         config = dict(
             levels=[1, 1, 1, 2, 2, 1],
             channels=[16, 32, 64, 128, 256, 512],
             block=dla.DlaBottleneck
         )
-    elif model_name == '3':
-        # DlaBottle2Neck and adjusted levels & channels (~6.0M parameters)
+    elif model_name == '4':
+        # DlaBottle2neck (~4.9M parameters)
+        config = dict(
+            levels=[1, 1, 1, 1, 2, 1],
+            channels=[16, 32, 64, 64, 256, 256],
+            block=dla.DlaBottle2neck
+        )
+    elif model_name == '5':
+        # DlaBottle2Neck (~6.0M parameters)
         config = dict(
             levels=[1, 1, 1, 2, 1, 1],
             channels=[16, 32, 64, 128, 256, 384],
             block=dla.DlaBottle2neck
         )
-    elif model_name == '4':
+    elif model_name == '6':
+        # DlaBottle2Neck (~7.2M parameters)
+        config = dict(
+            levels=[1, 1, 1, 1, 2, 1],
+            channels=[16, 32, 64, 128, 256, 384],
+            block=dla.DlaBottle2neck
+        )
+    elif model_name == '7':
         # DlaBottle2Neck (~8.2M parameters)
         config = dict(
             levels=[1, 1, 1, 1, 1, 1],
             channels=[16, 32, 64, 128, 256, 512],
             block=dla.DlaBottle2neck
         )
-    elif model_name == '5':
+    elif model_name == '8':
         # dla34 but DlaBottle2neck (~10.2M parameters)
         config = dict(
             levels=[1, 1, 1, 2, 2, 1],
             channels=[16, 32, 64, 128, 256, 512],
             block=dla.DlaBottle2neck
         )
-    elif model_name == '6':
+    elif model_name == '9':
         # levels are 1 (~12.0M parameters)
         config = dict(
             levels=[1, 1, 1, 1, 1, 1],
