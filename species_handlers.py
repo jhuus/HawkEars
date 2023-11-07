@@ -25,10 +25,10 @@ class Species_Handlers:
 
         # handler parameters, so it's easy to use the same logic for multiple species
         self.check_amplitude_config = {
-            'LALO': SimpleNamespace(low_freq=.58, high_freq=.80, min_ratio=.15),
-            'HOLA': SimpleNamespace(low_freq=.64, high_freq=.82, min_ratio=.15),
-            'PIGR': SimpleNamespace(low_freq=.58, high_freq=.67, min_ratio=.15),
-            'RUBL': SimpleNamespace(low_freq=.62, high_freq=.75, min_ratio=.15),
+            'LALO': SimpleNamespace(low_freq=.49, high_freq=.69, min_ratio=.15),
+            'HOLA': SimpleNamespace(low_freq=.60, high_freq=.73, min_ratio=.15),
+            'PIGR': SimpleNamespace(low_freq=.46, high_freq=.56, min_ratio=.15),
+            'RUBL': SimpleNamespace(low_freq=.45, high_freq=.67, min_ratio=.15),
         }
 
         self.check_soundalike_config = {
