@@ -73,6 +73,8 @@ for r in results:
     if overwrite or not os.path.exists(spec_path):
         print(f"Processing {spec_path}")
         spec = util.expand_spectrogram(r.value, low_band=low_band)
+        if np.min(spec) < 0 or np.max(spec) != 1:
+            print(f"    min={np.min(spec)}, max={np.max(spec)}")
 
         num_plotted += 1
         plot.plot_spec(spec, spec_path, low_band=low_band)
