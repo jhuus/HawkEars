@@ -5,7 +5,7 @@ import inspect
 import os
 import sys
 
-CONVERT_TYPES = ['.flac', '.octet-stream', '.wav', '.wma', '.x-hx-aac-adts', '.x-aiff']
+CONVERT_TYPES = ['.flac', '.octet-stream', '.qt', '.wav', '.wma', '.x-hx-aac-adts', '.x-aiff']
 
 # command-line arguments
 parser = argparse.ArgumentParser()
