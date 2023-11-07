@@ -11,9 +11,11 @@ Spring Peeper,Spring Peeper
 # These bird species are included in the provided model
 Acadian Flycatcher,ACFL
 Alder Flycatcher,ALFL
+American Avocet,AMAV
 American Bittern,AMBI
 American Coot,AMCO
 American Crow,AMCR
+American Golden-Plover,AMGP
 American Goldfinch,AMGO
 American Kestrel,AMKE
 American Pipit,AMPI
@@ -23,8 +25,11 @@ American Three-toed Woodpecker,ATTW
 American Tree Sparrow,ATSP
 American Wigeon,AMWI
 American Woodcock,AMWO
+Anna's Hummingbird,ANHU
 Arctic Tern,ARTE
 Baird's Sparrow,BAIS
+Baird's Sandpiper,BASA
+Bald Eagle,BAEA
 Baltimore Oriole,BAOR
 Bank Swallow,BANS
 Barn Owl,BANO
@@ -33,9 +38,11 @@ Barred Owl,BADO
 Bay-breasted Warbler,BBWA
 Bell's Vireo,BEVI
 Belted Kingfisher,BEKI
+Bewick's Wren,BEWR
 Black Tern,BLTE
 Black-and-white Warbler,BAWW
 Black-backed Woodpecker,BBWO
+Black-bellied Plover,BBPL
 Black-billed Cuckoo,BBCU
 Black-billed Magpie,BBMA
 Black-capped Chickadee,BCCH
@@ -56,12 +63,15 @@ Bohemian Waxwing,BOWA
 Bonaparte's Gull,BOGU
 Boreal Chickadee,BOCH
 Boreal Owl,BOOW
+Brant,BRAN
 Brewer's Blackbird,BRBL
 Brewer's Sparrow,BRSP
 Broad-winged Hawk,BWHA
 Brown Creeper,BRCR
 Brown Thrasher,BRTH
 Brown-headed Cowbird,BHCO
+Bufflehead,BUFF
+California Quail,CAQU
 Canada Goose,CANG
 Canada Jay,CAJA
 Canada Warbler,CAWA
@@ -71,15 +81,20 @@ Caspian Tern,CATE
 Cassin's Vireo,CAVI
 Cedar Waxwing,CEDW
 Cerulean Warbler,CERW
+Chestnut-backed Chickadee,CBCH
 Chestnut-collared Longspur,CCLO
 Chestnut-sided Warbler,CSWA
+Chimney Swift,CHSW
 Chipping Sparrow,CHSP
 Chuck-will's-widow,CWWI
 Clark's Nutcracker,CLNU
 Clay-colored Sparrow,CCSP
 Cliff Swallow,CLSW
+Common Gallinule,COGA
+Common Goldeneye,COGO
 Common Grackle,COGR
 Common Loon,COLO
+Common Merganser,COME
 Common Nighthawk,CONI
 Common Raven,CORA
 Common Redpoll,CORE
@@ -91,7 +106,9 @@ Dark-eyed Junco,DEJU
 Dickcissel,DICK
 Double-crested Cormorant,DCCO
 Downy Woodpecker,DOWO
+Dunlin,DUNL
 Dusky Flycatcher,DUFL
+Eared Grebe,EAGR
 Eastern Bluebird,EABL
 Eastern Kingbird,EAKI
 Eastern Meadowlark,EAME
@@ -109,11 +126,14 @@ Fox Sparrow,FOSP
 Franklin's Gull,FRGU
 Gadwall,GADW
 Golden-crowned Kinglet,GCKI
+Golden-crowned Sparrow,GCSP
 Golden-winged Warbler,GWWA
 Grasshopper Sparrow,GRSP
 Gray Catbird,GRCA
 Gray Flycatcher,GRFL
+Gray Partridge,GRAP
 Gray-cheeked Thrush,GCTH
+Great Black-backed Gull,GBBG
 Great Blue Heron,GBHE
 Great Crested Flycatcher,GCFL
 Great Egret,GREG
@@ -121,12 +141,16 @@ Great Gray Owl,GGOW
 Great Horned Owl,GHOW
 Greater White-fronted Goose,GWFG
 Greater Yellowlegs,GRYE
+Green Heron,GRHE
 Green-winged Teal,GWTE
 Hairy Woodpecker,HAWO
+Harris's Sparrow,HASP
 Henslow's Sparrow,HESP
 Hermit Thrush,HETH
 Herring Gull,HERG
+Hooded Merganser,HOME
 Hooded Warbler,HOWA
+Horned Grebe,HOGR
 Horned Lark,HOLA
 House Finch,HOFI
 House Sparrow,HOSP
@@ -138,13 +162,17 @@ Kirtland's Warbler,KIWA
 Lapland Longspur,LALO
 Lark Sparrow,LASP
 Lazuli Bunting,LAZB
-LeConte's Sparrow,LCSP
 Least Bittern,LEBI
 Least Flycatcher,LEFL
+Least Sandpiper,LESP
+LeConte's Sparrow,LCSP
+Lesser Black-backed Gull,LBBG
 Lesser Yellowlegs,LEYE
 Lincoln's Sparrow,LISP
 Loggerhead Shrike,LOSH
+Long-billed Dowitcher,LBDO
 Long-eared Owl,LEOW
+Long-tailed Duck,LTDU
 MacGillivray's Warbler,MGWA
 Magnolia Warbler,MAWA
 Mallard,MALL
@@ -155,6 +183,7 @@ Mountain Bluebird,MOBL
 Mountain Chickadee,MOCH
 Mourning Dove,MODO
 Mourning Warbler,MOWA
+Mute Swan,MUSW
 Nashville Warbler,NAWA
 Nelson's Sparrow,NESP
 Northern Cardinal,NOCA
@@ -163,10 +192,12 @@ Northern Goshawk,NOGO
 Northern Harrier,NOHA
 Northern Hawk Owl,NHOW
 Northern Parula,NOPA
+Northern Pintail,NOPI
 Northern Pygmy-Owl,NOPO
 Northern Rough-winged Swallow,NRWS
 Northern Saw-whet Owl,NSWO
 Northern Shoveler,NSHO
+Northern Shrike,NSHR
 Northern Waterthrush,NOWA
 Olive-sided Flycatcher,OSFL
 Orange-crowned Warbler,OCWA
@@ -176,6 +207,7 @@ Ovenbird,OVEN
 Pacific Wren,PAWR
 Pacific-slope Flycatcher,PSFL
 Palm Warbler,PAWA
+Pectoral Sandpiper,PESA
 Peregrine Falcon,PEFA
 Philadelphia Vireo,PHVI
 Pied-billed Grebe,PBGR
@@ -194,29 +226,38 @@ Red-eyed Vireo,REVI
 Red-headed Woodpecker,RHWO
 Red-naped Sapsucker,RNSA
 Red-necked Grebe,RNGR
+Red-necked Phalarope,RNPH
 Red-shouldered Hawk,RSHA
 Red-tailed Hawk,RTHA
 Red-throated Loon,RTLO
 Red-winged Blackbird,RWBL
 Ring-billed Gull,RBGU
+Ring-necked Duck,RNDU
 Ring-necked Pheasant,RNEP
 Rock Pigeon,ROPI
 Rock Wren,ROWR
 Rose-breasted Grosbeak,RBGR
 Rough-legged Hawk,RLHA
 Ruby-crowned Kinglet,RCKI
+Ruby-throated Hummingbird,RTHU
+Ruddy Turnstone,RUTU
 Ruffed Grouse,RUGR
+Rufous Hummingbird,RUHU
 Rusty Blackbird,RUBL
+Sanderling,SAND
 Sandhill Crane,SACR
 Savannah Sparrow,SAVS
 Say's Phoebe,SAPH
 Scarlet Tanager,SCTA
 Sedge Wren,SEWR
+Semipalmated Plover,SEPL
+Semipalmated Sandpiper,SESA
 Sharp-shinned Hawk,SSHA
 Sharp-tailed Grouse,STGR
 Short-billed Dowitcher,SBDO
 Short-eared Owl,SEOW
 Snow Bunting,SNBU
+Snow Goose,SNGO
 Solitary Sandpiper,SOSA
 Song Sparrow,SOSP
 Sora,SORA
@@ -225,6 +266,7 @@ Spotted Towhee,SPTO
 Sprague's Pipit,SPPI
 Steller's Jay,STJA
 Summer Tanager,SUTA
+Swainson's Hawk,SWHA
 Swainson's Thrush,SWTH
 Swamp Sparrow,SWSP
 Tennessee Warbler,TEWA
@@ -233,6 +275,7 @@ Townsend's Warbler,TOWA
 Tree Swallow,TRES
 Trumpeter Swan,TRUS
 Tufted Titmouse,TUTI
+Tundra Swan,TUSW
 Upland Sandpiper,UPSA
 Varied Thrush,VATH
 Veery,VEER
@@ -240,6 +283,7 @@ Vesper Sparrow,VESP
 Violet-green Swallow,VGSW
 Virginia Rail,VIRA
 Warbling Vireo,WAVI
+Western Grebe,WEGR
 Western Kingbird,WEKI
 Western Meadowlark,WEME
 Western Tanager,WETA
@@ -248,10 +292,13 @@ Whimbrel,WHIM
 White-breasted Nuthatch,WBNU
 White-crowned Sparrow,WCSP
 White-eyed Vireo,WEVI
+White-rumped Sandpiper,WRSA
 White-throated Sparrow,WTSP
 White-winged Crossbill,WWCR
 Wild Turkey,WITU
+Willet,WILL
 Willow Flycatcher,WIFL
+Willow Ptarmigan,WIPT
 Wilson's Phalarope,WIPH
 Wilson's Snipe,WISN
 Wilson's Warbler,WIWA
