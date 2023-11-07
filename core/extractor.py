@@ -106,7 +106,7 @@ class Extractor:
         else:
             seconds = self.load_audio(recording_path)
 
-        filename = Path(recording_path).stem
+        filename = Path(recording_path).name
         source_id = self.get_source_id(filename)
         recording_id = self.get_recording_id(filename, source_id, seconds)
 
@@ -118,9 +118,7 @@ class Extractor:
                 self.specs[recording_id] = {}
 
             check_offset = round(offsets[i], 0)
-            if (check_offset in self.specs[recording_id]
-                or check_offset - 1 in self.specs[recording_id]
-                or check_offset + 1 in self.specs[recording_id]):
+            if check_offset in self.specs[recording_id]:
                 continue
 
             num_inserted += 1
