@@ -32,8 +32,9 @@ class SpecInfo:
         self.embedding = embedding
 
 parser = argparse.ArgumentParser()
+parser.add_argument('-e', type=float, default=0.5, help='Raise spectrograms to this exponent to show background sounds. Default = 0.5.')
 parser.add_argument('-f', type=str, default='training', help='Database name (or upper case species code, or HNC).')
-parser.add_argument('-m', type=float, default=0.4, help='Stop plotting when distance exceeds this. Default = 0.4.')
+parser.add_argument('-m', type=float, default=0.6, help='Stop plotting when distance exceeds this. Default = 0.4.')
 parser.add_argument('-n', type=int, default=60, help='Number of top matches to plot.')
 parser.add_argument('-o', type=str, default='output', help='Output directory for plotting matches.')
 parser.add_argument('-i', type=str, default='', help='Path to file containing spectrogram to search for.')
@@ -44,6 +45,7 @@ parser.add_argument('-x', type=str, default=None, help='If specified (e.g. "trai
 
 args = parser.parse_args()
 
+exponent = args.e
 db_name = args.f
 target_path = args.i
 target_offset = args.t
@@ -80,7 +82,7 @@ audio_file_name = os.path.basename(target_path)
 _, ext = os.path.splitext(audio_file_name)
 audio_file_name = audio_file_name[:-(len(ext))]
 image_path = os.path.join(out_dir, f'0~{audio_file_name}-{target_offset:.2f}~0.0.png')
-plot.plot_spec(target_spec, image_path)
+plot.plot_spec(target_spec ** exponent, image_path)
 
 # get spectrograms from the database
 
@@ -130,13 +132,14 @@ if check_db_name is not None:
     use_name = skip_species_name if skip_species_name is not None else species_name
     results = check_db.get_spectrogram_by_subcat_name(use_name, include_embedding=True)
     for r in results:
-        spec_name = f'{r.filename}-{r.offset:.2f}'
+        spec_name = f'{r.filename}-{int(round(r.offset))}'
         check_spec_names[spec_name] = 1
 
 # load the saved model, i.e. the search checkpoint
 print('loading saved model')
 model = main_model.MainModel.load_from_checkpoint(f"../{cfg.misc.search_ckpt_path}")
 model.eval() # set inference mode
+model.to(device)
 
 # get the embedding for the target spectrogram
 input = np.zeros((1, 1, cfg.audio.spec_height, cfg.audio.spec_width))
@@ -170,7 +173,7 @@ for spec_info in spec_infos:
     spec = util.expand_spectrogram(results[0].value)
     spec = spec.reshape((1, cfg.audio.spec_height, cfg.audio.spec_width))
 
-    spec_name = f'{filename}-{offset:.2f}'
+    spec_name = f'{filename}-{int(round(offset))}'
     if spec_name in check_spec_names:
         continue
 
@@ -179,6 +182,7 @@ for spec_info in spec_infos:
     spec_path = os.path.join(out_dir, f'{spec_num}~{base}-{offset:.2f}~{distance:.3f}.png')
 
     if not os.path.exists(spec_path):
+        spec **= exponent
         plot.plot_spec(spec, spec_path)
         num_plotted += 1
 
