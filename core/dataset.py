@@ -73,6 +73,8 @@ class CustomDataset(Dataset):
             elif random.uniform(0, 1) < cfg.train.prob_shift:
                 spec = self._shift_horizontal(spec)
 
+            spec = spec.clip(0, 1) # set negative numbers to 0
+
             # raise to an exponent so smaller values are relatively reduced
             if random.uniform(0, 1) < cfg.train.prob_exponent:
                 spec = spec ** random.uniform(cfg.train.min_exponent, cfg.train.max_exponent)
