@@ -42,31 +42,31 @@ config = dict(
 #    drop_path_rate=0., # stochastic depth drop-path rate
 def get_model(model_name, **kwargs):
     if model_name == '1':
-        # eca_vovnet39b but layer_per_block=3 (16.0M with 23 classes)
+        #  about 2.1M parameters
         config = dict(
-            stem_chs=[64, 64, 128],
+            stem_chs=[32, 32, 64],
             stage_conv_chs=[128, 160, 192, 224],
-            stage_out_chs=[256, 512, 768, 1024],
-            layer_per_block=3,
-            block_per_stage=[1, 1, 2, 2],
+            stage_out_chs=[128, 256, 384, 512],
+            layer_per_block=1,
+            block_per_stage=[1, 1, 1, 1],
             residual=True,
             depthwise=False,
             attn='eca',
         )
     elif model_name == '2':
-        # like prev but cut stage_out_chs in half (9.3M with 23 classes)
+        #  about 3.7M parameters
         config = dict(
             stem_chs=[64, 64, 128],
             stage_conv_chs=[128, 160, 192, 224],
             stage_out_chs=[128, 256, 384, 512],
-            layer_per_block=3,
-            block_per_stage=[1, 1, 2, 2],
+            layer_per_block=2,
+            block_per_stage=[1, 1, 1, 1],
             residual=True,
             depthwise=False,
             attn='eca',
         )
-    elif model_name == '3':
-        # like prev but block_per_stage=1 (5.1M with 23 classes)
+    elif model_name == '5':
+        # about 5.1M parameters
         config = dict(
             stem_chs=[64, 64, 128],
             stage_conv_chs=[128, 160, 192, 224],
@@ -77,8 +77,32 @@ def get_model(model_name, **kwargs):
             depthwise=False,
             attn='eca',
         )
-    elif model_name == '4':
-        # like model 2 but attn='ese' (9.8M with 23 classes)
+    elif model_name == '6':
+        # about 6.2M parameters
+        config = dict(
+            stem_chs=[32, 32, 64],
+            stage_conv_chs=[128, 160, 192, 224],
+            stage_out_chs=[128, 256, 384, 384],
+            layer_per_block=2,
+            block_per_stage=[1, 1, 2, 2],
+            residual=True,
+            depthwise=False,
+            attn='eca',
+        )
+    elif model_name == '7':
+        # about 7.6M parameters
+        config = dict(
+            stem_chs=[64, 64, 128],
+            stage_conv_chs=[128, 160, 192, 224],
+            stage_out_chs=[128, 256, 384, 512],
+            layer_per_block=3,
+            block_per_stage=[1, 1, 1, 2],
+            residual=True,
+            depthwise=False,
+            attn='eca',
+        )
+    elif model_name == '8':
+        # about 9.3M parameters
         config = dict(
             stem_chs=[64, 64, 128],
             stage_conv_chs=[128, 160, 192, 224],
@@ -87,7 +111,7 @@ def get_model(model_name, **kwargs):
             block_per_stage=[1, 1, 2, 2],
             residual=True,
             depthwise=False,
-            attn='ese',
+            attn='eca',
         )
     else:
         raise Exception(f"Unknown custom VovNet model name: {model_name}")
