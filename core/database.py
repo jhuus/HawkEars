@@ -240,7 +240,7 @@ class Database:
             if field is not None:
                 query += f' WHERE {field} = "{value}"'
 
-            query += f' Order BY ID'
+            query += f' Order BY Name'
 
             cursor = self.conn.cursor()
             cursor.execute(query)
