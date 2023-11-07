@@ -1,10 +1,11 @@
 from dataclasses import dataclass
+import traceback
 
 from core import cfg, metrics
 from model import dla
 from model import efficientnet_v2
+from model import fastvit
 from model import mobilenet
-from model import repvit
 from model import vovnet
 
 import numpy as np
@@ -102,6 +103,9 @@ class MainModel(LightningModule):
         if cfg.train.drop_path_rate is not None:
             kwargs.update(dict(drop_path_rate=cfg.train.drop_path_rate))
 
+        if cfg.train.proj_drop_rate is not None:
+            kwargs.update(dict(proj_drop_rate=cfg.train.proj_drop_rate))
+
         # create the model
         if model_name.startswith('custom_dla'):
             tokens = model_name.split('_')
@@ -109,15 +113,15 @@ class MainModel(LightningModule):
         elif model_name.startswith('custom_efficientnet'):
             tokens = model_name.split('_')
             model = efficientnet_v2.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
+        elif model_name.startswith('custom_fastvit'):
+            tokens = model_name.split('_')
+            model = fastvit.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
         elif model_name.startswith('custom_mobilenet'):
             tokens = model_name.split('_')
             model = mobilenet.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
         elif model_name.startswith('custom_vovnet'):
             tokens = model_name.split('_')
             model = vovnet.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
-        elif model_name.startswith('repvit'):
-            tokens = model_name.split('_')
-            model = repvit.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
         else:
             model = timm.create_model(model_name, pretrained=pretrained, in_chans=1,
                                       num_classes=self.num_train_classes, **kwargs)
@@ -127,14 +131,14 @@ class MainModel(LightningModule):
     # I tried to implement a general solution but it got very complex,
     # so instead we handle it based on the model name
     def _update_classifier(self, model):
-        if self.model_name.startswith('tf_eff') or 'mobilenet' in self.model_name:
+        if 'efficientnet' in self.model_name or 'ghostnet' in self.model_name or 'mobilenet' in self.model_name:
             # replace the final layer, which is Linear
             layers = list(model.children())
             in_features = layers[-1].in_features
             feature_extractor = nn.Sequential(*layers[:-1])
             classifier = nn.Linear(in_features, self.num_train_classes)
             return nn.Sequential(feature_extractor, classifier)
-        elif 'vovnet' in self.model_name:
+        elif 'fastvit' in self.model_name or 'vovnet' in self.model_name:
             # replace the 'fc' layer in the final block
             return self._update_linear_sublayer(model.children(), 'fc')
         elif 'dla' in self.model_name:
@@ -300,35 +304,18 @@ class MainModel(LightningModule):
 
     # get embeddings for use in searching and clustering
     def get_embeddings(self, specs, device):
-        if 'efficientnetv2' in self.model_name:
-            with torch.no_grad():
-                torch_specs = torch.Tensor(specs).to(device)
-                x = self.base_model.forward_features(torch_specs)
-                x = self.base_model.global_pool(x)
-                return x.cpu().detach().numpy()
-        elif 'mobilenetv3' in self.model_name:
-            with torch.no_grad():
-                torch_specs = torch.Tensor(specs).to(device)
-                x = self.base_model.forward_features(torch_specs)
-                x = self.base_model.global_pool(x)
-                x = self.base_model.conv_head(x)
-                x = self.base_model.act2(x)
-                x = self.base_model.flatten(x)
-                return x.cpu().detach().numpy()
-        elif 'repvit' in self.model_name:
-            with torch.no_grad():
-                torch_specs = torch.Tensor(specs).to(device)
-                self.base_model.classifier = nn.Identity()
-                x = self.base_model(torch_specs)
-                return x.cpu().detach().numpy()
-        elif 'vovnet' in self.model_name:
-            with torch.no_grad():
-                torch_specs = torch.Tensor(specs).to(device)
-                x = self.base_model.forward_features(torch_specs)
+        with torch.no_grad():
+            torch_specs = torch.Tensor(specs).to(device)
+            x = self.base_model.forward_features(torch_specs)
+            if 'fastvit' in self.model_name:
                 x = self.base_model.head.global_pool(x)
-                return x.cpu().detach().numpy()
-        else:
-            raise Exception(f"Embeddings not supported for {self.model_name}")
+            else:
+                x = self.base_model.global_pool(x)
+
+            if 'mobilenetv3' in self.model_name or 'repghostnet' in self.model_name:
+                x = self.base_model.flatten(x)
+
+            return x.cpu().detach().numpy()
 
     # get predictions one block at a time to avoid running out of GPU memory;
     # block size is cfg.infer.block_size
