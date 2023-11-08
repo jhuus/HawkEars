@@ -57,6 +57,7 @@ class MainModel(LightningModule):
         self.labels = None
         self.predictions = None
         self.epoch_num = 0
+        self.prev_loss = 1
 
         if was_pretrained:
             # load a checkpoint that we trained using transfer learning or fine-tuning
@@ -208,9 +209,11 @@ class MainModel(LightningModule):
         x, y = batch
         logits = self(x)
         loss = get_loss_fn(self.weights)(logits, y)
+        smoothed_loss = .1 * loss + .9 * self.prev_loss # simple exponentially weighted average
+        self.prev_loss = smoothed_loss
 
         self.log("lr", get_learning_rate(self.optimizer), prog_bar=True)
-        self.log("train_loss", loss, prog_bar=True)
+        self.log("train_loss", smoothed_loss, prog_bar=True)
         return loss
 
     # calculate and log batch accuracy and related metrics during validation phase
