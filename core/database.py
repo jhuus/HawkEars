@@ -1,11 +1,14 @@
 # SQLite database interface for audio recordings.
 
+from datetime import datetime
 import sqlite3
 from types import SimpleNamespace
 
 class Database:
     def __init__(self, filename='data/training.db'):
         self.conn = None
+        self.today = datetime.today().strftime("%Y-%m-%d")
+
         try:
             self.conn = sqlite3.connect(filename)
             self._create_tables()
@@ -71,7 +74,8 @@ class Database:
                     Offset REAL NOT NULL,
                     Audio BLOB,
                     Embedding BLOB,
-                    Ignore TEXT)
+                    Ignore TEXT,
+                    Inserted TEXT)
             '''
             cursor.execute(query)
 
@@ -372,6 +376,31 @@ class Database:
         except sqlite3.Error as e:
             print(f'Error in database get_recording_by_subcategory_name: {e}')
 
+    def get_recording_by_src_subcat(self, source_id, subcategory_id):
+        try:
+            query = f'''
+                SELECT ID, SourceID, SubcategoryID, FileName, Seconds
+                FROM Recording
+                WHERE SourceID = "{source_id}" AND SubcategoryID = "{subcategory_id}"
+                ORDER BY ID
+            '''
+            cursor = self.conn.cursor()
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            if rows is None:
+                return []
+
+            results = []
+            for row in rows:
+                id, sourceID, subcategoryID, filename, seconds = row
+                result = SimpleNamespace(id=id, source_id=sourceID, subcategory_id=subcategoryID, filename=filename, seconds=seconds)
+                results.append(result)
+
+            return results
+
+        except sqlite3.Error as e:
+            print(f'Error in database get_recording_by_src_subcat: {e}')
+
     def get_recording_by_src_subcat_file(self, source_id, subcategory_id, filename):
         try:
             query = f'''
@@ -416,9 +445,9 @@ class Database:
 
     def insert_spectrogram(self, recording_id, value, offset, audio=None, embedding=None, ignore='N'):
         try:
-            query = 'INSERT INTO Spectrogram (RecordingID, Value, Offset, Audio, Embedding, Ignore) Values (?, ?, ?, ?, ?, ?)'
+            query = 'INSERT INTO Spectrogram (RecordingID, Value, Offset, Audio, Embedding, Ignore, Inserted) Values (?, ?, ?, ?, ?, ?, ?)'
             cursor = self.conn.cursor()
-            cursor.execute(query, (recording_id, value, offset, audio, embedding, ignore))
+            cursor.execute(query, (recording_id, value, offset, audio, embedding, ignore, self.today))
             cursor = self.conn.cursor()
             self.conn.commit()
             return cursor.lastrowid
@@ -686,6 +715,24 @@ class Database:
 
         except sqlite3.Error as e:
             print(f'Error in database get_spectrogram_count: {e}')
+
+    def get_spectrogram_count_by_recid(self, recording_id):
+        try:
+
+            query = f'''
+                SELECT COUNT(*)
+                FROM Spectrogram
+                WHERE RecordingID = {recording_id}
+            '''
+            cursor = self.conn.cursor()
+            cursor.execute(query)
+            result = cursor.fetchone()
+            if result != None:
+                return result[0]
+            return result
+
+        except sqlite3.Error as e:
+            print(f'Error in database get_spectrogram_count_by_recid: {e}')
 
     def update_spectrogram(self, id, field, value):
         try:
