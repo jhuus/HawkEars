@@ -28,7 +28,7 @@ class Training:
     compile = False
     mixed_precision = True  # usually improves performance, especially with larger models
     multi_label = True
-    deterministic = True
+    deterministic = False
     seed = 1
     learning_rate = .0025   # base learning rate
     batch_size = 32
@@ -36,7 +36,8 @@ class Training:
     load_weights = False    # passed as "weights" to timm.create_model
     use_class_weights = True
     load_ckpt_path = None   # for transfer learning or fine-tuning
-    fine_tuning = False     # if true, don't freeze the feature extractor
+    update_classifier = False  # if true, create a new classifier for the loaded model
+    freeze_backbone = False # if true, freeze the loaded model and train the classifier only (requires update_classifier=True)
     dropout = None          # various dropout parameters are passed to model only if not None
     drop_rate = None
     drop_path_rate = None
