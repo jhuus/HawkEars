@@ -5,6 +5,7 @@ from core import cfg, metrics
 from model import dla
 from model import efficientnet_v2
 from model import fastvit
+import logging
 from model import mobilenet
 from model import vovnet
 
@@ -42,10 +43,10 @@ class MainModel(LightningModule):
     # 5) loading a model to be used in inference
     #
     # 'pretrained' is passed to timm.create_model to indicate whether weights should be loaded;
-    # 'was_pretrained' is True iff we are loading a model that we trained using transfer learning or fine-tuning;
     # the 'weights' argument refers to class weights, which should be renamed to avoid confusion
-    def __init__(self, train_class_names, train_class_codes, test_class_names, weights, model_name, pretrained, was_pretrained=False):
+    def __init__(self, train_class_names, train_class_codes, test_class_names, weights, model_name, pretrained):
         super().__init__()
+
         self.save_hyperparameters()
         self.num_train_classes = len(train_class_names)
         self.train_class_names = train_class_names
@@ -59,33 +60,7 @@ class MainModel(LightningModule):
         self.epoch_num = 0
         self.prev_loss = None
 
-        if was_pretrained:
-            # load a checkpoint that we trained using transfer learning or fine-tuning
-            # (so we need to define it in the same way)
-            backbone = self._create_model(model_name, pretrained=False)
-            self.base_model = self._update_classifier(backbone)
-        elif cfg.train.load_ckpt_path is not None:
-            # perform transfer learning or fine-tuning based on a model that we trained
-            load_ckpt_path = cfg.train.load_ckpt_path
-            cfg.train.load_ckpt_path = None # so it isn't used recursively
-            backbone = self.load_from_checkpoint(load_ckpt_path)
-            self.model_name = backbone.model_name
-            self.hparams.model_name = self.model_name
-            self.hparams.was_pretrained = True
-
-            if not cfg.train.fine_tuning:
-                backbone.freeze()
-
-            if backbone.hparams.was_pretrained:
-                # if it was already pretrained once, don't keep updating the classifier,
-                # which would result in an unloadable model
-                self.base_model = backbone.base_model
-            else:
-                self.base_model = self._update_classifier(backbone.base_model)
-
-        else:
-            # create a basic model for training or inference
-            self.base_model = self._create_model(model_name, pretrained)
+        self.base_model = self._create_model(model_name, pretrained)
 
         if cfg.train.model_print_path is not None:
             with open(cfg.train.model_print_path, 'w') as out_file:
@@ -131,20 +106,28 @@ class MainModel(LightningModule):
     # for transfer learning, update classifier so number of classes is correct;
     # I tried to implement a general solution but it got very complex,
     # so instead we handle it based on the model name
-    def _update_classifier(self, model):
+    def update_classifier(self, train_class_names, train_class_codes, test_class_names, weights):
+        logging.info(f"Updating classifier of {self.model_name} model (freeze_backbone = {cfg.train.freeze_backbone})")
+        self.num_train_classes = len(train_class_names)
+        self.train_class_names = train_class_names
+        self.train_class_codes = train_class_codes
+
+        self.test_class_names = test_class_names
+        self.weights = weights
+
         if 'efficientnet' in self.model_name or 'ghostnet' in self.model_name or 'mobilenet' in self.model_name:
             # replace the final layer, which is Linear
-            layers = list(model.children())
+            layers = list(self.base_model.children())
             in_features = layers[-1].in_features
             feature_extractor = nn.Sequential(*layers[:-1])
             classifier = nn.Linear(in_features, self.num_train_classes)
-            return nn.Sequential(feature_extractor, classifier)
+            self.base_model = nn.Sequential(feature_extractor, classifier)
         elif 'fastvit' in self.model_name or 'vovnet' in self.model_name:
             # replace the 'fc' layer in the final block
-            return self._update_linear_sublayer(model.children(), 'fc')
+            self.base_model =  self._update_linear_sublayer(self.base_model.children(), 'fc')
         elif 'dla' in self.model_name:
             # classifier is Conv2d then Flatten
-            layers = list(model.children())
+            layers = list(self.base_model.children())
             feature_extractor = nn.Sequential(*layers[:-2])
 
             # create a new Conv2d, then copy the Flatten
@@ -157,12 +140,12 @@ class MainModel(LightningModule):
             classifier_list.append(nn.Flatten(start_dim=1, end_dim=-1))
             self._unfreeze_list(classifier_list)
             classifier = nn.Sequential(*classifier_list)
-            return nn.Sequential(feature_extractor, classifier)
+            self.base_model = nn.Sequential(feature_extractor, classifier)
         elif 'repvit' in self.model_name:
-            # remove classifier from model by setting it to Identify
-            old_classifier = model.classifier
-            model.classifier = nn.Identity()
-            feature_extractor = model
+            # remove classifier from model by setting it to Identity
+            old_classifier = self.base_model.classifier
+            self.base_model.classifier = nn.Identity()
+            feature_extractor = self.base_model
 
             # append a new classifier
             layers = list(old_classifier.classifier.children())
@@ -175,7 +158,7 @@ class MainModel(LightningModule):
                                              out_features=self.num_train_classes))
             self._unfreeze_list(classifier_list)
             classifier = nn.Sequential(*classifier_list)
-            return nn.Sequential(feature_extractor, classifier)
+            self.base_model = nn.Sequential(feature_extractor, classifier)
         else:
             raise Exception(f"Transfer learning from {self.model_name} is not supported")
 
@@ -292,6 +275,7 @@ class MainModel(LightningModule):
     def on_train_epoch_end(self):
         epoch_num = torch.tensor(self.epoch_num).type(torch.float32) # eliminates warning
         self.log(f"epoch_num", epoch_num, prog_bar=False) # so we can save checkpoints for the last n epochs
+
         self.epoch_num += 1
         if self.labels is None:
             return
