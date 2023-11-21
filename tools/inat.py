@@ -68,6 +68,7 @@ class Main:
         response = pyinaturalist.get_observations(taxon_name=f'{self.species_name}', identified=True,
                                                   sounds=True, photos=self.require_photos, page='all')
         id_map = {} # map media IDs to observation IDs
+        print(f"Response contains {len(response['results'])} results")
         for result in response['results']:
             if self.num_downloads >= self.max_downloads:
                 break
