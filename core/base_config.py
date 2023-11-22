@@ -97,8 +97,8 @@ class Miscellaneous:
     search_ckpt_path = "data/ckpt/custom_efficientnet_5.ckpt" # checkpoint used in searching and clustering
     classes_file = "data/classes.txt"   # list of classes used to generate pickle files
     ignore_file = "data/ignore.txt"     # classes listed in this file are ignored in analysis
-    train_pickle = "data/ssw0-train.pickle"
-    test_pickle = "data/ssw0-test.pickle"
+    train_pickle = None
+    test_pickle = None
 
     # when running extract and no source is defined, get source by matching these regexes in order;
     # this assumes iNaturalist downloads were renamed by adding an N prefix
