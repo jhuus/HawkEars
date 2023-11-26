@@ -64,6 +64,7 @@ class CustomDataset(Dataset):
         if self.training and cfg.train.augmentation and np.max(spec) > 0:
             class_index = self.spec_df.loc[idx, 'class_index'] # could also get this from label
             class_name = self.class_df.loc[class_index, 'name']
+
             if cfg.train.multi_label and random.uniform(0, 1) < cfg.train.prob_mixup and class_name != 'Noise':
                 spec, label = self._merge_specs(spec, label, class_name)
             elif random.uniform(0, 1) < cfg.train.prob_real_noise:
@@ -141,9 +142,9 @@ class CustomDataset(Dataset):
 
         # combine the two spectrograms and the two labels, using a simple unweighted merge
         spec += other_spec
-        label += self.label[other_idx]
+        merged_label = label + self.label[other_idx]
 
-        return spec, label
+        return spec, merged_label
 
     # perform a random horizontal shift of the spectrogram
     def _shift_horizontal(self, spec):
