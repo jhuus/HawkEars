@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import traceback
 
 from core import cfg, metrics
 from model import dla
@@ -29,8 +28,7 @@ def get_loss_fn(weights):
         # primary use case
         return torch.nn.BCEWithLogitsLoss(weight=weights)
     else:
-        # single-label (multi-class) embeddings are better for measuring distance
-        # between inputs, e.g. for searching or clustering
+        # single-label (multi-class) embeddings, usually for binary classifiers
         return torch.nn.CrossEntropyLoss(weight=weights, label_smoothing=cfg.train.label_smoothing)
 
 class MainModel(LightningModule):
@@ -38,12 +36,10 @@ class MainModel(LightningModule):
     #
     # 1) creating a model to train from scratch
     # 2) creating a model to train using transfer learning, starting with one we already trained
-    # 3) loading one we already trained to be used in the previous case
-    # 4) fine-tuning a model that we trained either from scratch or with transfer learning
-    # 5) loading a model to be used in inference
+    # 3) fine-tuning a model that we trained either from scratch or with transfer learning
+    # 4) loading a model to be used in inference
     #
     # 'pretrained' is passed to timm.create_model to indicate whether weights should be loaded;
-    # the 'weights' argument refers to class weights, which should be renamed to avoid confusion
     def __init__(self, train_class_names, train_class_codes, test_class_names, weights, model_name, pretrained):
         super().__init__()
 
@@ -192,10 +188,12 @@ class MainModel(LightningModule):
         x, y = batch
         logits = self(x)
         loss = get_loss_fn(self.weights)(logits, y)
+
+        detached = loss.detach() # necessary to avoid memory leak
         if self.prev_loss is None:
-            smoothed_loss = loss
+            smoothed_loss = detached
         else:
-            smoothed_loss = .1 * loss + .9 * self.prev_loss # simple exponentially weighted average
+            smoothed_loss = .1 * detached + .9 * self.prev_loss # simple exponentially weighted average
 
         self.prev_loss = smoothed_loss
         self.log("lr", get_learning_rate(self.optimizer), prog_bar=True)
