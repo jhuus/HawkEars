@@ -40,7 +40,7 @@ class MainModel(LightningModule):
     # 4) loading a model to be used in inference
     #
     # 'pretrained' is passed to timm.create_model to indicate whether weights should be loaded;
-    def __init__(self, train_class_names, train_class_codes, test_class_names, weights, model_name, pretrained):
+    def __init__(self, train_class_names, train_class_codes, test_class_names, weights, model_name, pretrained, num_train_specs=0):
         super().__init__()
 
         self.save_hyperparameters()
@@ -50,6 +50,7 @@ class MainModel(LightningModule):
         self.model_name = model_name
 
         self.test_class_names = test_class_names
+        self.num_train_specs = num_train_specs
         self.weights = weights
         self.labels = None
         self.predictions = None
@@ -177,6 +178,14 @@ class MainModel(LightningModule):
         feature_extractor = nn.Sequential(*layers[:-1])
         return nn.Sequential(feature_extractor, classifier)
 
+    def unfreeze_classifier(self):
+        if hasattr(self.base_model, "classifier"):
+            self._unfreeze_list([self.base_model.classifier])
+        elif hasattr(self.base_model, "fc"):
+            self._unfreeze_list([self.base_model.fc])
+        elif hasattr(self.base_model, "head") and hasattr(self.base_model.head, "fc"):
+            self._unfreeze_list([self.base_model.head.fc])
+
     # run a batch through the model
     def forward(self, x):
         x = self.base_model(x)
@@ -197,7 +206,8 @@ class MainModel(LightningModule):
 
         self.prev_loss = smoothed_loss
         self.log("lr", get_learning_rate(self.optimizer), prog_bar=True)
-        self.log("train_loss", smoothed_loss, prog_bar=True)
+        self.log("smoothed_loss", smoothed_loss, prog_bar=True)
+        self.log("loss", loss, prog_bar=False)
         return loss
 
     # calculate and log batch accuracy and related metrics during validation phase
@@ -284,7 +294,12 @@ class MainModel(LightningModule):
     # define optimizers and LR schedulers
     def configure_optimizers(self):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=cfg.train.learning_rate)
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=cfg.train.num_epochs)
+        num_batches = int(cfg.train.num_epochs * self.num_train_specs / cfg.train.batch_size)
+        self.scheduler = {
+            'scheduler': torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=num_batches),
+            'interval': 'step',
+            'frequency': 1
+        }
 
         self.weights = self.weights.to(self.device) # now we can move weights to device too
 
