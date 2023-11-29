@@ -38,6 +38,7 @@ class Training:
     load_ckpt_path = None   # for transfer learning or fine-tuning
     update_classifier = False  # if true, create a new classifier for the loaded model
     freeze_backbone = False # if true, freeze the loaded model and train the classifier only (requires update_classifier=True)
+    num_workers = 2
     dropout = None          # various dropout parameters are passed to model only if not None
     drop_rate = None
     drop_path_rate = None
@@ -50,28 +51,31 @@ class Training:
     val_portion = 0         # used only if num_folds = 1
     model_print_path = "model.txt" # path of text file to print the model (TODO: put in current log directory)
 
-    # data augmentation
+    # data augmentation (see core/dataset.py to understand these parameters)
     augmentation = True
     prob_mixup = 0.35
     prob_real_noise = 0.3
     prob_speckle = .1
     prob_fade = .2
     prob_exponent = .25
-    prob_shift = 0
-    max_shift = 8           # number of pixels (samples)
+    prob_shift = .1
+    max_shift = 4
     min_fade = .1
     max_fade = .8
     speckle_variance = .009
     min_exponent = 1
     max_exponent = 1.6
+    mixup_weights = False
+    mixup_weight_min = .2
+    mixup_weight_max = .8
 
 @dataclass
 class Inference:
-    min_prob = 0.73              # minimum confidence level
+    min_prob = 0.79              # minimum confidence level
     use_banding_codes = True     # use banding codes instead of species names in labels
     check_adjacent = True        # omit label unless adjacent segment matches
-    adjacent_prob_factor = 0.65  # when checking if adjacent segment matches species, use self.min_prob times this
-    top_n = 6 # number of top matches to log in debug mode
+    adjacent_prob_factor = 0.75  # when checking if adjacent segment matches species, use self.min_prob times this
+    top_n = 20 # number of top matches to log in debug mode
     min_location_freq = .0001    # ignore if species frequency less than this for location/week
     file_date_regex = "\S+_(\d+)_.*" # regex to extract date from file name (e.g. HNCAM015_20210529_161122.mp3)
     file_date_regex_group = 1    # use group at offset 1
