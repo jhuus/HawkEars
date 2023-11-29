@@ -123,7 +123,7 @@ class CustomDataset(Dataset):
         white_noise[0] /= np.max(white_noise) # set max = 1
         return white_noise[0]
 
-    # merge spectrograms, using either simple or mixup approach
+    # merge spectrograms, i.e. apply a "mixup" augmentation
     def _merge_specs(self, spec, label, class_name):
         # pick a random index
         index = random.randint(0, len(self.indexes) - 1)
@@ -140,9 +140,16 @@ class CustomDataset(Dataset):
 
         other_spec = util.expand_spectrogram(self.spec_df.loc[other_idx, 'spec'])
 
-        # combine the two spectrograms and the two labels, using a simple unweighted merge
-        spec += other_spec
-        merged_label = label + self.label[other_idx]
+        if cfg.train.mixup_weights:
+            # combine the two spectrograms and the two labels using mixup logic
+            # but with a uniform distribution instead of the usual beta distribution
+            _lambda = random.uniform(.2, .8)
+            spec = _lambda * spec + (1 - _lambda) * other_spec
+            merged_label = _lambda * label + (1 - _lambda) * self.label[other_idx]
+        else:
+            # combine the two spectrograms and the two labels using a simple unweighted merge
+            spec += other_spec
+            merged_label = label + self.label[other_idx]
 
         return spec, merged_label
 
