@@ -32,9 +32,9 @@ class SpecInfo:
         self.embedding = embedding
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-e', type=float, default=0.5, help='Raise spectrograms to this exponent to show background sounds. Default = 0.5.')
+parser.add_argument('-e', type=float, default=1.0, help='Raise spectrograms to this exponent to show background sounds. Default = 1.0.')
 parser.add_argument('-f', type=str, default='training', help='Database name (or upper case species code, or HNC).')
-parser.add_argument('-m', type=float, default=0.6, help='Stop plotting when distance exceeds this. Default = 0.4.')
+parser.add_argument('-m', type=float, default=0.6, help='Stop plotting when distance exceeds this. Default = 0.6.')
 parser.add_argument('-n', type=int, default=60, help='Number of top matches to plot.')
 parser.add_argument('-o', type=str, default='output', help='Output directory for plotting matches.')
 parser.add_argument('-i', type=str, default='', help='Path to file containing spectrogram to search for.')
