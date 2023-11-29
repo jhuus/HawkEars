@@ -61,13 +61,23 @@ for r in results:
 logging.info('Counting spectrograms per class')
 total_specs = 0
 num_spectrograms = []
+empty_classes = []
 for i in range(len(class_names)):
     count = db.get_spectrogram_count(class_names[i])
     logging.info(f'# spectrograms for {class_names[i]}: {count}')
+    if count == 0:
+        empty_classes.append(class_names[i])
     num_spectrograms.append(count)
     total_specs += count
 
 logging.info(f'Total # spectrograms: {total_specs}')
+
+if len(empty_classes) > 0:
+    logging.error("Terminated because there are no spectrograms for:")
+    for name in empty_classes:
+        logging.error(name)
+
+    quit()
 
 # get spectrograms
 spec = [0 for i in range(total_specs)]
