@@ -28,7 +28,6 @@ class Trainer:
         weights = dm.class_weights()
 
         for k in range(cfg.train.num_folds):
-            # save_top_k=1 in ModelCheckpoint triggers save at every epoch
             trainer = pl.Trainer(
                 accelerator='auto',
                 callbacks=[ModelCheckpoint(save_top_k=cfg.train.save_last_n, mode='max', monitor='epoch_num'),
@@ -51,8 +50,11 @@ class Trainer:
 
                 if cfg.train.update_classifier:
                     model.update_classifier(dm.train_class_names, dm.train_class_codes, dm.test_class_names, weights)
+                else:
+                    model.unfreeze_classifier()
             else:
-                model = main_model.MainModel(dm.train_class_names, dm.train_class_codes, dm.test_class_names, weights, cfg.train.model_name, cfg.train.load_weights)
+                model = main_model.MainModel(dm.train_class_names, dm.train_class_codes, dm.test_class_names, weights,
+                                             cfg.train.model_name, cfg.train.load_weights, dm.num_train_specs)
 
             if cfg.train.compile:
                 # skip compile for short tests
