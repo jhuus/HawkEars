@@ -55,7 +55,7 @@ class DataModule(pl.LightningDataModule):
             test_df, test_label = self._one_hot(test_df, test=True)
             test_indexes = np.arange(len(test_df), dtype=np.int32)
             self.test_set = dataset.CustomDataset(test_df, test_label, self.train_class_df, test_indexes, training=False)
-            self.test_loader = DataLoader(self.test_set, batch_size=cfg.train.batch_size, num_workers=2, shuffle=False)
+            self.test_loader = DataLoader(self.test_set, batch_size=cfg.train.batch_size, num_workers=cfg.train.num_workers, shuffle=False)
 
     # generate one-hot labels from a spectrogram dataframe;
     # if multi_label, some entries might have multiple labels
@@ -149,10 +149,10 @@ class DataModule(pl.LightningDataModule):
 
         # datasets get complete dataframe and list of relevant indexes
         self.train_set = dataset.CustomDataset(self.train_spec_df, self.train_label, self.train_class_df, train_indexes, training=True)
-        self.train_loader = DataLoader(self.train_set, batch_size=cfg.train.batch_size, num_workers=2, shuffle=True)
+        self.train_loader = DataLoader(self.train_set, batch_size=cfg.train.batch_size, num_workers=cfg.train.num_workers, shuffle=True)
 
         self.val_set = dataset.CustomDataset(self.train_spec_df, self.train_label, self.train_class_df, val_indexes, training=False)
-        self.val_loader = DataLoader(self.val_set, batch_size=cfg.train.batch_size, num_workers=2, shuffle=False)
+        self.val_loader = DataLoader(self.val_set, batch_size=cfg.train.batch_size, num_workers=cfg.train.num_workers, shuffle=False)
 
     def class_weights(self):
         if cfg.train.use_class_weights:
