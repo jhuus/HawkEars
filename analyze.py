@@ -32,6 +32,7 @@ class ClassInfo:
         self.has_label = False
         self.ebird_frequency_too_low = False
         self.probs = [] # predictions (one per segment)
+        self.is_label = [] # True iff corresponding offset is a label
 
 class Label:
     def __init__(self, class_name, probability, start_time, end_time):
@@ -256,6 +257,7 @@ class Analyzer:
         for i in range(len(self.offsets)):
             for j in range(len(self.class_infos)):
                     self.class_infos[j].probs.append(predictions[i][j])
+                    self.class_infos[j].is_label.append(False)
                     if (self.class_infos[j].probs[-1] >= cfg.infer.min_prob):
                         self.class_infos[j].has_label = True
 
@@ -341,11 +343,9 @@ class Analyzer:
             else:
                 name = class_info.name
 
-            prev_label = None
+            # set is_label[i] = True for any offset that qualifies in a first pass
             probs = class_info.probs
             for i in range(len(probs)):
-
-                # create a label if probability exceeds the threshold
                 if probs[i] < cfg.infer.min_prob:
                     continue
 
@@ -353,15 +353,42 @@ class Analyzer:
                     if cfg.infer.check_adjacent and probs[i - 1] < min_adj_prob and probs[i + 1] < min_adj_prob:
                         continue
 
-                end_time = self.offsets[i]+cfg.audio.segment_len
-                if self.merge_labels and prev_label != None and prev_label.end_time >= self.offsets[i]:
-                    # extend the previous label's end time (i.e. merge)
-                    prev_label.end_time = end_time
-                    prev_label.probability = max(probs[i], prev_label.probability)
-                else:
-                    label = Label(name, probs[i], self.offsets[i], end_time)
-                    labels.append(label)
-                    prev_label = label
+                class_info.is_label[i] = True
+
+            # raise confidence levels if the species' presence is confirmed
+            if cfg.infer.lower_min_if_confirmed:
+                # calculate number of seconds labelled so far
+                seconds = 0
+                for i in range(len(class_info.is_label)):
+                    if class_info.is_label[i]:
+                        if i > 0 and class_info.is_label[i - 1]:
+                            seconds += 1
+                        elif i > 0 and class_info.is_label[i - 2]:
+                            seconds += 2
+                        else:
+                            seconds += cfg.audio.segment_len
+
+                if seconds > cfg.infer.confirmed_if_seconds:
+                    # species presence is considered confirmed, so lower the min prob and scan again
+                    min_prob = cfg.infer.lower_min_factor * cfg.infer.min_prob
+                    for i in range(len(probs)):
+                        if not class_info.is_label[i] and probs[i] >= min_prob:
+                            class_info.is_label[i] = True
+                            probs[i] = cfg.infer.min_prob # display it as min_prob in the label
+
+            # generate the labels
+            prev_label = None
+            for i in range(len(probs)):
+                if class_info.is_label[i]:
+                    end_time = self.offsets[i] + cfg.audio.segment_len
+                    if self.merge_labels and prev_label != None and prev_label.end_time >= self.offsets[i]:
+                        # extend the previous label's end time (i.e. merge)
+                        prev_label.end_time = end_time
+                        prev_label.probability = max(probs[i], prev_label.probability)
+                    else:
+                        label = Label(name, probs[i], self.offsets[i], end_time)
+                        labels.append(label)
+                        prev_label = label
 
         self._save_labels(labels, file_path)
 
