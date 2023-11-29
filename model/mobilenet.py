@@ -6,7 +6,10 @@ from timm.models import mobilenetv3
 
 # all models are mobilenetv3_large_100 with different channel multipliers
 def get_model(model_name, **kwargs):
-    if model_name == '1':
+    if model_name == '0':
+        # ~200K parameters
+        channel_multiplier = .1
+    elif model_name == '1':
         # ~1.5M parameters
         channel_multiplier = .5
     elif model_name == '2':
