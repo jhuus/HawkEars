@@ -330,7 +330,7 @@ class Analyzer:
 
         # generate labels for one class at a time
         labels = []
-        min_adj_prob = cfg.infer.min_prob * cfg.infer.adjacent_prob_factor # in mode 0, adjacent segments need this prob at least
+        min_adj_prob = cfg.infer.min_prob * cfg.infer.adjacent_prob_factor # if check_adjacent, adjacent segments need this prob at least
 
         for class_info in self.class_infos:
             if class_info.ignore or class_info.ebird_frequency_too_low or not class_info.has_label:
@@ -346,22 +346,20 @@ class Analyzer:
             for i in range(len(probs)):
 
                 # create a label if probability exceeds the threshold
-                if probs[i] >= cfg.infer.min_prob:
-                    use_prob = probs[i]
-                else:
+                if probs[i] < cfg.infer.min_prob:
                     continue
 
-                end_time = self.offsets[i]+cfg.audio.segment_len
                 if i not in [0, len(probs) - 1]:
                     if cfg.infer.check_adjacent and probs[i - 1] < min_adj_prob and probs[i + 1] < min_adj_prob:
                         continue
 
+                end_time = self.offsets[i]+cfg.audio.segment_len
                 if self.merge_labels and prev_label != None and prev_label.end_time >= self.offsets[i]:
                     # extend the previous label's end time (i.e. merge)
                     prev_label.end_time = end_time
-                    prev_label.probability = max(use_prob, prev_label.probability)
+                    prev_label.probability = max(probs[i], prev_label.probability)
                 else:
-                    label = Label(name, use_prob, self.offsets[i], end_time)
+                    label = Label(name, probs[i], self.offsets[i], end_time)
                     labels.append(label)
                     prev_label = label
 
@@ -384,15 +382,19 @@ class Analyzer:
     # in debug mode, output the top predictions for the first segment
     def _log_predictions(self, predictions):
         predictions = np.copy(predictions[0])
+        sum=predictions.sum()
         logging.info("\ntop predictions")
 
+        #sum = 0
         for i in range(cfg.infer.top_n):
             j = np.argmax(predictions)
             code = self.class_infos[j].code
             probability = predictions[j]
+            #sum += probability
             logging.info(f"{code}: {probability}")
             predictions[j] = 0
 
+        logging.info(f"{sum=}")
         logging.info("")
 
     def run(self, file_list):
