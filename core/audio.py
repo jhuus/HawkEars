@@ -75,10 +75,10 @@ class Audio:
         for offset in offsets:
             index = int(offset*cfg.audio.sampling_rate)
             if offset <= last_offset:
-                segment = signal[index:index + segment_len * cfg.audio.sampling_rate]
+                segment = signal[index:index + int(segment_len * cfg.audio.sampling_rate)]
             else:
                 segment = signal[index:]
-                pad_amount = segment_len * cfg.audio.sampling_rate - segment.shape[0]
+                pad_amount = int(segment_len * cfg.audio.sampling_rate - segment.shape[0])
                 segment = np.pad(segment, ((0, pad_amount)), 'constant', constant_values=0)
 
             spec = self._get_raw_spectrogram(segment, low_band=low_band)
@@ -128,7 +128,7 @@ class Audio:
 
     # return a spectrogram with a sin wave of the given frequency
     def sin_wave(self, frequency):
-        samples = cfg.audio.segment_len * cfg.audio.sampling_rate
+        samples = int(cfg.audio.segment_len * cfg.audio.sampling_rate)
         t = np.linspace(0, 2*np.pi, samples)
         segment = np.sin(t*frequency*cfg.audio.segment_len)
         spec = self._get_raw_spectrogram(segment)
