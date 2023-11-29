@@ -82,6 +82,14 @@ class Inference:
     block_size = 200             # do this many spectrograms at a time to avoid running out of GPU memory
     frequency_db = "frequency"   # eBird barchart data, i.e. species report frequencies
 
+    # These parameters control a second pass during inference.
+    # If lower_min_if_confirmed is true, count the number of seconds labelled for a species in a recording.
+    # If seconds >= confirmed_if_seconds, the species is assumed to be present, so scan again,
+    # lowering the min_prob by multiplying it by lower_min_factor.
+    lower_min_if_confirmed = True
+    confirmed_if_seconds = 6
+    lower_min_factor = .7
+
     # Soundalike groups are used in analysis / inference when a location is given.
     # For each soundalike species, eBird barchart data is accessed to get the maximum
     # frequency across all weeks (i.e. maximum portion of checklists that include the species).
