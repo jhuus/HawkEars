@@ -410,7 +410,8 @@ class Analyzer:
     def _log_predictions(self, predictions):
         predictions = np.copy(predictions[0])
         sum=predictions.sum()
-        logging.info("\ntop predictions")
+        logging.info("")
+        logging.info("Top predictions:")
 
         for i in range(cfg.infer.top_n):
             j = np.argmax(predictions)
