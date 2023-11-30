@@ -412,12 +412,10 @@ class Analyzer:
         sum=predictions.sum()
         logging.info("\ntop predictions")
 
-        #sum = 0
         for i in range(cfg.infer.top_n):
             j = np.argmax(predictions)
             code = self.class_infos[j].code
             probability = predictions[j]
-            #sum += probability
             logging.info(f"{code}: {probability}")
             predictions[j] = 0
 
