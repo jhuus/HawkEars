@@ -453,7 +453,7 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--input', type=str, default='', help="Input path (single audio file or directory). No default.")
     parser.add_argument('-o', '--output', type=str, default='', help="Output directory to contain label files. Default is input path, if that is a directory.")
     parser.add_argument('-m', '--merge', type=int, default=1, help=f'Specify 0 to not merge adjacent labels of same species. Default = 1, i.e. merge.')
-    parser.add_argument('-p', '--score', type=float, default=cfg.infer.min_score, help=f"Generate label if score >= this. Default = {cfg.infer.min_score}.")
+    parser.add_argument('-p', '--min_score', type=float, default=cfg.infer.min_score, help=f"Generate label if score >= this. Default = {cfg.infer.min_score}.")
     parser.add_argument('-s', '--start', type=str, default='', help="Optional start time in hh:mm:ss format, where hh and mm are optional.")
     parser.add_argument('--date', type=str, default=None, help=f'Date in yyyymmdd, mmdd, or file. Specifying file extracts the date from the file name, using the reg ex defined in config.py.')
     parser.add_argument('--lat', type=float, default=None, help=f'Latitude. Use with longitude to identify an eBird county and ignore corresponding rarities.')
@@ -467,7 +467,7 @@ if __name__ == '__main__':
     logging.info("Initializing")
 
     cfg.infer.use_banding_codes = args.band
-    cfg.infer.min_score = args.score
+    cfg.infer.min_score = args.min_score
     if cfg.infer.min_score < 0:
         logging.error("Error: min_score must be >= 0")
         quit()
