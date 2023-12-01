@@ -32,7 +32,7 @@ class Species_Handlers:
         }
 
         self.check_soundalike_config = {
-            'BWHA': SimpleNamespace(soundalike_code='WTSP', min_prob=.25)
+            'BWHA': SimpleNamespace(soundalike_code='WTSP', min_score=.25)
         }
 
         self.device = device
@@ -64,19 +64,19 @@ class Species_Handlers:
         low_index = int(config.low_freq * cfg.audio.spec_height)   # bottom of frequency range
         high_index = int(config.high_freq * cfg.audio.spec_height) # top of frequency range
 
-        for i in range(len(class_info.probs)):
-            # ignore if probability < threshold
-            if class_info.probs[i] < cfg.infer.min_prob:
+        for i in range(len(class_info.scores)):
+            # ignore if score < threshold
+            if class_info.scores[i] < cfg.infer.min_score:
                 continue
 
             # don't get this until we need it, since it's expensive to calculate the first time
             highest_amplitude = self.get_highest_amplitude()
 
-            # set prob = 0 if relative amplitude is too low
+            # set score = 0 if relative amplitude is too low
             amplitude = np.max(self.raw_spectrograms[i][low_index:high_index,:])
             relative_amplitude = amplitude / highest_amplitude
             if relative_amplitude < config.min_ratio:
-                class_info.probs[i] = 0
+                class_info.scores[i] = 0
 
     # The main config file has soundalike parameters for cases where a common species is mistaken for a rare one.
     # Here we handle cases where a common species is mistaken for a not-so-rare one. For example,
@@ -91,14 +91,14 @@ class Species_Handlers:
             return # must be using a subset of the full species list
 
         soundalike_info = self.class_infos[config.soundalike_code] # class_info for the soundalike species
-        for i in range(len(class_info.probs)):
-            # ignore if probability < threshold
-            if class_info.probs[i] < cfg.infer.min_prob:
+        for i in range(len(class_info.scores)):
+            # ignore if score < threshold
+            if class_info.scores[i] < cfg.infer.min_score:
                 continue
 
-            # set prob = 0 if current or previous soundalike prob >= min_prob
-            if soundalike_info.probs[i] > config.min_prob or (i > 0 and soundalike_info.probs[i - 1] > config.min_prob):
-                class_info.probs[i] = 0
+            # set score = 0 if current or previous soundalike score >= min_score
+            if soundalike_info.scores[i] > config.min_score or (i > 0 and soundalike_info.scores[i - 1] > config.min_score):
+                class_info.scores[i] = 0
 
     # Use the low band spectrogram and model to check for Ruffed Grouse drumming.
     # The frequency is too low to detect properly with the normal spectrogram,
@@ -114,8 +114,8 @@ class Species_Handlers:
             # merge with main predictions (drumming is detected here, other RUGR sounds are detected by the main ensemble)
             exponent = 1.7 # lower the drumming predictions a bit to reduce false positives
             for i in range(len(self.offsets)):
-                class_info.probs[i] = max(class_info.probs[i], predictions[i][0] ** exponent)
-                if class_info.probs[i] >= cfg.infer.min_prob:
+                class_info.scores[i] = max(class_info.scores[i], predictions[i][0] ** exponent)
+                if class_info.scores[i] >= cfg.infer.min_score:
                     class_info.has_label = True
 
     # Return the highest amplitude from the raw spectrograms.
