@@ -71,10 +71,10 @@ class Training:
 
 @dataclass
 class Inference:
-    min_prob = 0.79              # minimum confidence level
+    min_score = 0.79             # only generate labels when score is at least this
     use_banding_codes = True     # use banding codes instead of species names in labels
     check_adjacent = True        # omit label unless adjacent segment matches
-    adjacent_prob_factor = 0.75  # when checking if adjacent segment matches species, use self.min_prob times this
+    adjacent_score_factor = 0.75  # when checking if adjacent segment matches species, use self.min_score times this
     top_n = 20 # number of top matches to log in debug mode
     min_location_freq = .0001    # ignore if species frequency less than this for location/week
     file_date_regex = "\S+_(\d+)_.*" # regex to extract date from file name (e.g. HNCAM015_20210529_161122.mp3)
@@ -85,7 +85,7 @@ class Inference:
     # These parameters control a second pass during inference.
     # If lower_min_if_confirmed is true, count the number of seconds labelled for a species in a recording.
     # If seconds >= confirmed_if_seconds, the species is assumed to be present, so scan again,
-    # lowering the min_prob by multiplying it by lower_min_factor.
+    # lowering the min_score by multiplying it by lower_min_factor.
     lower_min_if_confirmed = True
     confirmed_if_seconds = 6
     lower_min_factor = .7
