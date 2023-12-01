@@ -31,13 +31,13 @@ class ClassInfo:
     def reset(self):
         self.has_label = False
         self.ebird_frequency_too_low = False
-        self.probs = [] # predictions (one per segment)
+        self.scores = [] # predictions (one per segment)
         self.is_label = [] # True iff corresponding offset is a label
 
 class Label:
-    def __init__(self, class_name, probability, start_time, end_time):
+    def __init__(self, class_name, score, start_time, end_time):
         self.class_name = class_name
-        self.probability = probability
+        self.score = score
         self.start_time = start_time
         self.end_time = end_time
 
@@ -256,9 +256,9 @@ class Analyzer:
         # populate class_infos with predictions
         for i in range(len(self.offsets)):
             for j in range(len(self.class_infos)):
-                    self.class_infos[j].probs.append(predictions[i][j])
+                    self.class_infos[j].scores.append(predictions[i][j])
                     self.class_infos[j].is_label.append(False)
-                    if (self.class_infos[j].probs[-1] >= cfg.infer.min_prob):
+                    if (self.class_infos[j].scores[-1] >= cfg.infer.min_score):
                         self.class_infos[j].has_label = True
 
     def _get_seconds_from_time_string(self, time_str):
@@ -332,7 +332,7 @@ class Analyzer:
 
         # generate labels for one class at a time
         labels = []
-        min_adj_prob = cfg.infer.min_prob * cfg.infer.adjacent_prob_factor # if check_adjacent, adjacent segments need this prob at least
+        min_adj_score = cfg.infer.min_score * cfg.infer.adjacent_score_factor # if check_adjacent, adjacent segments need this score at least
 
         for class_info in self.class_infos:
             if class_info.ignore or class_info.ebird_frequency_too_low or not class_info.has_label:
@@ -344,18 +344,18 @@ class Analyzer:
                 name = class_info.name
 
             # set is_label[i] = True for any offset that qualifies in a first pass
-            probs = class_info.probs
-            for i in range(len(probs)):
-                if probs[i] < cfg.infer.min_prob:
+            scores = class_info.scores
+            for i in range(len(scores)):
+                if scores[i] < cfg.infer.min_score:
                     continue
 
-                if i not in [0, len(probs) - 1]:
-                    if cfg.infer.check_adjacent and probs[i - 1] < min_adj_prob and probs[i + 1] < min_adj_prob:
+                if i not in [0, len(scores) - 1]:
+                    if cfg.infer.check_adjacent and scores[i - 1] < min_adj_score and scores[i + 1] < min_adj_score:
                         continue
 
                 class_info.is_label[i] = True
 
-            # raise confidence levels if the species' presence is confirmed
+            # raise scores if the species' presence is confirmed
             if cfg.infer.lower_min_if_confirmed:
                 # calculate number of seconds labelled so far
                 seconds = 0
@@ -369,24 +369,24 @@ class Analyzer:
                             seconds += cfg.audio.segment_len
 
                 if seconds > cfg.infer.confirmed_if_seconds:
-                    # species presence is considered confirmed, so lower the min prob and scan again
-                    min_prob = cfg.infer.lower_min_factor * cfg.infer.min_prob
-                    for i in range(len(probs)):
-                        if not class_info.is_label[i] and probs[i] >= min_prob:
+                    # species presence is considered confirmed, so lower the min score and scan again
+                    min_score = cfg.infer.lower_min_factor * cfg.infer.min_score
+                    for i in range(len(scores)):
+                        if not class_info.is_label[i] and scores[i] >= min_score:
                             class_info.is_label[i] = True
-                            probs[i] = cfg.infer.min_prob # display it as min_prob in the label
+                            scores[i] = cfg.infer.min_score # display it as min_score in the label
 
             # generate the labels
             prev_label = None
-            for i in range(len(probs)):
+            for i in range(len(scores)):
                 if class_info.is_label[i]:
                     end_time = self.offsets[i] + cfg.audio.segment_len
                     if self.merge_labels and prev_label != None and prev_label.end_time >= self.offsets[i]:
                         # extend the previous label's end time (i.e. merge)
                         prev_label.end_time = end_time
-                        prev_label.probability = max(probs[i], prev_label.probability)
+                        prev_label.score = max(scores[i], prev_label.score)
                     else:
-                        label = Label(name, probs[i], self.offsets[i], end_time)
+                        label = Label(name, scores[i], self.offsets[i], end_time)
                         labels.append(label)
                         prev_label = label
 
@@ -400,7 +400,7 @@ class Analyzer:
         try:
             with open(output_path, 'w') as file:
                 for label in labels:
-                    file.write(f'{label.start_time:.2f}\t{label.end_time:.2f}\t{label.class_name};{label.probability:.2f}\n')
+                    file.write(f'{label.start_time:.2f}\t{label.end_time:.2f}\t{label.class_name};{label.score:.2f}\n')
 
         except:
             logging.error(f"Unable to write file {output_path}")
@@ -409,15 +409,15 @@ class Analyzer:
     # in debug mode, output the top predictions for the first segment
     def _log_predictions(self, predictions):
         predictions = np.copy(predictions[0])
-        sum=predictions.sum()
+        sum = predictions.sum()
         logging.info("")
         logging.info("Top predictions:")
 
         for i in range(cfg.infer.top_n):
             j = np.argmax(predictions)
             code = self.class_infos[j].code
-            probability = predictions[j]
-            logging.info(f"{code}: {probability}")
+            score = predictions[j]
+            logging.info(f"{code}: {score}")
             predictions[j] = 0
 
         logging.info(f"{sum=}")
@@ -453,7 +453,7 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--input', type=str, default='', help="Input path (single audio file or directory). No default.")
     parser.add_argument('-o', '--output', type=str, default='', help="Output directory to contain label files. Default is input path, if that is a directory.")
     parser.add_argument('-m', '--merge', type=int, default=1, help=f'Specify 0 to not merge adjacent labels of same species. Default = 1, i.e. merge.')
-    parser.add_argument('-p', '--prob', type=float, default=cfg.infer.min_prob, help=f"Generate label if probability >= this. Default = {cfg.infer.min_prob}.")
+    parser.add_argument('-p', '--score', type=float, default=cfg.infer.min_score, help=f"Generate label if score >= this. Default = {cfg.infer.min_score}.")
     parser.add_argument('-s', '--start', type=str, default='', help="Optional start time in hh:mm:ss format, where hh and mm are optional.")
     parser.add_argument('--date', type=str, default=None, help=f'Date in yyyymmdd, mmdd, or file. Specifying file extracts the date from the file name, using the reg ex defined in config.py.')
     parser.add_argument('--lat', type=float, default=None, help=f'Latitude. Use with longitude to identify an eBird county and ignore corresponding rarities.')
@@ -467,9 +467,9 @@ if __name__ == '__main__':
     logging.info("Initializing")
 
     cfg.infer.use_banding_codes = args.band
-    cfg.infer.min_prob = args.prob
-    if cfg.infer.min_prob < 0:
-        logging.error("Error: min_prob must be >= 0")
+    cfg.infer.min_score = args.score
+    if cfg.infer.min_score < 0:
+        logging.error("Error: min_score must be >= 0")
         quit()
 
     file_list = Analyzer._get_file_list(args.input)
