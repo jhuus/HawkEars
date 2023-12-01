@@ -64,12 +64,21 @@ class Database:
             '''
             cursor.execute(query)
 
+            # Record per sound type, e.g. chip or tink
+            query = '''
+                CREATE TABLE IF NOT EXISTS SoundType (
+                    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Name TEXT NOT NULL)
+            '''
+            cursor.execute(query)
+
             # Record per spectrogram extracted from recordings, including the raw spectrogram data
             # and a link to the recording and offset within it
             query = '''
                 CREATE TABLE IF NOT EXISTS Spectrogram (
                     ID INTEGER PRIMARY KEY AUTOINCREMENT,
                     RecordingID INTEGER NOT NULL,
+                    SoundTypeID INTEGER,
                     Value BLOB NOT NULL,
                     Offset REAL NOT NULL,
                     Audio BLOB,
@@ -209,7 +218,6 @@ class Database:
 
         except sqlite3.Error as e:
             print(f'Error in database get_category: {e}')
-
 
 # ------------------------------- #
 # Subcategory
@@ -438,6 +446,58 @@ class Database:
             return cursor.lastrowid
         except sqlite3.Error as e:
             print(f'Error in database update_recording: {e}')
+
+# ------------------------------- #
+# SoundType
+# ------------------------------- #
+
+    def insert_soundtype(self, name):
+        try:
+            query = '''
+                INSERT INTO SoundType (Name) Values (?)
+            '''
+            cursor = self.conn.cursor()
+            cursor.execute(query, (name,))
+            self.conn.commit()
+            return cursor.lastrowid
+        except sqlite3.Error as e:
+            print(f'Error in database insert_soundtype: {e}')
+
+    def delete_soundtype(self, field='ID', value=None):
+        try:
+            query = f'''
+                DELETE FROM SoundType WHERE {field} = "{value}"
+            '''
+            cursor = self.conn.cursor()
+            cursor.execute(query)
+            self.conn.commit()
+        except sqlite3.Error as e:
+            print(f'Error in database delete_soundtype: {e}')
+
+    def get_soundtype(self, field=None, value=None):
+        try:
+            query = f'SELECT ID, Name FROM SoundType'
+            if field is not None:
+                query += f' WHERE {field} = "{value}"'
+
+            query += f' Order BY ID'
+
+            cursor = self.conn.cursor()
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            if rows is None:
+                return []
+
+            results = []
+            for row in rows:
+                id, name = row
+                result = SimpleNamespace(id=id, name=name)
+                results.append(result)
+
+            return results
+
+        except sqlite3.Error as e:
+            print(f'Error in database get_soundtype: {e}')
 
 # ------------------------------- #
 # Spectrogram
