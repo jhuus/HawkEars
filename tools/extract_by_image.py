@@ -36,7 +36,8 @@ class ExtractByImage(extractor.Extractor):
         for image_path in Path().glob(f"{self.images_path}/*.png"):
             name = Path(image_path).stem
             if '~' in name:
-                result = re.split("\S+~(\S+)-(\S+)~.*", name)
+                result = re.split("\S+~(.+)~.*", name)
+                result = re.split("(.+)-(.+)", result[1])
             else:
                 result = re.split("(\S+)-(\S+)", name)
 
