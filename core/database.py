@@ -101,6 +101,9 @@ class Database:
             query = 'CREATE INDEX IF NOT EXISTS idx_spectrogram_recid ON Spectrogram (RecordingID)'
             cursor.execute(query)
 
+            query = 'CREATE INDEX IF NOT EXISTS idx_spectrogram_sndid ON Spectrogram (SoundTypeID)'
+            cursor.execute(query)
+
             query = 'CREATE INDEX IF NOT EXISTS idx_spectrogram ON Spectrogram (Ignore, RecordingID)'
             cursor.execute(query)
 
