@@ -294,7 +294,13 @@ class MainModel(LightningModule):
     # define optimizers and LR schedulers
     def configure_optimizers(self):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=cfg.train.learning_rate)
-        num_batches = int(cfg.train.num_epochs * self.num_train_specs / cfg.train.batch_size)
+
+        # set LR_epochs > num_epochs to increase final learning rate
+        if cfg.train.LR_epochs is None or cfg.train.LR_epochs < cfg.train.num_epochs:
+            num_batches = int(cfg.train.num_epochs * self.num_train_specs / cfg.train.batch_size)
+        else:
+            num_batches = int(cfg.train.LR_epochs * self.num_train_specs / cfg.train.batch_size)
+
         self.scheduler = {
             'scheduler': torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=num_batches),
             'interval': 'step',
