@@ -19,7 +19,8 @@ import torch.nn.functional as F
 class Trainer:
     def __init__(self):
         torch.set_float32_matmul_precision('medium') # may improve performance a little
-        pl.seed_everything(cfg.train.seed)
+        if not cfg.train.seed is None:
+            pl.seed_everything(cfg.train.seed)
 
     def run(self):
         # load all the data once for performance, then split as needed in each fold
