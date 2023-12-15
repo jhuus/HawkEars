@@ -29,9 +29,9 @@ class Training:
     mixed_precision = True  # usually improves performance, especially with larger models
     multi_label = True
     deterministic = False
-    seed = 1
+    seed = None
     learning_rate = .0025   # base learning rate
-    batch_size = 32
+    batch_size = 64
     model_name = "tf_efficientnetv2_b0" # 5.9M parameters
     load_weights = False    # passed as "weights" to timm.create_model
     use_class_weights = True
@@ -44,11 +44,12 @@ class Training:
     drop_path_rate = None
     proj_drop_rate = None
     num_epochs = 10
+    LR_epochs = None        # default = num_epochs, higher values reduce effective learning rate decay
     save_last_n = 3         # save checkpoints for this many last epochs
-    label_smoothing = 0.15
+    label_smoothing = 0.12
     training_db = "training" # name of training database
     num_folds = 1           # for k-fold cross-validation
-    val_portion = 0         # used only if num_folds = 1
+    val_portion = 0         # used only if num_folds > 1
     model_print_path = "model.txt" # path of text file to print the model (TODO: put in current log directory)
 
     # data augmentation (see core/dataset.py to understand these parameters)
@@ -88,7 +89,7 @@ class Inference:
     # lowering the min_score by multiplying it by lower_min_factor.
     lower_min_if_confirmed = True
     confirmed_if_seconds = 6
-    lower_min_factor = .7
+    lower_min_factor = .85
 
     # Soundalike groups are used in analysis / inference when a location is given.
     # For each soundalike species, eBird barchart data is accessed to get the maximum
