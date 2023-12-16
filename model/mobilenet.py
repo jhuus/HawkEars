@@ -21,6 +21,9 @@ def get_model(model_name, **kwargs):
     elif model_name == '4':
         # ~5.0M parameters
         channel_multiplier = 1.1
+    elif model_name == '5':
+        # ~5.8M parameters
+        channel_multiplier = 1.15
     elif model_name == '6':
         # ~6.3M parameters
         channel_multiplier = 1.25
@@ -31,7 +34,7 @@ def get_model(model_name, **kwargs):
         # ~8.5M parameters
         channel_multiplier = 1.5
     else:
-        raise Exception(f"Unknown custom DLA model name: {model_name}")
+        raise Exception(f"Unknown custom Mobilenet model name: {model_name}")
 
     model = mobilenetv3._gen_mobilenet_v3('mobilenetv3_large_100', channel_multiplier, pretrained=False, in_chans=1, **kwargs)
 
