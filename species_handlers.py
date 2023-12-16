@@ -50,7 +50,7 @@ class Species_Handlers:
         self.low_band_specs = audio.get_spectrograms(offsets=offsets, low_band=True)
 
         if self.low_band_model is None:
-            self.low_band_model = main_model.MainModel.load_from_checkpoint(cfg.misc.low_band_ckpt_path)
+            self.low_band_model = main_model.MainModel.load_from_checkpoint(cfg.misc.low_band_ckpt_path, map_location=torch.device(self.device))
             self.low_band_model.eval() # set inference mode
 
     # Handle cases where a faint vocalization is mistaken for another species.
