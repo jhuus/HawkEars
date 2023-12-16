@@ -432,7 +432,7 @@ class Analyzer:
 
         self.models = []
         for model_path in model_paths:
-            model = main_model.MainModel.load_from_checkpoint(model_path)
+            model = main_model.MainModel.load_from_checkpoint(model_path, map_location=torch.device(self.device))
             model.eval() # set inference mode
             self.models.append(model)
 
