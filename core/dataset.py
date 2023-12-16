@@ -2,14 +2,12 @@ import logging
 import random
 import sys
 
-from core import audio
 from core import cfg
 from core import util
 
 import numpy as np
 import pytorch_lightning as pl
 import skimage
-import torchaudio
 from torch.utils.data import Dataset
 from torchvision import transforms
 
