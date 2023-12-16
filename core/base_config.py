@@ -46,7 +46,7 @@ class Training:
     num_epochs = 10
     LR_epochs = None        # default = num_epochs, higher values reduce effective learning rate decay
     save_last_n = 3         # save checkpoints for this many last epochs
-    label_smoothing = 0.12
+    label_smoothing = 0.15
     training_db = "training" # name of training database
     num_folds = 1           # for k-fold cross-validation
     val_portion = 0         # used only if num_folds > 1
@@ -72,7 +72,7 @@ class Training:
 
 @dataclass
 class Inference:
-    min_score = 0.79             # only generate labels when score is at least this
+    min_score = 0.75             # only generate labels when score is at least this
     use_banding_codes = True     # use banding codes instead of species names in labels
     check_adjacent = True        # omit label unless adjacent segment matches
     adjacent_score_factor = 0.75  # when checking if adjacent segment matches species, use self.min_score times this
@@ -88,7 +88,7 @@ class Inference:
     # If seconds >= confirmed_if_seconds, the species is assumed to be present, so scan again,
     # lowering the min_score by multiplying it by lower_min_factor.
     lower_min_if_confirmed = True
-    confirmed_if_seconds = 6
+    confirmed_if_seconds = 7
     lower_min_factor = .85
 
     # Soundalike groups are used in analysis / inference when a location is given.
