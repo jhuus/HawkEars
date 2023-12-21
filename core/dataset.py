@@ -57,6 +57,8 @@ class CustomDataset(Dataset):
         label = self.label[idx]
 
         spec = util.expand_spectrogram(spec)
+        if cfg.train.augmix:
+            spec2 = np.copy(spec)
 
         # skip augmentation if np.max(spec) == 0, i.e. null spectrograms
         if self.training and cfg.train.augmentation and np.max(spec) > 0:
@@ -65,21 +67,19 @@ class CustomDataset(Dataset):
 
             if cfg.train.multi_label and random.uniform(0, 1) < cfg.train.prob_mixup and class_name != 'Noise':
                 spec, label = self._merge_specs(spec, label, class_name)
-            elif random.uniform(0, 1) < cfg.train.prob_real_noise:
-                spec = self._add_real_noise(spec)
-            elif random.uniform(0, 1) < cfg.train.prob_speckle:
-                spec = self._speckle(spec)
-            elif random.uniform(0, 1) < cfg.train.prob_shift:
-                spec = self._shift_horizontal(spec)
+                if cfg.train.augmix:
+                    spec2 = np.copy(spec)
 
-            spec = spec.clip(0, 1) # set negative numbers to 0
-
-            # raise to an exponent so smaller values are relatively reduced
-            if random.uniform(0, 1) < cfg.train.prob_exponent:
-                spec = spec ** random.uniform(cfg.train.min_exponent, cfg.train.max_exponent)
+            spec = self._augment(spec)
+            if cfg.train.augmix:
+                spec2 = self._augment(spec2)
 
         spec = self._normalize_spec(spec)
         spec = self.transform(spec)
+
+        if cfg.train.augmix:
+            spec2 = self._normalize_spec(spec2)
+            spec2 = self.transform(spec2)
 
         # apply label smoothing here for multi-label case
         if self.training and cfg.train.multi_label and cfg.train.label_smoothing > 0:
@@ -91,7 +91,26 @@ class CustomDataset(Dataset):
             # convert one-hot encoding to int for multi-class case
             label = np.argmax(label)
 
-        return spec, label
+        if cfg.train.augmix:
+            return spec, spec2, label
+        else:
+            return spec, label
+
+    def _augment(self, spec):
+        if random.uniform(0, 1) < cfg.train.prob_real_noise:
+            spec = self._add_real_noise(spec)
+        elif random.uniform(0, 1) < cfg.train.prob_speckle:
+            spec = self._speckle(spec)
+        elif random.uniform(0, 1) < cfg.train.prob_shift:
+            spec = self._shift_horizontal(spec)
+
+        spec = spec.clip(0, 1) # set negative numbers to 0
+
+        # raise to an exponent so smaller values are relatively reduced
+        if random.uniform(0, 1) < cfg.train.prob_exponent:
+            spec = spec ** random.uniform(cfg.train.min_exponent, cfg.train.max_exponent)
+
+        return spec
 
     def _create_transforms(self):
         # real transforms are inline in _getitem_
