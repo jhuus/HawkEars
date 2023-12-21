@@ -17,7 +17,24 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchmetrics.functional import accuracy
-import torchvision
+import scipy.spatial.distance
+
+# Simplified version of "AugMix" loss from https://arxiv.org/pdf/1912.02781.pdf.
+# This AugMix implementation differs from the paper in three ways:
+#   1. different augmentation pipeline
+#   2. compare two augmented images instead of a 3-way compare including the unaugmented image
+#   3. use Euclidean distance instead of KL divergence
+class AugMix_Loss(nn.Module):
+    def __init__(self, weights):
+        super().__init__()
+        self.bce_loss = torch.nn.BCEWithLogitsLoss(weight=weights)
+
+    def __call__(self, logits1, logits2, target):
+        bce_loss = self.bce_loss(logits1, target)
+        distance = torch.sqrt(torch.sum(torch.pow(torch.subtract(logits1, logits2), 2))) / cfg.train.batch_size
+        scaled_distance = distance * bce_loss * cfg.train.augmix_factor
+        loss = bce_loss + scaled_distance
+        return loss
 
 def get_learning_rate(optimizer):
     for param_group in optimizer.param_groups:
@@ -194,15 +211,21 @@ class MainModel(LightningModule):
 
     # return the loss for a batch
     def training_step(self, batch, batch_idx):
-        x, y = batch
-        logits = self(x)
-        loss = get_loss_fn(self.weights)(logits, y)
-
-        detached = loss.detach() # necessary to avoid memory leak
-        if self.prev_loss is None:
-            smoothed_loss = detached
+        if cfg.train.augmix:
+            x1, x2, y = batch
+            logits1 = self(x1)
+            logits2 = self(x2)
+            loss = AugMix_Loss(self.weights)(logits1, logits2, y)
         else:
-            smoothed_loss = .1 * detached + .9 * self.prev_loss # simple exponentially weighted average
+            x, y = batch
+            logits = self(x)
+            loss = get_loss_fn(self.weights)(logits, y)
+
+        detached_loss = loss.detach() # necessary to avoid memory leak
+        if self.prev_loss is None:
+            smoothed_loss = detached_loss
+        else:
+            smoothed_loss = .1 * detached_loss + .9 * self.prev_loss # simple exponentially weighted average
 
         self.prev_loss = smoothed_loss
         self.log("lr", get_learning_rate(self.optimizer), prog_bar=True)
@@ -212,9 +235,15 @@ class MainModel(LightningModule):
 
     # calculate and log batch accuracy and related metrics during validation phase
     def validation_step(self, batch, batch_idx):
-        x, y = batch
-        logits = self(x)
-        loss = get_loss_fn(self.weights)(logits, y)
+        if cfg.train.augmix:
+            x1, x2, y = batch
+            logits1 = self(x1)
+            logits2 = self(x2)
+            loss = AugMix_Loss(self.weights)(logits1, logits2, y)
+        else:
+            x, y = batch
+            logits = self(x)
+            loss = get_loss_fn(self.weights)(logits, y)
 
         if cfg.train.multi_label:
             preds = torch.sigmoid(logits)
@@ -239,8 +268,12 @@ class MainModel(LightningModule):
 
     # calculate and log metrics during test phase
     def test_step(self, batch, batch_idx):
-        x, y = batch
-        logits = self(x)
+        if cfg.train.augmix:
+            x1, x2, y = batch
+            logits = self(x1)
+        else:
+            x, y = batch
+            logits = self(x)
 
         if cfg.train.multi_label:
             preds = torch.sigmoid(logits)
