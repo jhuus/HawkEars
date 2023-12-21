@@ -31,7 +31,7 @@ class Training:
     deterministic = False
     seed = None
     learning_rate = .0025   # base learning rate
-    batch_size = 64
+    batch_size = 32
     model_name = "tf_efficientnetv2_b0" # 5.9M parameters
     load_weights = False    # passed as "weights" to timm.create_model
     use_class_weights = True
@@ -69,6 +69,11 @@ class Training:
     mixup_weights = False
     mixup_weight_min = .2
     mixup_weight_max = .8
+
+    # simplified version of "AugMix" from https://arxiv.org/pdf/1912.02781.pdf;
+    # see comments at top of main_model.py
+    augmix = False
+    augmix_factor = .1
 
 @dataclass
 class Inference:
