@@ -30,9 +30,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--config', type=str, default="base", help=f'Configuration name. Default = "base".')
 parser.add_argument('-d', '--dbname', type=str, default=cfg.train.training_db, help=f'Database name. Default = "{cfg.train.training_db}".')
 parser.add_argument('-k', '--classes', type=str, default="classes", help=f'Class file name. Default = "classes".')
+parser.add_argument('-m', '--max', type=int, default=None, help=f'If specified, this is maximum number of spectrogram per class (double it for Noise).')
 parser.add_argument('-o', '--output', type=str, default=f"{output_path}", help=f'Output path. Default = "{output_path}".')
 
 args = parser.parse_args()
+max_count = args.max
 cfg_name = args.config
 if cfg_name in configs:
     set_config(cfg_name)
@@ -64,11 +66,18 @@ num_spectrograms = []
 empty_classes = []
 for i in range(len(class_names)):
     count = db.get_spectrogram_count(class_names[i])
-    logging.info(f'# spectrograms for {class_names[i]}: {count}')
+    if max_count is None:
+        use_count = count
+    elif class_names[i] == 'Noise':
+        use_count = min(count, 2 * max_count)
+    else:
+        use_count = min(count, max_count)
+
+    logging.info(f'# spectrograms for {class_names[i]} = {count} (use {use_count})')
     if count == 0:
         empty_classes.append(class_names[i])
-    num_spectrograms.append(count)
-    total_specs += count
+    num_spectrograms.append(use_count)
+    total_specs += use_count
 
 logging.info(f'Total # spectrograms: {total_specs}')
 
@@ -80,23 +89,32 @@ if len(empty_classes) > 0:
     quit()
 
 # get spectrograms
+specs_per_class = {}
+for i, class_name in enumerate(class_names):
+    specs_per_class[class_name] = []
+    results = db.get_recording_by_subcat_name(class_name)
+    for r in results:
+        results2 = db.get_spectrogram('RecordingID', r.id)
+        for r2 in results2:
+            rec_name = recording_dict[r2.recording_id]
+            specs_per_class[class_name].append([rec_name, r2.offset, r2.value])
+
+# apply "max" argument
 spec = [0 for i in range(total_specs)]
 rec_name = ['' for i in range(total_specs)]
 offset = [0 for i in range(total_specs)]
 spec_index = [i for i in range(total_specs)]
 class_index = np.zeros((total_specs, ), dtype=np.int32)
-
 idx = 0
-for i in range(len(class_names)):
-    results = db.get_recording_by_subcat_name(class_names[i])
-    for r in results:
-        results2 = db.get_spectrogram('RecordingID', r.id)
-        for r2 in results2:
-            spec[idx] = r2.value
-            rec_name[idx] = recording_dict[r2.recording_id]
-            offset[idx] = r2.offset
-            class_index[idx] = i
-            idx += 1
+for i, class_name in enumerate(class_names):
+    permutation = np.random.permutation(len(specs_per_class[class_name]))
+    for j in range(num_spectrograms[i]):
+        _rec_name, _offset, _spec = specs_per_class[class_name][permutation[j]]
+        offset[idx] = _offset
+        spec[idx] = _spec
+        rec_name[idx] = _rec_name
+        class_index[idx] = i
+        idx += 1
 
 # create dataframes, then pickle a dict containing them
 spec_df = pd.DataFrame({'spec': spec, 'spec_index': spec_index, 'rec_name': rec_name, 'offset': offset, 'class_index': class_index})
