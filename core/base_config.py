@@ -70,10 +70,8 @@ class Training:
     mixup_weight_min = .2
     mixup_weight_max = .8
 
-    # simplified version of "AugMix" from https://arxiv.org/pdf/1912.02781.pdf;
-    # see comments at top of main_model.py
     augmix = False
-    augmix_factor = .1
+    augmix_factor = 4
 
 @dataclass
 class Inference:
