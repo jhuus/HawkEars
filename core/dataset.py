@@ -55,29 +55,27 @@ class CustomDataset(Dataset):
         idx = self.indexes[idx] # convert to a spec_df index
         spec = self.spec_df.loc[idx, 'spec']
         label = self.label[idx]
-
         spec = util.expand_spectrogram(spec)
-        if cfg.train.augmix:
-            spec2 = np.copy(spec)
 
-        # skip augmentation if np.max(spec) == 0, i.e. null spectrograms
-        if self.training and cfg.train.augmentation and np.max(spec) > 0:
+        if self.training and cfg.train.augmentation:
             class_index = self.spec_df.loc[idx, 'class_index'] # could also get this from label
             class_name = self.class_df.loc[class_index, 'name']
 
             if cfg.train.multi_label and random.uniform(0, 1) < cfg.train.prob_mixup and class_name != 'Noise':
                 spec, label = self._merge_specs(spec, label, class_name)
-                if cfg.train.augmix:
-                    spec2 = np.copy(spec)
 
-            spec = self._augment(spec)
             if cfg.train.augmix:
-                spec2 = self._augment(spec2)
+                spec2 = np.copy(spec)
+
+            if np.max(spec) > 0: # skip augmentation for null spectrograms
+                spec = self._augment(spec)
+                if cfg.train.augmix:
+                    spec2 = self._augment(spec2)
 
         spec = self._normalize_spec(spec)
         spec = self.transform(spec)
 
-        if cfg.train.augmix:
+        if self.training and cfg.train.augmentation and cfg.train.augmix:
             spec2 = self._normalize_spec(spec2)
             spec2 = self.transform(spec2)
 
@@ -91,7 +89,7 @@ class CustomDataset(Dataset):
             # convert one-hot encoding to int for multi-class case
             label = np.argmax(label)
 
-        if cfg.train.augmix:
+        if self.training and cfg.train.augmentation and cfg.train.augmix:
             return spec, spec2, label
         else:
             return spec, label
