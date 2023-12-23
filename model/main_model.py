@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from core import cfg, metrics, plot
+from core import cfg, metrics
 from model import dla
 from model import efficientnet_v2
 from model import fastvit
