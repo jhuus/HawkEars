@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from core import cfg, metrics
+from core import cfg, metrics, plot
 from model import dla
 from model import efficientnet_v2
 from model import fastvit
@@ -19,22 +19,24 @@ import torch.nn.functional as F
 from torchmetrics.functional import accuracy
 import scipy.spatial.distance
 
-# Simplified version of "AugMix" loss from https://arxiv.org/pdf/1912.02781.pdf.
-# This AugMix implementation differs from the paper in three ways:
-#   1. different augmentation pipeline
-#   2. compare two augmented images instead of a 3-way compare including the unaugmented image
-#   3. use Euclidean distance instead of KL divergence
-class AugMix_Loss(nn.Module):
-    def __init__(self, weights):
+# AugMix loss copied from timm and modified for multi-label case.
+# See https://arxiv.org/pdf/1912.02781.pdf.
+class JsdCrossEntropy(nn.Module):
+    def __init__(self, weight):
         super().__init__()
-        self.bce_loss = torch.nn.BCEWithLogitsLoss(weight=weights)
+        self.cross_entropy_loss = torch.nn.BCEWithLogitsLoss(weight=weight)
 
-    def __call__(self, logits1, logits2, target):
-        bce_loss = self.bce_loss(logits1, target)
-        distance = torch.sqrt(torch.sum(torch.pow(torch.subtract(logits1, logits2), 2))) / cfg.train.batch_size
-        scaled_distance = distance * bce_loss * cfg.train.augmix_factor
-        loss = bce_loss + scaled_distance
-        return loss
+    def __call__(self, logits_list, label):
+        # Compute cross-entropy on the first image
+        loss1 = self.cross_entropy_loss(logits_list[0], label)
+        probs = [torch.sigmoid(logits) for logits in logits_list]
+
+        # Clamp mixture distribution to avoid exploding KL divergence
+        logp_mixture = torch.clamp(torch.stack(probs).mean(axis=0), 1e-7, 1).log()
+        kl_div = sum([F.kl_div(logp_mixture, p_split, reduction='batchmean') for p_split in probs]) / logits_list[0].shape[1]
+        loss2 = cfg.train.augmix_factor * kl_div
+
+        return loss1 + loss2
 
 def get_learning_rate(optimizer):
     for param_group in optimizer.param_groups:
@@ -212,10 +214,13 @@ class MainModel(LightningModule):
     # return the loss for a batch
     def training_step(self, batch, batch_idx):
         if cfg.train.augmix:
+            # the original AugMix paper used an unaugmented image and two augmented ones;
+            # this version omits the unaugmented image
             x1, x2, y = batch
             logits1 = self(x1)
             logits2 = self(x2)
-            loss = AugMix_Loss(self.weights)(logits1, logits2, y)
+
+            loss = JsdCrossEntropy(self.weights)([logits1, logits2], y)
         else:
             x, y = batch
             logits = self(x)
@@ -239,7 +244,7 @@ class MainModel(LightningModule):
             x1, x2, y = batch
             logits1 = self(x1)
             logits2 = self(x2)
-            loss = AugMix_Loss(self.weights)(logits1, logits2, y)
+            loss = JsdCrossEntropy(self.weights)([logits1, logits2], y)
         else:
             x, y = batch
             logits = self(x)
@@ -268,12 +273,8 @@ class MainModel(LightningModule):
 
     # calculate and log metrics during test phase
     def test_step(self, batch, batch_idx):
-        if cfg.train.augmix:
-            x1, x2, y = batch
-            logits = self(x1)
-        else:
-            x, y = batch
-            logits = self(x)
+        x, y = batch
+        logits = self(x)
 
         if cfg.train.multi_label:
             preds = torch.sigmoid(logits)
