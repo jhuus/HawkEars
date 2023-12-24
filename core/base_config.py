@@ -75,7 +75,8 @@ class Training:
 
 @dataclass
 class Inference:
-    min_score = 0.75             # only generate labels when score is at least this
+    min_score = 0.65             # only generate labels when score is at least this
+    score_exponent = .6          # increase scores so they're more like probabilities
     use_banding_codes = True     # use banding codes instead of species names in labels
     check_adjacent = True        # omit label unless adjacent segment matches
     adjacent_score_factor = 0.75  # when checking if adjacent segment matches species, use self.min_score times this
