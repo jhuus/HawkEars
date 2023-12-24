@@ -229,7 +229,7 @@ class Analyzer:
                 avg_pred += pred
 
         avg_pred /= len(predictions)
-        return avg_pred
+        return avg_pred ** cfg.infer.score_exponent
 
     def _get_predictions(self, signal, rate):
         # if needed, pad the signal with zeros to get the last spectrogram
