@@ -198,7 +198,6 @@ class Audio:
     def load(self, path, keep_bytes=False):
         self.have_signal = False
         self.signal = None
-        spectrogram = None
 
         try:
             self.have_signal = True
@@ -207,7 +206,7 @@ class Audio:
             scale = 1.0 / float(1 << ((16) - 1))
             info = ffmpeg.probe(path)
 
-            if not 'channels' in info['streams'][0].keys() or info['streams'][0]['channels'] == 1:
+            if not cfg.audio.choose_channel or not 'channels' in info['streams'][0].keys() or info['streams'][0]['channels'] == 1:
                 bytes, _ = (ffmpeg
                     .input(path)
                     .output('-', format='s16le', acodec='pcm_s16le', ac=1, ar=f'{cfg.audio.sampling_rate}')
