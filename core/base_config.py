@@ -10,7 +10,8 @@ class Audio:
     win_length = 2048
     spec_height = 192       # spectrogram height
     spec_width = 384        # spectrogram width (3 * 128)
-    check_seconds = 5       # check prefix of this length when picking cleanest channel
+    choose_channel = True   # use heuristic to pick the cleanest audio channel
+    check_seconds = 3       # check prefix of this length when picking cleanest channel
     min_audio_freq = 200    # need this low for American Bittern
     max_audio_freq = 13000  # need this high for Chestnut-backed Chickadee "seet series"
     mel_scale = True
@@ -75,11 +76,10 @@ class Training:
 
 @dataclass
 class Inference:
+    spec_overlap_seconds = 1.5   # number of seconds overlap for adjacent 3-second spectrograms
     min_score = 0.65             # only generate labels when score is at least this
     score_exponent = .6          # increase scores so they're more like probabilities
     use_banding_codes = True     # use banding codes instead of species names in labels
-    check_adjacent = True        # omit label unless adjacent segment matches
-    adjacent_score_factor = 0.75  # when checking if adjacent segment matches species, use self.min_score times this
     top_n = 20 # number of top matches to log in debug mode
     min_location_freq = .0001    # ignore if species frequency less than this for location/week
     file_date_regex = "\S+_(\d+)_.*" # regex to extract date from file name (e.g. HNCAM015_20210529_161122.mp3)
@@ -88,12 +88,14 @@ class Inference:
     frequency_db = "frequency"   # eBird barchart data, i.e. species report frequencies
 
     # These parameters control a second pass during inference.
-    # If lower_min_if_confirmed is true, count the number of seconds labelled for a species in a recording.
+    # If lower_min_if_confirmed is true, count the number of seconds for a species in a recording,
+    # where score >= min_score + raise_min_to_confirm * (1 - min_score).
     # If seconds >= confirmed_if_seconds, the species is assumed to be present, so scan again,
     # lowering the min_score by multiplying it by lower_min_factor.
-    lower_min_if_confirmed = True
-    confirmed_if_seconds = 7
-    lower_min_factor = .85
+    lower_min_if_confirmed = False
+    raise_min_to_confirm = .6    # to be confirmed, score must be >= min_score + this * (1 - min_score)
+    confirmed_if_seconds = 8     # need at least this many confirmed seconds >= raised threshold
+    lower_min_factor = .85       # if so, include all labels with score >= this * min_score
 
     # Soundalike groups are used in analysis / inference when a location is given.
     # For each soundalike species, eBird barchart data is accessed to get the maximum
@@ -111,7 +113,7 @@ class Inference:
 class Miscellaneous:
     main_ckpt_folder = "data/ckpt"      # use an ensemble of all checkpoints in this folder for inference
     low_band_ckpt_path = "data/low_band.ckpt"
-    search_ckpt_path = "data/ckpt/custom_efficientnet_5.ckpt" # checkpoint used in searching and clustering
+    search_ckpt_path = "data/ckpt/custom_efficientnet_5B.ckpt" # checkpoint used in searching and clustering
     classes_file = "data/classes.txt"   # list of classes used to generate pickle files
     ignore_file = "data/ignore.txt"     # classes listed in this file are ignored in analysis
     train_pickle = None
