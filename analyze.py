@@ -42,7 +42,7 @@ class Label:
         self.end_time = end_time
 
 class Analyzer:
-    def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region, debug_mode, merge):
+    def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region, debug_mode, merge, overlap):
         self.input_path = input_path.strip()
         self.output_path = output_path.strip()
         self.start_seconds = self._get_seconds_from_time_string(start_time)
@@ -53,6 +53,7 @@ class Analyzer:
         self.region = region
         self.debug_mode = debug_mode
         self.merge_labels = (merge == 1)
+        self.overlap = overlap
 
         if self.start_seconds is not None and self.end_seconds is not None and self.end_seconds < self.start_seconds + cfg.audio.segment_len:
                 logging.error(f"Error: end time must be >= start time + {cfg.audio.segment_len} seconds")
@@ -256,10 +257,10 @@ class Analyzer:
         # populate class_infos with predictions
         for i in range(len(self.offsets)):
             for j in range(len(self.class_infos)):
-                    self.class_infos[j].scores.append(predictions[i][j])
-                    self.class_infos[j].is_label.append(False)
-                    if (self.class_infos[j].scores[-1] >= cfg.infer.min_score):
-                        self.class_infos[j].has_label = True
+                self.class_infos[j].scores.append(predictions[i][j])
+                self.class_infos[j].is_label.append(False)
+                if (self.class_infos[j].scores[-1] >= cfg.infer.min_score):
+                    self.class_infos[j].has_label = True
 
     def _get_seconds_from_time_string(self, time_str):
         time_str = time_str.strip()
@@ -279,7 +280,8 @@ class Analyzer:
 
     # get the list of spectrograms
     def _get_specs(self, start_seconds, end_seconds):
-        self.offsets = np.arange(start_seconds, end_seconds + 1.0, 1.0).tolist()
+        increment = max(0.5, cfg.audio.segment_len - self.overlap)
+        self.offsets = np.arange(start_seconds, end_seconds + 1.0, increment).tolist()
         self.raw_spectrograms = [0 for i in range(len(self.offsets))]
         specs = self.audio.get_spectrograms(self.offsets, segment_len=cfg.audio.segment_len, raw_spectrograms=self.raw_spectrograms)
 
@@ -332,8 +334,6 @@ class Analyzer:
 
         # generate labels for one class at a time
         labels = []
-        min_adj_score = cfg.infer.min_score * cfg.infer.adjacent_score_factor # if check_adjacent, adjacent segments need this score at least
-
         for class_info in self.class_infos:
             if class_info.ignore or class_info.ebird_frequency_too_low or not class_info.has_label:
                 continue
@@ -349,18 +349,15 @@ class Analyzer:
                 if scores[i] < cfg.infer.min_score:
                     continue
 
-                if i not in [0, len(scores) - 1]:
-                    if cfg.infer.check_adjacent and scores[i - 1] < min_adj_score and scores[i + 1] < min_adj_score:
-                        continue
-
                 class_info.is_label[i] = True
 
             # raise scores if the species' presence is confirmed
             if cfg.infer.lower_min_if_confirmed:
                 # calculate number of seconds labelled so far
                 seconds = 0
+                raised_min_score = cfg.infer.min_score + cfg.infer.raise_min_to_confirm * (1 - cfg.infer.min_score)
                 for i in range(len(class_info.is_label)):
-                    if class_info.is_label[i]:
+                    if class_info.is_label[i] and scores[i] >= raised_min_score:
                         if i > 0 and class_info.is_label[i - 1]:
                             seconds += 1
                         elif i > 0 and class_info.is_label[i - 2]:
@@ -370,9 +367,9 @@ class Analyzer:
 
                 if seconds > cfg.infer.confirmed_if_seconds:
                     # species presence is considered confirmed, so lower the min score and scan again
-                    min_score = cfg.infer.lower_min_factor * cfg.infer.min_score
+                    lowered_min_score = cfg.infer.lower_min_factor * cfg.infer.min_score
                     for i in range(len(scores)):
-                        if not class_info.is_label[i] and scores[i] >= min_score:
+                        if not class_info.is_label[i] and scores[i] >= lowered_min_score:
                             class_info.is_label[i] = True
                             scores[i] = cfg.infer.min_score # display it as min_score in the label
 
@@ -452,6 +449,7 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--end', type=str, default='', help="Optional end time in hh:mm:ss format, where hh and mm are optional.")
     parser.add_argument('-i', '--input', type=str, default='', help="Input path (single audio file or directory). No default.")
     parser.add_argument('-o', '--output', type=str, default='', help="Output directory to contain label files. Default is input path, if that is a directory.")
+    parser.add_argument('--overlap', type=float, default=cfg.infer.spec_overlap_seconds, help=f"Seconds of overlap for adjacent 3-second spectrograms. Default = {cfg.infer.spec_overlap_seconds}.")
     parser.add_argument('-m', '--merge', type=int, default=1, help=f'Specify 0 to not merge adjacent labels of same species. Default = 1, i.e. merge.')
     parser.add_argument('-p', '--min_score', type=float, default=cfg.infer.min_score, help=f"Generate label if score >= this. Default = {cfg.infer.min_score}.")
     parser.add_argument('-s', '--start', type=str, default='', help="Optional start time in hh:mm:ss format, where hh and mm are optional.")
@@ -473,7 +471,7 @@ if __name__ == '__main__':
         quit()
 
     file_list = Analyzer._get_file_list(args.input)
-    analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.debug, args.merge)
+    analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.debug, args.merge, args.overlap)
     analyzer.run(file_list)
 
     elapsed = time.time() - start_time
