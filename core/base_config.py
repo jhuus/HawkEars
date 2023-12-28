@@ -97,18 +97,6 @@ class Inference:
     confirmed_if_seconds = 8     # need at least this many confirmed seconds >= raised threshold
     lower_min_factor = .85       # if so, include all labels with score >= this * min_score
 
-    # Soundalike groups are used in analysis / inference when a location is given.
-    # For each soundalike species, eBird barchart data is accessed to get the maximum
-    # frequency across all weeks (i.e. maximum portion of checklists that include the species).
-    # If the maximum frequency for a species in a soundalike group is <= soundalike_cutoff,
-    # it is replaced by the species with the highest frequency > soundalike_cutoff in the group.
-    # For instance, if a Mountain Chickadee is ID'd in a county where it's never been seen,
-    # but Black-capped Chickadees are common there, it will be reported as a Black-capped Chickadee.
-    soundalike_cutoff = .005
-    soundalikes = [['Black-capped Chickadee', 'Boreal Chickadee', 'Mountain Chickadee'],
-                ['Pacific Wren', 'Winter Wren'],
-                ['Pine Warbler', 'Dark-eyed Junco']]
-
 @dataclass
 class Miscellaneous:
     main_ckpt_folder = "data/ckpt"      # use an ensemble of all checkpoints in this folder for inference
