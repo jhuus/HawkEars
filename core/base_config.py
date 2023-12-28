@@ -77,7 +77,7 @@ class Training:
 @dataclass
 class Inference:
     spec_overlap_seconds = 1.5   # number of seconds overlap for adjacent 3-second spectrograms
-    min_score = 0.65             # only generate labels when score is at least this
+    min_score = 0.7              # only generate labels when score is at least this
     score_exponent = .6          # increase scores so they're more like probabilities
     use_banding_codes = True     # use banding codes instead of species names in labels
     top_n = 20 # number of top matches to log in debug mode
