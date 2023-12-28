@@ -6,10 +6,12 @@ import argparse
 import glob
 import logging
 import os
+from pathlib import Path
 import re
 import time
 
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn.functional as F
 
@@ -42,7 +44,7 @@ class Label:
         self.end_time = end_time
 
 class Analyzer:
-    def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region, debug_mode, merge, overlap):
+    def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region, locfile, debug_mode, merge, overlap):
         self.input_path = input_path.strip()
         self.output_path = output_path.strip()
         self.start_seconds = self._get_seconds_from_time_string(start_time)
@@ -51,9 +53,11 @@ class Analyzer:
         self.latitude = latitude
         self.longitude = longitude
         self.region = region
+        self.locfile = locfile
         self.debug_mode = debug_mode
         self.merge_labels = (merge == 1)
         self.overlap = overlap
+        self.frequencies = {}
 
         if self.start_seconds is not None and self.end_seconds is not None and self.end_seconds < self.start_seconds + cfg.audio.segment_len:
                 logging.error(f"Error: end time must be >= start time + {cfg.audio.segment_len} seconds")
@@ -90,6 +94,7 @@ class Analyzer:
     # return week number in the range [1, 48] as used by eBird barcharts, i.e. 4 weeks per month
     @staticmethod
     def _get_week_num_from_date_str(date_str):
+        date_str = date_str.replace('-', '') # for case with yyyy-mm-dd dates in CSV file
         if not date_str.isnumeric():
             return None
 
@@ -101,17 +106,44 @@ class Analyzer:
         else:
             return None
 
-    # process latitude, longitude, region and date;
+    # process latitude, longitude, region and date arguments;
     # a region is an alternative to lat/lon, and may specify an eBird county (e.g. CA-AB-FN)
     # or province (e.g. CA-AB)
     def _process_location_and_date(self):
-        if self.region is None and (self.latitude is None or self.longitude is None):
+        if self.locfile is None and self.region is None and (self.latitude is None or self.longitude is None):
             self.check_frequency = False
             return
 
         self.check_frequency = True
         self.get_date_from_file_name = False
+        self.freq_db = frequency_db.Frequency_DB()
+        self.counties = self.freq_db.get_all_counties()
         self.week_num = None
+
+        # if a location file is specified, use that
+        self.location_date_dict = None
+        if self.locfile is not None:
+            if os.path.exists(self.locfile):
+                dataframe = pd.read_csv(self.locfile)
+                expected_column_names = ['filename', 'latitude', 'longitude', 'recording_date']
+                if len(dataframe.columns) != len(expected_column_names):
+                    logging.error(f"Error: file {self.locfile} has {len(dataframe.columns)} columns but {len(expected_column_names)} were expected.")
+                    quit()
+
+                for i, column_name in enumerate(dataframe.columns):
+                    if column_name != expected_column_names[i]:
+                        logging.error(f"Error: file {self.locfile}, column {i} is {column_name} but {expected_column_names[i]} was expected.")
+                        quit()
+
+                self.location_date_dict = {}
+                for i, row in dataframe.iterrows():
+                    week_num = self._get_week_num_from_date_str(row['recording_date'])
+                    self.location_date_dict[row['filename']] = [row['latitude'], row['longitude'], week_num]
+
+                return
+            else:
+                logging.error(f"Error: file {self.locfile} not found.")
+                quit()
 
         if self.date_str == 'file':
             self.get_date_from_file_name = True
@@ -121,10 +153,7 @@ class Analyzer:
                 logging.error(f'Error: invalid date string: {self.date_str}')
                 quit()
 
-        freq_db = frequency_db.Frequency_DB()
-        self.counties = freq_db.get_all_counties()
-
-        counties = [] # list of corresponding eBird counties
+        counties = [] # list of relevant eBird counties
         if self.region is not None:
             for c in self.counties:
                 if c.code.startswith(self.region):
@@ -147,8 +176,23 @@ class Analyzer:
         else:
             logging.info(f'Matching species in region {self.region}')
 
-        # get the weekly frequency data per species, where frequency is the
-        # percent of eBird checklists containing a species in a given county/week
+        self._update_class_frequency_stats(counties)
+
+    # cache eBird species frequencies for performance
+    def _get_frequencies(self, county_id, class_name):
+        if county_id not in self.frequencies:
+            self.frequencies[county_id] = {}
+
+        if class_name in self.frequencies[county_id]:
+            return self.frequencies[county_id][class_name]
+        else:
+            results = self.freq_db.get_frequencies(county_id, class_name)
+            self.frequencies[county_id][class_name] = results
+            return results
+
+    # update the weekly frequency data per species, where frequency is the
+    # percent of eBird checklists containing a species in a given county/week
+    def _update_class_frequency_stats(self, counties):
         class_infos = {}
         for class_info in self.class_infos:
             class_infos[class_info.name] = class_info # copy from list to dict for faster reference
@@ -156,7 +200,7 @@ class Analyzer:
                 # get sums of weekly frequencies for this species across specified counties
                 frequency = [0 for i in range(48)] # eBird uses 4 weeks per month
                 for county in counties:
-                    results = freq_db.get_frequencies(county.id, class_info.name)
+                    results = self._get_frequencies(county.id, class_info.name)
                     for result in results:
                         frequency[result.week_num - 1] += result.value
 
@@ -172,34 +216,6 @@ class Analyzer:
                     # if no date is specified we will use the maximum across all weeks
                     class_info.max_frequency = max(class_info.max_frequency, frequency[week_num])
                     class_info.frequency[week_num] = frequency[week_num]
-
-        # process soundalikes (see comments in base_config.py);
-        # start by identifying soundalikes at or below the cutoff frequency
-        low_freq_soundalikes = {}
-        for set in cfg.infer.soundalikes:
-            for i in range(len(set)):
-                if set[i] in class_infos and class_infos[set[i]].max_frequency <= cfg.infer.soundalike_cutoff:
-                    low_freq_soundalikes[set[i]] = []
-                    for j in range(len(set)):
-                        if i != j and set[j] in class_infos:
-                            low_freq_soundalikes[set[i]].append(set[j])
-
-        # for each soundalike below the low frequency cutoff, find its highest peer above the cutoff
-        for name in low_freq_soundalikes:
-            max_peer_class_info = None
-            for peer_name in low_freq_soundalikes[name]:
-                peer_class_info = class_infos[peer_name]
-                if peer_class_info.max_frequency > cfg.infer.soundalike_cutoff:
-                    if max_peer_class_info is None or peer_class_info.max_frequency > max_peer_class_info.max_frequency:
-                        max_peer_class_info = peer_class_info
-
-            if max_peer_class_info is not None:
-                # replace the low freq one by a soundalike
-                class_info = class_infos[name]
-                class_info.name = max_peer_class_info.name
-                class_info.code = max_peer_class_info.code
-                class_info.frequency = max_peer_class_info.frequency
-                class_info.max_frequency = max_peer_class_info.max_frequency
 
     # get class names and codes from the model, which gets them from the checkpoint
     def _get_class_infos(self):
@@ -294,10 +310,26 @@ class Analyzer:
     def _analyze_file(self, file_path):
         logging.info(f"Analyzing {file_path}")
 
-        check_frequency = False
-        if self.check_frequency:
-            check_frequency = True
-            if self.get_date_from_file_name:
+        check_frequency = self.check_frequency
+        if check_frequency:
+            if self.location_date_dict is not None:
+                filename = Path(file_path).name
+                if filename in self.location_date_dict:
+                    latitude, longitude, self.week_num = self.location_date_dict[filename]
+                    county = None
+                    for c in self.counties:
+                        if latitude >= c.min_y and latitude <= c.max_y and longitude >= c.min_x and longitude <= c.max_x:
+                            county = c
+                            break
+
+                    if county is None:
+                        check_frequency = False
+                        logging.warning(f"Warning: no matching county found for latitude={latitude} and longitude={longitude}")
+                    else:
+                        self._update_class_frequency_stats([county])
+                else:
+                    logging.warning(f"Warning: file {filename} not found in {self.locfile}")
+            elif self.get_date_from_file_name:
                 result = re.split(cfg.infer.file_date_regex, os.path.basename(file_path))
                 if len(result) > cfg.infer.file_date_regex_group:
                     date_str = result[cfg.infer.file_date_regex_group]
@@ -456,6 +488,7 @@ if __name__ == '__main__':
     parser.add_argument('--date', type=str, default=None, help=f'Date in yyyymmdd, mmdd, or file. Specifying file extracts the date from the file name, using the reg ex defined in config.py.')
     parser.add_argument('--lat', type=float, default=None, help=f'Latitude. Use with longitude to identify an eBird county and ignore corresponding rarities.')
     parser.add_argument('--lon', type=float, default=None, help=f'Longitude. Use with latitude to identify an eBird county and ignore corresponding rarities.')
+    parser.add_argument('--locfile', type=str, default=None, help=f'Path to optional CSV file containing file names, latitudes, longitudes and recording dates.')
     parser.add_argument('-r', '--region', type=str, default=None, help=f'eBird region code, e.g. "CA-AB" for Alberta. Use as an alternative to latitude/longitude.')
     args = parser.parse_args()
 
@@ -471,7 +504,7 @@ if __name__ == '__main__':
         quit()
 
     file_list = Analyzer._get_file_list(args.input)
-    analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.debug, args.merge, args.overlap)
+    analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.locfile, args.debug, args.merge, args.overlap)
     analyzer.run(file_list)
 
     elapsed = time.time() - start_time
