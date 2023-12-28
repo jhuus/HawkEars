@@ -16,19 +16,15 @@ class Species_Handlers:
         # update this dictionary to enable/disable handlers
         self.handlers = {
             'BWHA': self.check_soundalike,
-            'LALO': self.check_amplitude,
-            'HOLA': self.check_amplitude,
-            'PIGR': self.check_amplitude,
-            'RUBL': self.check_amplitude,
+            #'LALO': self.check_amplitude,
+            #'PIGR': self.check_amplitude,
             'RUGR': self.ruffed_grouse,
         }
 
         # handler parameters, so it's easy to use the same logic for multiple species
         self.check_amplitude_config = {
             'LALO': SimpleNamespace(low_freq=.49, high_freq=.69, min_ratio=.15),
-            'HOLA': SimpleNamespace(low_freq=.60, high_freq=.73, min_ratio=.15),
             'PIGR': SimpleNamespace(low_freq=.46, high_freq=.56, min_ratio=.15),
-            'RUBL': SimpleNamespace(low_freq=.45, high_freq=.67, min_ratio=.15),
         }
 
         self.check_soundalike_config = {
@@ -78,8 +74,7 @@ class Species_Handlers:
             if relative_amplitude < config.min_ratio:
                 class_info.scores[i] = 0
 
-    # The main config file has soundalike parameters for cases where a common species is mistaken for a rare one.
-    # Here we handle cases where a common species is mistaken for a not-so-rare one. For example,
+    # Handle cases where one species is frequently mistaken for another. For example,
     # a fragment of a White-throated Sparrow song is sometimes mistaken for a Broad-winged Hawk.
     # If we're scanning BWHA and the current or previous label has a significant possibility of WTSP, skip this label.
     def check_soundalike(self, class_info):
