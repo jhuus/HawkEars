@@ -191,7 +191,7 @@ class Analyzer:
             return results
 
     # update the weekly frequency data per species, where frequency is the
-    # percent of eBird checklists containing a species in a given county/week
+    # percent of eBird checklists containing a species in a given county/week;
     def _update_class_frequency_stats(self, counties):
         class_infos = {}
         for class_info in self.class_infos:
@@ -201,8 +201,9 @@ class Analyzer:
                 frequency = [0 for i in range(48)] # eBird uses 4 weeks per month
                 for county in counties:
                     results = self._get_frequencies(county.id, class_info.name)
-                    for result in results:
-                        frequency[result.week_num - 1] += result.value
+                    for i in range(len(results)):
+                        # for each week use the maximum of it and the adjacent weeks
+                        frequency[i] = max(max(results[i].value, results[(i + 1) % 48].value), results[(i - 1) % 48].value)
 
                 if len(counties) > 1:
                     # get the average across counties
