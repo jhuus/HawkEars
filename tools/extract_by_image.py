@@ -40,6 +40,8 @@ class ExtractByImage(extractor.Extractor):
                 result = re.split("(.+)-(.+)", result[1])
             else:
                 result = re.split("(\S+)-(\S+)", name)
+                if len(result) != 4:
+                    result = re.split("(\S+)_(\S+)", name)
 
             if len(result) != 4:
                 print(f"Error: unknown file name format: {image_path}")
