@@ -93,9 +93,9 @@ class Inference:
     # If seconds >= confirmed_if_seconds, the species is assumed to be present, so scan again,
     # lowering the min_score by multiplying it by lower_min_factor.
     lower_min_if_confirmed = True
-    raise_min_to_confirm = .6    # to be confirmed, score must be >= min_score + this * (1 - min_score)
+    raise_min_to_confirm = .5    # to be confirmed, score must be >= min_score + this * (1 - min_score)
     confirmed_if_seconds = 8     # need at least this many confirmed seconds >= raised threshold
-    lower_min_factor = .5        # if so, include all labels with score >= this * min_score
+    lower_min_factor = .6        # if so, include all labels with score >= this * min_score
 
 @dataclass
 class Miscellaneous:
