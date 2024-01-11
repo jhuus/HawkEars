@@ -97,11 +97,9 @@ class CustomDataset(Dataset):
     def _augment(self, spec):
         if random.uniform(0, 1) < cfg.train.prob_real_noise:
             spec = self._add_real_noise(spec)
-
-        if random.uniform(0, 1) < cfg.train.prob_speckle:
+        elif random.uniform(0, 1) < cfg.train.prob_speckle:
             spec = self._speckle(spec)
-
-        if random.uniform(0, 1) < cfg.train.prob_shift:
+        elif random.uniform(0, 1) < cfg.train.prob_shift:
             spec = self._shift_horizontal(spec)
 
         spec = spec.clip(0, 1) # set negative numbers to 0
