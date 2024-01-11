@@ -27,6 +27,7 @@ parser.add_argument('-n', type=int, default=0, help='If > 0, stop after this man
 parser.add_argument('-s', type=str, default='', help='Species name.')
 parser.add_argument('-o', type=str, default='', help='Output directory.')
 parser.add_argument('-p', type=str, default='', help='Only plot spectrograms if file name starts with this (case-insensitive).')
+parser.add_argument('--include_file', type=str, default=None, help='Only plot spectrograms if file name is listed in this file.')
 parser.add_argument('-w', type=int, default=0, help='1 = overwrite existing image files.')
 
 args = parser.parse_args()
@@ -39,6 +40,7 @@ num_to_plot = args.n
 low_band = (args.l == 1)
 overwrite = (args.w == 1)
 out_dir = args.o
+include_file = args.include_file
 
 if not os.path.exists(out_dir):
     print(f'creating directory {out_dir}')
@@ -47,6 +49,12 @@ if not os.path.exists(out_dir):
 db = database.Database(db_path)
 
 start_time = time.time()
+
+include_dict = {}
+if include_file is not None:
+    lines = util.get_file_lines(include_file)
+    for line in lines:
+        include_dict[line] = 1
 
 if mode == 0:
     # include only if Ignore != 'Y'
@@ -64,7 +72,9 @@ else:
 
 num_plotted = 0
 for r in results:
-    if len(prefix) > 0 and not r.filename.lower().startswith(prefix):
+    if len(prefix) > 0 and not r.filename.startswith(prefix):
+        continue
+    elif include_file is not None and r.filename not in include_dict:
         continue
 
     base, ext = os.path.splitext(r.filename)
