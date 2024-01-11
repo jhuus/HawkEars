@@ -60,8 +60,8 @@ class Training:
     prob_speckle = .1
     prob_fade = .2
     prob_exponent = .25
-    prob_shift = .1
-    max_shift = 4
+    prob_shift = 1
+    max_shift = 6
     min_fade = .1
     max_fade = .8
     speckle_variance = .009
