@@ -259,7 +259,7 @@ class Analyzer:
             signal = np.pad(signal, (0, pad_amount), 'constant', constant_values=(0, 0))
 
         start_seconds = 0 if self.start_seconds is None else self.start_seconds
-        max_end_seconds = (signal.shape[0] / rate) - cfg.audio.segment_len
+        max_end_seconds = max(0, (signal.shape[0] / rate) - cfg.audio.segment_len)
         end_seconds = max_end_seconds if self.end_seconds is None else self.end_seconds
 
         specs = self._get_specs(start_seconds, end_seconds)
