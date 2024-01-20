@@ -18,19 +18,19 @@ def plot_spec(spec, path, low_band=False, show_dims=False):
         x_tick_locations = [i for i in range(0, cfg.audio.spec_width + 1, 32)]
         x_tick_labels = [i for i in range(0, cfg.audio.spec_width + 1, 32)]
 
-        y_tick_locations = [i for i in range(0, cfg.audio.spec_height + 1, 16)]
-        y_tick_labels = [i for i in range(0, cfg.audio.spec_height + 1, 16)]
+        y_tick_locations = [i for i in range(0, spec_height + 1, 16)]
+        y_tick_labels = [i for i in range(0, spec_height + 1, 16)]
     else:
         x_tick_locations = [i for i in range(0, cfg.audio.spec_width + 1, 64)]
         x_tick_labels = [f'{i/(cfg.audio.spec_width / cfg.audio.segment_len):.1f}s' for i in range(0, cfg.audio.spec_width + 1, 64)]
 
         # generate a y_tick for first and last frequencies and every n kHz
         if cfg.audio.mel_scale:
-            frequencies = librosa.mel_frequencies(n_mels=cfg.audio.spec_height,
+            frequencies = librosa.mel_frequencies(n_mels=spec_height,
                                                     fmin=cfg.audio.min_audio_freq,
                                                     fmax=cfg.audio.max_audio_freq)
         else:
-            freq_incr = (cfg.audio.max_audio_freq - cfg.audio.min_audio_freq) / (cfg.audio.spec_height - 1)
+            freq_incr = (cfg.audio.max_audio_freq - cfg.audio.min_audio_freq) / (spec_height - 1)
             frequencies = np.arange(cfg.audio.min_audio_freq, cfg.audio.max_audio_freq + freq_incr, freq_incr)
 
         y_tick_locations = []
