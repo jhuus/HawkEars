@@ -76,6 +76,7 @@ class Training:
 
 @dataclass
 class Inference:
+    num_threads = 3              # multiple threads improves performance but uses more GPU memory
     spec_overlap_seconds = 1.5   # number of seconds overlap for adjacent 3-second spectrograms
     min_score = 0.7              # only generate labels when score is at least this
     score_exponent = .6          # increase scores so they're more like probabilities
@@ -84,7 +85,7 @@ class Inference:
     min_location_freq = .0001    # ignore if species frequency less than this for location/week
     file_date_regex = "\S+_(\d+)_.*" # regex to extract date from file name (e.g. HNCAM015_20210529_161122.mp3)
     file_date_regex_group = 1    # use group at offset 1
-    block_size = 200             # do this many spectrograms at a time to avoid running out of GPU memory
+    block_size = 100             # do this many spectrograms at a time to avoid running out of GPU memory
     frequency_db = "frequency"   # eBird barchart data, i.e. species report frequencies
 
     # These parameters control a second pass during inference.
