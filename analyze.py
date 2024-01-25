@@ -5,9 +5,11 @@
 import argparse
 import glob
 import logging
+import multiprocessing as mp
 import os
 from pathlib import Path
 import re
+import threading
 import time
 
 import numpy as np
@@ -505,8 +507,38 @@ if __name__ == '__main__':
         quit()
 
     file_list = Analyzer._get_file_list(args.input)
-    analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.locfile, args.debug, args.merge, args.overlap)
-    analyzer.run(file_list)
+    if cfg.infer.num_threads == 1:
+        # keep it simple in case multithreading code has undesirable side-effects (e.g. disabling echo to terminal)
+        analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.locfile, args.debug, args.merge, args.overlap)
+        analyzer.run(file_list)
+    else:
+        # split input files into one group per thread
+        file_lists = [[] for i in range(cfg.infer.num_threads)]
+        for i in range(len(file_list)):
+            file_lists[i % cfg.infer.num_threads].append(file_list[i])
+
+        # for some reason using processes is faster than just using threads, but that disables output on Windows
+        processes = []
+        for i in range(cfg.infer.num_threads):
+            if len(file_lists[i]) > 0:
+                analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.locfile, args.debug, args.merge, args.overlap)
+                if os.name == "posix":
+                    process = mp.Process(target=analyzer.run, args=(file_lists[i], ))
+                else:
+                    process = threading.Thread(target=analyzer.run, args=(file_lists[i], ))
+
+                process.start()
+                processes.append(process)
+
+        # wait for processes to complete
+        for process in processes:
+            try:
+                process.join()
+            except Exception as e:
+                logging.error(f"Caught exception: {e}")
+
+    if os.name == "posix":
+        os.system("stty echo")
 
     elapsed = time.time() - start_time
     minutes = int(elapsed) // 60
