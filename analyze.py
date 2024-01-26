@@ -46,7 +46,7 @@ class Label:
         self.end_time = end_time
 
 class Analyzer:
-    def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region, locfile, debug_mode, merge, overlap):
+    def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region, locfile, debug_mode, merge, overlap, device, thread_num=1):
         self.input_path = input_path.strip()
         self.output_path = output_path.strip()
         self.start_seconds = self._get_seconds_from_time_string(start_time)
@@ -59,6 +59,8 @@ class Analyzer:
         self.debug_mode = debug_mode
         self.merge_labels = (merge == 1)
         self.overlap = overlap
+        self.thread_num = thread_num
+        self.device = device
         self.frequencies = {}
 
         if self.start_seconds is not None and self.end_seconds is not None and self.end_seconds < self.start_seconds + cfg.audio.segment_len:
@@ -75,13 +77,6 @@ class Analyzer:
                 self.output_path = self.input_path
         elif not os.path.exists(self.output_path):
             os.makedirs(self.output_path)
-
-        if torch.cuda.is_available():
-            self.device = 'cuda'
-            logging.info(f"Using GPU")
-        else:
-            self.device = 'cpu'
-            logging.info(f"Using CPU")
 
     @staticmethod
     def _get_file_list(input_path):
@@ -311,7 +306,7 @@ class Analyzer:
         return spec_array
 
     def _analyze_file(self, file_path):
-        logging.info(f"Analyzing {file_path}")
+        logging.info(f"Thread {self.thread_num}: Analyzing {file_path}")
 
         check_frequency = self.check_frequency
         if check_frequency:
@@ -428,7 +423,7 @@ class Analyzer:
         basename = os.path.basename(file_path)
         tokens = basename.split('.')
         output_path = os.path.join(self.output_path, f'{tokens[0]}_HawkEars.txt')
-        logging.info(f"Writing output to {output_path}")
+        logging.info(f"Thread {self.thread_num}: Writing output to {output_path}")
         try:
             with open(output_path, 'w') as file:
                 for label in labels:
@@ -492,6 +487,7 @@ if __name__ == '__main__':
     parser.add_argument('--lat', type=float, default=None, help=f'Latitude. Use with longitude to identify an eBird county and ignore corresponding rarities.')
     parser.add_argument('--lon', type=float, default=None, help=f'Longitude. Use with latitude to identify an eBird county and ignore corresponding rarities.')
     parser.add_argument('--locfile', type=str, default=None, help=f'Path to optional CSV file containing file names, latitudes, longitudes and recording dates.')
+    parser.add_argument('--threads', type=int, default=cfg.infer.num_threads, help=f'Number of threads. Default = {cfg.infer.num_threads}')
     parser.add_argument('-r', '--region', type=str, default=None, help=f'eBird region code, e.g. "CA-AB" for Alberta. Use as an alternative to latitude/longitude.')
     args = parser.parse_args()
 
@@ -500,28 +496,36 @@ if __name__ == '__main__':
     start_time = time.time()
     logging.info("Initializing")
 
+    num_threads = args.threads
     cfg.infer.use_banding_codes = args.band
     cfg.infer.min_score = args.min_score
     if cfg.infer.min_score < 0:
         logging.error("Error: min_score must be >= 0")
         quit()
 
+    if torch.cuda.is_available():
+        device = 'cuda'
+        logging.info(f"Using GPU")
+    else:
+        device = 'cpu'
+        logging.info(f"Using CPU")
+
     file_list = Analyzer._get_file_list(args.input)
-    if cfg.infer.num_threads == 1:
+    if num_threads == 1:
         # keep it simple in case multithreading code has undesirable side-effects (e.g. disabling echo to terminal)
-        analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.locfile, args.debug, args.merge, args.overlap)
+        analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.locfile, args.debug, args.merge, args.overlap, device)
         analyzer.run(file_list)
     else:
         # split input files into one group per thread
-        file_lists = [[] for i in range(cfg.infer.num_threads)]
+        file_lists = [[] for i in range(num_threads)]
         for i in range(len(file_list)):
-            file_lists[i % cfg.infer.num_threads].append(file_list[i])
+            file_lists[i % num_threads].append(file_list[i])
 
         # for some reason using processes is faster than just using threads, but that disables output on Windows
         processes = []
-        for i in range(cfg.infer.num_threads):
+        for i in range(num_threads):
             if len(file_lists[i]) > 0:
-                analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.locfile, args.debug, args.merge, args.overlap)
+                analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.locfile, args.debug, args.merge, args.overlap, device, i + 1)
                 if os.name == "posix":
                     process = mp.Process(target=analyzer.run, args=(file_lists[i], ))
                 else:
