@@ -195,6 +195,8 @@ class Audio:
     def signal_len(self):
         return len(self.signal) if self.have_signal else 0
 
+    # use ffmpeg to load audio recording into memory, either merging channels or choosing the cleanest channel;
+    # using librosa would simplify the code, but ffmpeg is much faster, and load time is a significant bottleneck
     def load(self, path, keep_bytes=False):
         self.have_signal = False
         self.signal = None
