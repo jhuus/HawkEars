@@ -164,7 +164,7 @@ Lark Sparrow,LASP
 Lazuli Bunting,LAZB
 Least Bittern,LEBI
 Least Flycatcher,LEFL
-Least Sandpiper,LESP
+Least Sandpiper,LESA
 LeConte's Sparrow,LCSP
 Lesser Black-backed Gull,LBBG
 Lesser Yellowlegs,LEYE
