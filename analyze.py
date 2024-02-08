@@ -420,9 +420,7 @@ class Analyzer:
         self._save_labels(labels, file_path)
 
     def _save_labels(self, labels, file_path):
-        basename = os.path.basename(file_path)
-        tokens = basename.split('.')
-        output_path = os.path.join(self.output_path, f'{tokens[0]}_HawkEars.txt')
+        output_path = os.path.join(self.output_path, f'{Path(file_path).stem}_HawkEars.txt')
         logging.info(f"Thread {self.thread_num}: Writing output to {output_path}")
         try:
             with open(output_path, 'w') as file:
