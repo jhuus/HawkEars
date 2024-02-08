@@ -1,8 +1,6 @@
 # Audio processing, especially extracting and returning spectrograms.
 
-import json
 import logging
-import random
 
 import cv2
 import ffmpeg
@@ -155,7 +153,7 @@ class Audio:
             # call _get_raw_spectrogram for the whole signal, then break it up into spectrograms;
             # this is faster when getting overlapping spectrograms for a whole recording
             spectrogram = None
-            spec_width_per_sec = int(cfg.audio.spec_width / segment_len)
+            spec_width_per_sec = int(cfg.audio.spec_width / cfg.audio.segment_len)
 
             # create in blocks so we don't run out of GPU memory
             block_length = cfg.audio.spec_block_seconds * cfg.audio.sampling_rate
@@ -173,11 +171,9 @@ class Audio:
 
                 start += length
 
-            last_offset = (spectrogram.shape[1] / spec_width_per_sec) - segment_len
-
             specs = []
-            for offset in offsets:
-                if offset <= last_offset:
+            for i, offset in enumerate(offsets):
+                if i == 0 or i < len(offsets) - 1:
                     specs.append(spectrogram[:, int(offset * spec_width_per_sec) : int((offset + segment_len) * spec_width_per_sec)])
                 else:
                     spec = spectrogram[:, int(offset * spec_width_per_sec):]
