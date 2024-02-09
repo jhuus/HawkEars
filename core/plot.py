@@ -66,6 +66,7 @@ def plot_spec(spec, path, low_band=False, show_dims=True, width=None, height=Non
     if show_dims:
         plt.xticks(x_tick_locations, x_tick_labels)
         plt.yticks(y_tick_locations, y_tick_labels)
+        plt.savefig(path)
     else:
         plt.tick_params(
             axis='both',       # apply to both axes
@@ -79,5 +80,6 @@ def plot_spec(spec, path, low_band=False, show_dims=True, width=None, height=Non
             labelleft=False,
             labelright=False)
 
-    plt.savefig(path)
+        plt.savefig(path, bbox_inches='tight', pad_inches=0)
+
     plt.close()
