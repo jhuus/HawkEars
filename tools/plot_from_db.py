@@ -78,7 +78,7 @@ for r in results:
         continue
 
     base, ext = os.path.splitext(r.filename)
-    spec_path = f'{out_dir}/{base}-{r.offset:.2f}.png'
+    spec_path = f'{out_dir}/{base}-{r.offset:.2f}.jpeg'
 
     if overwrite or not os.path.exists(spec_path):
         print(f"Processing {spec_path}")
