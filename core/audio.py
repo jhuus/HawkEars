@@ -176,8 +176,13 @@ class Audio:
                 if i == 0 or i < len(offsets) - 1:
                     specs.append(spectrogram[:, int(offset * spec_width_per_sec) : int((offset + segment_len) * spec_width_per_sec)])
                 else:
+                    # last offset, but not the first one
                     spec = spectrogram[:, int(offset * spec_width_per_sec):]
-                    spec = np.pad(spec, ((0, 0), (0, cfg.audio.spec_width - spec.shape[1])), 'constant', constant_values=0)
+                    if spec.shape[1] > cfg.audio.spec_width:
+                        spec = spec[:, :cfg.audio.spec_width]
+                    elif spec.shape[1] < cfg.audio.spec_width:
+                        spec = np.pad(spec, ((0, 0), (0, cfg.audio.spec_width - spec.shape[1])), 'constant', constant_values=0)
+
                     specs.append(spec)
 
         if raw_spectrograms is not None and len(raw_spectrograms) == len(specs):
