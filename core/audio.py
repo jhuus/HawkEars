@@ -104,7 +104,11 @@ class Audio:
         if check_seconds == 0:
             return left_signal, left_channel # make an arbitrary choice
 
-        offsets = [1] # skip the first second
+        if recording_seconds >= check_seconds + 1:
+            offsets = [1] # skip the first second
+        else:
+            offsets = [0] # check at the very beginning
+
         self.signal = left_signal
         left_spec = self.get_spectrograms(offsets, segment_len=check_seconds)[0]
         self.signal = right_signal
@@ -173,17 +177,13 @@ class Audio:
 
             specs = []
             for i, offset in enumerate(offsets):
-                if i == 0 or i < len(offsets) - 1:
-                    specs.append(spectrogram[:, int(offset * spec_width_per_sec) : int((offset + segment_len) * spec_width_per_sec)])
-                else:
-                    # last offset, but not the first one
-                    spec = spectrogram[:, int(offset * spec_width_per_sec):]
-                    if spec.shape[1] > cfg.audio.spec_width:
-                        spec = spec[:, :cfg.audio.spec_width]
-                    elif spec.shape[1] < cfg.audio.spec_width:
-                        spec = np.pad(spec, ((0, 0), (0, cfg.audio.spec_width - spec.shape[1])), 'constant', constant_values=0)
+                spec = spectrogram[:, int(offset * spec_width_per_sec):int((offset + segment_len) * spec_width_per_sec)]
+                if spec.shape[1] > cfg.audio.spec_width:
+                    spec = spec[:, :cfg.audio.spec_width]
+                elif spec.shape[1] < cfg.audio.spec_width:
+                    spec = np.pad(spec, ((0, 0), (0, cfg.audio.spec_width - spec.shape[1])), 'constant', constant_values=0)
 
-                    specs.append(spec)
+                specs.append(spec)
 
         if raw_spectrograms is not None and len(raw_spectrograms) == len(specs):
             for i, spec in enumerate(specs):
