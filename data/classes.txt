@@ -16,7 +16,7 @@ American Bittern,AMBI
 American Coot,AMCO
 American Crow,AMCR
 American Golden-Plover,AMGP
-American Goldfinch,AMGO
+American Goldfinch,AGOL
 American Kestrel,AMKE
 American Pipit,AMPI
 American Redstart,AMRE
@@ -188,7 +188,7 @@ Nashville Warbler,NAWA
 Nelson's Sparrow,NESP
 Northern Cardinal,NOCA
 Northern Flicker,NOFL
-Northern Goshawk,NOGO
+American Goshawk,AGOS
 Northern Harrier,NOHA
 Northern Hawk Owl,NHOW
 Northern Parula,NOPA
