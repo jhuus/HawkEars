@@ -15,6 +15,9 @@ def get_model(model_name, **kwargs):
     elif model_name == '2':
         # ~2.4M parameters
         channel_multiplier = .7
+    elif model_name == '2B':
+        # ~3.2M parameters
+        channel_multiplier = .8
     elif model_name == '3':
         # ~4.2M parameters
         channel_multiplier = 1.0 # i.e. this is mobilenetv3_large_100
