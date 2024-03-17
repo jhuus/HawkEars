@@ -54,6 +54,18 @@ def get_model(model_name, **kwargs):
             attn='eca',
         )
     elif model_name == '2':
+        #  about 3.1M parameters
+        config = dict(
+            stem_chs=[32, 32, 32],
+            stage_conv_chs=[128, 160, 192, 224],
+            stage_out_chs=[128, 256, 384, 384],
+            layer_per_block=1,
+            block_per_stage=[1, 1, 1, 2],
+            residual=True,
+            depthwise=False,
+            attn='eca',
+        )
+    elif model_name == '3':
         #  about 3.7M parameters
         config = dict(
             stem_chs=[64, 64, 128],
