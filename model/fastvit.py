@@ -21,6 +21,14 @@ def get_model(model_name, **kwargs):
             mlp_ratios=(3, 3, 3, 3),
             token_mixers=("repmixer", "repmixer", "repmixer", "repmixer")
         )
+    elif model_name == '2B':
+        # about 2.8M parameters
+        model_args = dict(
+            layers=(2, 2, 3, 2),
+            embed_dims=(48, 96, 192, 384),
+            mlp_ratios=(3, 3, 3, 3),
+            token_mixers=("repmixer", "repmixer", "repmixer", "repmixer")
+        )
     elif model_name == '3':
         # about 3.3M parameters (this is fastvit_t8)
         model_args = dict(
