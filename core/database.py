@@ -541,7 +541,7 @@ class Database:
 
     def get_spectrogram(self, field=None, value=None, include_audio=False, include_embedding=False, include_ignored=False):
         try:
-            fields = 'ID, RecordingID, Value, Offset, Ignore'
+            fields = 'ID, RecordingID, Value, Offset, Ignore, SoundTypeID'
             if include_audio:
                 fields += ', Audio'
             if include_embedding:
@@ -567,21 +567,22 @@ class Database:
 
             results = []
             for row in rows:
-                id, recordingID, value, offset, ignore = row[:5]
+                id, recordingID, value, offset, ignore, sound_type_id = row[:6]
                 if include_audio:
-                    audio = row[5]
+                    audio = row[6]
                     if include_embedding:
-                        embedding = row[6]
+                        embedding = row[7]
                     else:
                         embedding = None
                 elif include_embedding:
                     audio = None
-                    embedding = row[5]
+                    embedding = row[6]
                 else:
                     audio = None
                     embedding = None
 
-                result = SimpleNamespace(id=id, recording_id=recordingID, value=value, offset=offset, ignore=ignore, audio=audio, embedding=embedding)
+                result = SimpleNamespace(id=id, recording_id=recordingID, value=value, offset=offset, ignore=ignore, \
+                                         sound_type_id=sound_type_id, audio=audio, embedding=embedding)
                 results.append(result)
 
             return results
@@ -638,7 +639,7 @@ class Database:
 
     def get_spectrogram_by_subcat_name(self, subcategory_name, include_audio=False, include_embedding=False, include_ignored=False):
         try:
-            fields = 'Spectrogram.ID, RecordingID, Recording.FileName, Value, Offset, Ignore'
+            fields = 'Spectrogram.ID, RecordingID, Recording.FileName, Value, Offset, Ignore, SoundTypeID'
             if include_audio:
                 fields += ', Audio'
             if include_embedding:
@@ -665,21 +666,22 @@ class Database:
 
             results = []
             for row in rows:
-                id, recordingID, filename, value, offset, ignore = row[:6]
+                id, recordingID, filename, value, offset, ignore, sound_type_id = row[:7]
                 if include_audio:
-                    audio = row[6]
+                    audio = row[7]
                     if include_embedding:
-                        embedding = row[7]
+                        embedding = row[8]
                     else:
                         embedding = None
                 elif include_embedding:
                     audio = None
-                    embedding = row[6]
+                    embedding = row[7]
                 else:
                     audio = None
                     embedding = None
 
-                result = SimpleNamespace(id=id, recording_id=recordingID, filename=filename, value=value, offset=offset, ignore=ignore, audio=audio, embedding=embedding)
+                result = SimpleNamespace(id=id, recording_id=recordingID, filename=filename, value=value, offset=offset, \
+                                         ignore=ignore, sound_type_id=sound_type_id, audio=audio, embedding=embedding)
                 results.append(result)
 
             return results
