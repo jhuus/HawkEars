@@ -81,7 +81,7 @@ target_spec = specs[0].reshape((1, cfg.audio.spec_height, cfg.audio.spec_width))
 audio_file_name = os.path.basename(target_path)
 _, ext = os.path.splitext(audio_file_name)
 audio_file_name = audio_file_name[:-(len(ext))]
-image_path = os.path.join(out_dir, f'0~{audio_file_name}-{target_offset:.2f}~0.0.png')
+image_path = os.path.join(out_dir, f'0~{audio_file_name}-{target_offset:.2f}~0.0.jpeg')
 plot.plot_spec(target_spec ** exponent, image_path)
 
 # get spectrograms from the database
