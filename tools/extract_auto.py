@@ -59,6 +59,11 @@ class Recording:
         self.is_bird_preds = [] # predictions from the is_bird models
         self.predictions = []   # predictions from the standard models
 
+        # save these for plotting
+        self.not_bird_specs = []
+        self.not_centered_specs = []
+        self.wrong_species_specs = []
+
     # reduce specs/offsets list to the given indexes
     def update_specs(self, indexes):
         specs = np.zeros((len(indexes), 1, cfg.audio.spec_height, cfg.audio.spec_width))
@@ -200,6 +205,8 @@ class ExtractAuto(extractor.Extractor):
                 if avg_is_bird_preds[i][0] > self.min_bird_conf:
                     spec_indexes.append(i)
                     good_spec_count += 1
+                else:
+                    r.not_bird_specs.append((r, r.specs[i], r.offsets[i]))
 
             r.update_specs(spec_indexes)
 
@@ -216,6 +223,8 @@ class ExtractAuto(extractor.Extractor):
                 if self._is_centered(r.specs[i]):
                     spec_indexes.append(i)
                     good_spec_count += 1
+                else:
+                    r.not_centered_specs.append((r, r.specs[i], r.offsets[i]))
 
             r.update_specs(spec_indexes)
 
@@ -291,6 +300,8 @@ class ExtractAuto(extractor.Extractor):
                 if is_good:
                     spec_indexes.append(i)
                     good_spec_count += 1
+                else:
+                    r.wrong_species_specs.append((r, r.specs[i], r.offsets[i]))
 
             r.update_specs(spec_indexes)
 
@@ -334,7 +345,20 @@ class ExtractAuto(extractor.Extractor):
 
         self.recordings = recordings
 
-    # randomly select up to self.max_plot spectrograms and plot them
+    # plot specs that were rejected because they are not bird sounds, not centered enough, or the wrong species
+    def plot_rejected_specs(self, specs, category):
+        if len(specs) > 0:
+            output_dir = os.path.join(self.spec_dir, category)
+            os.makedirs(output_dir)
+            permutation = np.random.permutation(np.arange(len(specs)))
+
+            for i in range(min(self.max_plot, len(permutation))):
+                recording, spec, offset = specs[permutation[i]]
+                spec_path = os.path.join(output_dir, f"{Path(recording.filename).stem}_{offset:.1f}.png")
+                plot.plot_spec(spec, spec_path)
+
+    # after filtering, randomly select up to self.max_plot spectrograms and plot them;
+    # also plot up to max_plot not_bird, not_centered and wrong_species spectrograms
     def _plot_specs(self):
         logging.info("Plotting spectrograms")
         if os.path.exists(self.spec_dir):
@@ -358,6 +382,30 @@ class ExtractAuto(extractor.Extractor):
             offset = recording.offsets[spec_index]
             spec_path = os.path.join(self.spec_dir, f"{Path(recording.filename).stem}_{offset:.1f}.png")
             plot.plot_spec(spec, spec_path)
+
+        # plot up to self.max_plot bird spectrograms that were rejected as being not bird sounds
+        specs = []
+        for r in self.recordings:
+            for item in r.not_bird_specs:
+                specs.append(item)
+
+        self.plot_rejected_specs(specs, "not_bird")
+
+        # plot up to self.max_plot bird spectrograms that were rejected as being not centered enough
+        specs = []
+        for r in self.recordings:
+            for item in r.not_centered_specs:
+                specs.append(item)
+
+        self.plot_rejected_specs(specs, "not_centered")
+
+        # plot up to self.max_plot bird spectrograms that were rejected as being the wrong species
+        specs = []
+        for r in self.recordings:
+            for item in r.wrong_species_specs:
+                specs.append(item)
+
+        self.plot_rejected_specs(specs, "wrong_species")
 
     def _insert_specs(self):
         logging.info("Inserting spectrograms")
