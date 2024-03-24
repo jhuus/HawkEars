@@ -4,6 +4,7 @@ from core import cfg, metrics
 from model import dla
 from model import efficientnet_v2
 from model import fastvit
+from model import hgnet_v2
 import logging
 from model import mobilenet
 from model import vovnet
@@ -108,6 +109,9 @@ class MainModel(LightningModule):
         elif model_name.startswith('custom_fastvit'):
             tokens = model_name.split('_')
             model = fastvit.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
+        elif model_name.startswith('custom_hgnet'):
+            tokens = model_name.split('_')
+            model = hgnet_v2.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
         elif model_name.startswith('custom_mobilenet'):
             tokens = model_name.split('_')
             model = mobilenet.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
@@ -138,7 +142,7 @@ class MainModel(LightningModule):
             feature_extractor = nn.Sequential(*layers[:-1])
             classifier = nn.Linear(in_features, self.num_train_classes)
             self.base_model = nn.Sequential(feature_extractor, classifier)
-        elif 'fastvit' in self.model_name or 'vovnet' in self.model_name:
+        elif 'fastvit' in self.model_name or 'hgnet' in self.model_name or 'vovnet' in self.model_name:
             # replace the 'fc' layer in the final block
             self.base_model =  self._update_linear_sublayer(self.base_model.children(), 'fc')
         elif 'dla' in self.model_name:
