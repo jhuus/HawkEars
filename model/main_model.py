@@ -135,17 +135,21 @@ class MainModel(LightningModule):
         self.test_class_names = test_class_names
         self.weights = weights
 
-        if 'efficientnet' in self.model_name or 'ghostnet' in self.model_name or 'mobilenet' in self.model_name:
+        group1 = ['efficientnet', 'ghostnet', 'mobilenet']
+        group2 = ['fastvit', 'hgnet', 'vovnet']
+        group3 = ['dla']
+
+        if any(name in self.model_name for name in group1):
             # replace the final layer, which is Linear
             layers = list(self.base_model.children())
             in_features = layers[-1].in_features
             feature_extractor = nn.Sequential(*layers[:-1])
             classifier = nn.Linear(in_features, self.num_train_classes)
             self.base_model = nn.Sequential(feature_extractor, classifier)
-        elif 'fastvit' in self.model_name or 'hgnet' in self.model_name or 'vovnet' in self.model_name:
+        elif any(name in self.model_name for name in group2):
             # replace the 'fc' layer in the final block
             self.base_model =  self._update_linear_sublayer(self.base_model.children(), 'fc')
-        elif 'dla' in self.model_name:
+        elif any(name in self.model_name for name in group3):
             # classifier is Conv2d then Flatten
             layers = list(self.base_model.children())
             feature_extractor = nn.Sequential(*layers[:-2])
@@ -158,24 +162,6 @@ class MainModel(LightningModule):
                                          padding=old_conv2d.padding)]
             old_flatten = layers[-1]
             classifier_list.append(nn.Flatten(start_dim=1, end_dim=-1))
-            self._unfreeze_list(classifier_list)
-            classifier = nn.Sequential(*classifier_list)
-            self.base_model = nn.Sequential(feature_extractor, classifier)
-        elif 'repvit' in self.model_name:
-            # remove classifier from model by setting it to Identity
-            old_classifier = self.base_model.classifier
-            self.base_model.classifier = nn.Identity()
-            feature_extractor = self.base_model
-
-            # append a new classifier
-            layers = list(old_classifier.classifier.children())
-            old_bn = layers[0]
-            classifier_list = [nn.BatchNorm1d(num_features=old_bn.num_features,
-                                              eps=1e-05, momentum=0.1, affine=True,
-                                              track_running_stats=True)]
-            old_linear = layers[1]
-            classifier_list.append(nn.Linear(in_features=old_linear.in_features,
-                                             out_features=self.num_train_classes))
             self._unfreeze_list(classifier_list)
             classifier = nn.Sequential(*classifier_list)
             self.base_model = nn.Sequential(feature_extractor, classifier)
