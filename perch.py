@@ -54,7 +54,12 @@ class Analyzer:
 
         # get predictions and create labels
         labels = []
-        predictions = self.model.predict([file_path]) # predict on the model's classes
+        try:
+            predictions = self.model.predict([file_path]) # predict on the model's classes
+        except Exception as e:
+            logging.error(f"Caught exception: {e}")
+            return
+
         for info, row in predictions.iterrows():
             start_offset, end_offset = info[1], info[2]
 
