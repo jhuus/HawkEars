@@ -166,6 +166,9 @@ class Audio:
             while start < len(self.signal):
                 i += 1
                 length = min(block_length, len(self.signal) - start)
+                if length < cfg.audio.win_length:
+                    break
+
                 block = self._get_raw_spectrogram(self.signal[start:start+length], low_band=low_band)
 
                 if spectrogram is None:
