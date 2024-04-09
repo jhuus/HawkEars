@@ -56,11 +56,14 @@ class MainModel(LightningModule):
     #
     # 1) creating a model to train from scratch
     # 2) creating a model to train using transfer learning, starting with one we already trained
-    # 3) fine-tuning a model that we trained either from scratch or with transfer learning
-    # 4) loading a model to be used in inference
+    # 3) loading one we already trained to be used in the previous case
+    # 4) fine-tuning a model that we trained either from scratch or with transfer learning
+    # 5) loading a model to be used in inference
     #
     # 'pretrained' is passed to timm.create_model to indicate whether weights should be loaded;
-    def __init__(self, train_class_names, train_class_codes, test_class_names, weights, model_name, pretrained, num_train_specs=0):
+    # 'was_pretrained' is True iff we are loading a model that we trained using transfer learning or fine-tuning;
+    # the 'weights' argument refers to class weights, which should be renamed to avoid confusion
+    def __init__(self, train_class_names, train_class_codes, test_class_names, weights, model_name, pretrained, was_pretrained=False):
         super().__init__()
 
         self.save_hyperparameters()
@@ -70,14 +73,38 @@ class MainModel(LightningModule):
         self.model_name = model_name
 
         self.test_class_names = test_class_names
-        self.num_train_specs = num_train_specs
         self.weights = weights
         self.labels = None
         self.predictions = None
         self.epoch_num = 0
         self.prev_loss = None
 
-        self.base_model = self._create_model(model_name, pretrained)
+        if was_pretrained:
+            # load a checkpoint that we trained using transfer learning or fine-tuning
+            # (so we need to define it in the same way)
+            backbone = self._create_model(model_name, pretrained=False)
+            self.base_model = self._update_classifier(backbone)
+        elif cfg.train.load_ckpt_path is not None:
+            # perform transfer learning or fine-tuning based on a model that we trained
+            load_ckpt_path = cfg.train.load_ckpt_path
+            cfg.train.load_ckpt_path = None # so it isn't used recursively
+            backbone = MainModel.load_from_checkpoint(load_ckpt_path)
+            self.model_name = backbone.model_name
+            self.hparams.model_name = self.model_name
+            self.hparams.was_pretrained = True
+
+            if cfg.train.freeze_backbone:
+                backbone.freeze()
+
+            if backbone.hparams.was_pretrained:
+                # if it was already pretrained once, don't keep updating the classifier,
+                # which would result in an unloadable model
+                self.base_model = backbone.base_model
+            else:
+                self.base_model = self._update_classifier(backbone.base_model)
+        else:
+            # create a basic model for training or inference
+            self.base_model = self._create_model(model_name, pretrained)
 
         if cfg.train.model_print_path is not None:
             with open(cfg.train.model_print_path, 'w') as out_file:
@@ -126,14 +153,8 @@ class MainModel(LightningModule):
     # for transfer learning, update classifier so number of classes is correct;
     # I tried to implement a general solution but it got very complex,
     # so instead we handle it based on the model name
-    def update_classifier(self, train_class_names, train_class_codes, test_class_names, weights):
+    def _update_classifier(self, model):
         logging.info(f"Updating classifier of {self.model_name} model (freeze_backbone = {cfg.train.freeze_backbone})")
-        self.num_train_classes = len(train_class_names)
-        self.train_class_names = train_class_names
-        self.train_class_codes = train_class_codes
-
-        self.test_class_names = test_class_names
-        self.weights = weights
 
         group1 = ['efficientnet', 'ghostnet', 'mobilenet']
         group2 = ['fastvit', 'hgnet', 'vovnet']
@@ -141,17 +162,17 @@ class MainModel(LightningModule):
 
         if any(name in self.model_name for name in group1):
             # replace the final layer, which is Linear
-            layers = list(self.base_model.children())
+            layers = list(model.children())
             in_features = layers[-1].in_features
             feature_extractor = nn.Sequential(*layers[:-1])
             classifier = nn.Linear(in_features, self.num_train_classes)
-            self.base_model = nn.Sequential(feature_extractor, classifier)
+            return nn.Sequential(feature_extractor, classifier)
         elif any(name in self.model_name for name in group2):
             # replace the 'fc' layer in the final block
-            self.base_model =  self._update_linear_sublayer(self.base_model.children(), 'fc')
+            return self._update_linear_sublayer(model.children(), 'fc')
         elif any(name in self.model_name for name in group3):
             # classifier is Conv2d then Flatten
-            layers = list(self.base_model.children())
+            layers = list(model.children())
             feature_extractor = nn.Sequential(*layers[:-2])
 
             # create a new Conv2d, then copy the Flatten
@@ -164,7 +185,7 @@ class MainModel(LightningModule):
             classifier_list.append(nn.Flatten(start_dim=1, end_dim=-1))
             self._unfreeze_list(classifier_list)
             classifier = nn.Sequential(*classifier_list)
-            self.base_model = nn.Sequential(feature_extractor, classifier)
+            return nn.Sequential(feature_extractor, classifier)
         else:
             raise Exception(f"Transfer learning from {self.model_name} is not supported")
 
@@ -318,6 +339,17 @@ class MainModel(LightningModule):
     # define optimizers and LR schedulers
     def configure_optimizers(self):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=cfg.train.learning_rate)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=cfg.train.num_epochs)
+
+        self.weights = self.weights.to(self.device) # now we can move weights to device too
+
+        return [self.optimizer], [self.scheduler]
+
+    '''
+    # TODO: restore this logic (was removed while fixing retraining bug)
+    # define optimizers and LR schedulers
+    def configure_optimizers(self):
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=cfg.train.learning_rate)
 
         # set LR_epochs > num_epochs to increase final learning rate
         if cfg.train.LR_epochs is None or cfg.train.LR_epochs < cfg.train.num_epochs:
@@ -334,6 +366,7 @@ class MainModel(LightningModule):
         self.weights = self.weights.to(self.device) # now we can move weights to device too
 
         return [self.optimizer], [self.scheduler]
+    '''
 
     # get embeddings for use in searching and clustering
     def get_embeddings(self, specs, device):
