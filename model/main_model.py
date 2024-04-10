@@ -63,7 +63,7 @@ class MainModel(LightningModule):
     # 'pretrained' is passed to timm.create_model to indicate whether weights should be loaded;
     # 'was_pretrained' is True iff we are loading a model that we trained using transfer learning or fine-tuning;
     # the 'weights' argument refers to class weights, which should be renamed to avoid confusion
-    def __init__(self, train_class_names, train_class_codes, test_class_names, weights, model_name, pretrained, was_pretrained=False):
+    def __init__(self, train_class_names, train_class_codes, test_class_names, weights, model_name, pretrained, was_pretrained=False, num_train_specs=0):
         super().__init__()
 
         self.save_hyperparameters()
@@ -71,6 +71,7 @@ class MainModel(LightningModule):
         self.train_class_names = train_class_names
         self.train_class_codes = train_class_codes
         self.model_name = model_name
+        self.num_train_specs = num_train_specs
 
         self.test_class_names = test_class_names
         self.weights = weights
@@ -339,17 +340,6 @@ class MainModel(LightningModule):
     # define optimizers and LR schedulers
     def configure_optimizers(self):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=cfg.train.learning_rate)
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=cfg.train.num_epochs)
-
-        self.weights = self.weights.to(self.device) # now we can move weights to device too
-
-        return [self.optimizer], [self.scheduler]
-
-    '''
-    # TODO: restore this logic (was removed while fixing retraining bug)
-    # define optimizers and LR schedulers
-    def configure_optimizers(self):
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=cfg.train.learning_rate)
 
         # set LR_epochs > num_epochs to increase final learning rate
         if cfg.train.LR_epochs is None or cfg.train.LR_epochs < cfg.train.num_epochs:
@@ -366,7 +356,6 @@ class MainModel(LightningModule):
         self.weights = self.weights.to(self.device) # now we can move weights to device too
 
         return [self.optimizer], [self.scheduler]
-    '''
 
     # get embeddings for use in searching and clustering
     def get_embeddings(self, specs, device):
