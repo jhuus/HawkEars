@@ -90,10 +90,10 @@ class Extractor:
 
         return self.subcategory_id
 
-    def get_recording_id(self, filename, source_id, seconds):
+    def get_recording_id(self, filename, path, source_id, seconds):
         results = self.db.get_recording_by_src_subcat_file(source_id, self.subcategory_id, filename)
         if len(results) == 0:
-            recording_id = self.db.insert_recording(source_id, self.subcategory_id, filename, seconds)
+            recording_id = self.db.insert_recording(source_id, self.subcategory_id, filename, path, seconds)
         else:
             recording_id = results[0].id
 
@@ -108,7 +108,7 @@ class Extractor:
 
         filename = Path(recording_path).name
         source_id = self.get_source_id(filename)
-        recording_id = self.get_recording_id(filename, source_id, seconds)
+        recording_id = self.get_recording_id(filename, recording_path, source_id, seconds)
 
         num_inserted = 0
         specs = self.audio.get_spectrograms(offsets, segment_len=cfg.audio.segment_len, low_band=self.low_band)
