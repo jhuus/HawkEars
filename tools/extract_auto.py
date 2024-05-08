@@ -43,10 +43,9 @@ import scipy
 import torch
 
 class Recording:
-    def __init__(self, path, filename, full_path, source_id, seconds, specs, increment):
+    def __init__(self, path, filename, source_id, seconds, specs, increment):
         self.path = path
         self.filename = filename
-        self.full_path = full_path
         self.source_id = source_id
         self.seconds = seconds
         self.specs = np.zeros((len(specs), 1, cfg.audio.spec_height, cfg.audio.spec_width))
@@ -116,7 +115,7 @@ class ExtractAuto(extractor.Extractor):
             filename = Path(recording_path).name
             source_id = self.get_source_id(filename)
             specs = self.audio.get_spectrograms(offsets, segment_len=cfg.audio.segment_len, low_band=self.low_band)
-            recording = Recording(recording_path, filename, recording_path, source_id, seconds, specs, self.increment)
+            recording = Recording(recording_path, filename, source_id, seconds, specs, self.increment)
             self.recordings.append(recording)
 
             if self.max_rec is not None and len(self.recordings) >= self.max_rec:
@@ -415,7 +414,7 @@ class ExtractAuto(extractor.Extractor):
             if inserted_max:
                 break
 
-            recording_id = self.get_recording_id(r.filename, r.source_id, r.seconds)
+            recording_id = self.get_recording_id(r.filename, r.path, r.source_id, r.seconds)
             for i, spec in enumerate(r.specs):
                 compressed = util.compress_spectrogram(spec)
                 self.db.insert_spectrogram(recording_id, compressed, r.offsets[i])
