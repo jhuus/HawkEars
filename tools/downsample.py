@@ -20,7 +20,7 @@ for filename in os.listdir(root_dir):
         base, ext = os.path.splitext(filename)
         if ext != None and len(ext) > 0 and ext.lower() in CONVERT_TYPES:
             target = os.path.join(root_dir, base)
-            cmd = f'ffmpeg -i "{filepath}" -y -vn -ar 44100 -ac 2 -b:a 192k "{target}.mp3"'
+            cmd = f'ffmpeg -i "{filepath}" -y -vn -ar 32000 -ac 2 -b:a 192k "{target}.mp3"'
             print(cmd)
             os.system(cmd)
             os.remove(filepath)
