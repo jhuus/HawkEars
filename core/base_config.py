@@ -4,16 +4,21 @@ from dataclasses import dataclass
 
 @dataclass
 class Audio:
+    # when changing other parameters, use round(segment_len * sampling_rate / spec_width) as a good
+    # first approximation for hop length, but fine-tune as needed to improve alignment of
+    # spectrograms several minutes into a recording (only an issue when we get one spectrogram
+    # for the whole recording and then split it up)
     segment_len = 3         # spectrogram duration in seconds
     sampling_rate = 40960
     hop_length = 320
     win_length = 2048
     spec_height = 192       # spectrogram height
     spec_width = 384        # spectrogram width (3 * 128)
-    choose_channel = True   # use heuristic to pick the cleanest audio channel
-    check_seconds = 3       # check prefix of this length when picking cleanest channel
     min_audio_freq = 200    # need this low for American Bittern
     max_audio_freq = 13000  # need this high for Chestnut-backed Chickadee "seet series"
+
+    choose_channel = True   # use heuristic to pick the cleanest audio channel
+    check_seconds = 3       # check prefix of this length when picking cleanest channel
     mel_scale = True
     power = 1
     spec_block_seconds = 240 # max seconds of spectrogram to create at a time (limited by GPU memory)
