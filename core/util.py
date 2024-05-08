@@ -40,15 +40,6 @@ def expand_spectrogram(spec, low_band=False):
 
     return spec
 
-# convert compressed audio in the DB to signed 16-bit PCM;
-def convert_audio(compressed):
-    uncompressed = zlib.decompress(compressed)
-    array = np.frombuffer(uncompressed, dtype=np.float32)
-    array = array * 32768
-    array = array.astype(np.int16)
-    bytes = array.tobytes()
-    return bytes
-
 # return list of audio files in the given directory;
 # returned file names are fully qualified paths, unless short_names=True
 def get_audio_files(path, short_names=False):
