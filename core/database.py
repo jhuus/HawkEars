@@ -60,6 +60,7 @@ class Database:
                     SourceID INTEGER NOT NULL,
                     SubcategoryID INTEGER NOT NULL,
                     FileName TEXT NOT NULL,
+                    Path TEXT,
                     Seconds INTEGER)
             '''
             cursor.execute(query)
@@ -82,6 +83,7 @@ class Database:
                     Value BLOB NOT NULL,
                     Offset REAL NOT NULL,
                     Audio BLOB,
+                    SamplingRate INTEGER,
                     Embedding BLOB,
                     Ignore TEXT,
                     Inserted TEXT)
@@ -302,14 +304,14 @@ class Database:
 # Recording
 # ------------------------------- #
 
-    def insert_recording(self, source_id, subcategory_id, filename, seconds=0):
+    def insert_recording(self, source_id, subcategory_id, filename, path, seconds=0):
         try:
             query = '''
-                INSERT INTO Recording (SourceID, SubcategoryID, FileName, Seconds)
-                Values (?, ?, ?, ?)
+                INSERT INTO Recording (SourceID, SubcategoryID, FileName, Path, Seconds)
+                Values (?, ?, ?, ?, ?)
             '''
             cursor = self.conn.cursor()
-            cursor.execute(query, (source_id, subcategory_id, filename, seconds))
+            cursor.execute(query, (source_id, subcategory_id, filename, path, seconds))
             self.conn.commit()
             return cursor.lastrowid
         except sqlite3.Error as e:
@@ -339,7 +341,7 @@ class Database:
 
     def get_recording(self, field=None, value=None):
         try:
-            query = f'SELECT ID, SourceID, SubcategoryID, FileName, Seconds FROM Recording'
+            query = f'SELECT ID, SourceID, SubcategoryID, FileName, Path, Seconds FROM Recording'
             if field is not None:
                 query += f' WHERE {field} = "{value}"'
 
@@ -353,8 +355,8 @@ class Database:
 
             results = []
             for row in rows:
-                id, sourceID, subcategoryID, filename, seconds = row
-                result = SimpleNamespace(id=id, source_id=sourceID, subcategory_id=subcategoryID, filename=filename, seconds=seconds)
+                id, sourceID, subcategoryID, filename, path, seconds = row
+                result = SimpleNamespace(id=id, source_id=sourceID, subcategory_id=subcategoryID, filename=filename, path=path, seconds=seconds)
                 results.append(result)
 
             return results
@@ -365,7 +367,7 @@ class Database:
     def get_recording_by_subcat_name(self, subcategory_name):
         try:
             query = f'''
-                SELECT ID, SourceID, SubcategoryID, FileName, Seconds
+                SELECT ID, SourceID, SubcategoryID, FileName, Path, Seconds
                 FROM Recording
                 WHERE SubcategoryID = (SELECT ID FROM Subcategory WHERE Name = "{subcategory_name}")
                 ORDER BY ID
@@ -378,8 +380,8 @@ class Database:
 
             results = []
             for row in rows:
-                id, sourceID, subcategoryID, filename, seconds = row
-                result = SimpleNamespace(id=id, source_id=sourceID, subcategory_id=subcategoryID, filename=filename, seconds=seconds)
+                id, sourceID, subcategoryID, filename, path, seconds = row
+                result = SimpleNamespace(id=id, source_id=sourceID, subcategory_id=subcategoryID, filename=filename, path=path, seconds=seconds)
                 results.append(result)
 
             return results
@@ -390,7 +392,7 @@ class Database:
     def get_recording_by_src_subcat(self, source_id, subcategory_id):
         try:
             query = f'''
-                SELECT ID, SourceID, SubcategoryID, FileName, Seconds
+                SELECT ID, SourceID, SubcategoryID, FileName, Path, Seconds
                 FROM Recording
                 WHERE SourceID = "{source_id}" AND SubcategoryID = "{subcategory_id}"
                 ORDER BY ID
@@ -403,8 +405,8 @@ class Database:
 
             results = []
             for row in rows:
-                id, sourceID, subcategoryID, filename, seconds = row
-                result = SimpleNamespace(id=id, source_id=sourceID, subcategory_id=subcategoryID, filename=filename, seconds=seconds)
+                id, sourceID, subcategoryID, filename, path, seconds = row
+                result = SimpleNamespace(id=id, source_id=sourceID, subcategory_id=subcategoryID, filename=filename, path=path, seconds=seconds)
                 results.append(result)
 
             return results
@@ -415,7 +417,7 @@ class Database:
     def get_recording_by_src_subcat_file(self, source_id, subcategory_id, filename):
         try:
             query = f'''
-                SELECT ID, SourceID, SubcategoryID, FileName, Seconds
+                SELECT ID, SourceID, SubcategoryID, FileName, Path, Seconds
                 FROM Recording
                 WHERE SourceID = "{source_id}" AND SubcategoryID = "{subcategory_id}" AND FileName = "{filename}"
                 ORDER BY ID
@@ -428,8 +430,8 @@ class Database:
 
             results = []
             for row in rows:
-                id, sourceID, subcategoryID, filename, seconds = row
-                result = SimpleNamespace(id=id, source_id=sourceID, subcategory_id=subcategoryID, filename=filename, seconds=seconds)
+                id, sourceID, subcategoryID, filename, path, seconds = row
+                result = SimpleNamespace(id=id, source_id=sourceID, subcategory_id=subcategoryID, filename=filename, path=path, seconds=seconds)
                 results.append(result)
 
             return results
@@ -506,11 +508,14 @@ class Database:
 # Spectrogram
 # ------------------------------- #
 
-    def insert_spectrogram(self, recording_id, value, offset, audio=None, embedding=None, ignore='N'):
+    def insert_spectrogram(self, recording_id, value, offset, audio=None, embedding=None, ignore='N', sampling_rate=None, sound_type_id=None, date=None):
         try:
-            query = 'INSERT INTO Spectrogram (RecordingID, Value, Offset, Audio, Embedding, Ignore, Inserted) Values (?, ?, ?, ?, ?, ?, ?)'
+            if date is None:
+                date = self.today
+
+            query = 'INSERT INTO Spectrogram (RecordingID, Value, Offset, Audio, Embedding, Ignore, SamplingRate, SoundTypeID, Inserted) Values (?, ?, ?, ?, ?, ?, ?, ?, ?)'
             cursor = self.conn.cursor()
-            cursor.execute(query, (recording_id, value, offset, audio, embedding, ignore, self.today))
+            cursor.execute(query, (recording_id, value, offset, audio, embedding, ignore, sampling_rate, sound_type_id, date))
             cursor = self.conn.cursor()
             self.conn.commit()
             return cursor.lastrowid
@@ -541,7 +546,7 @@ class Database:
 
     def get_spectrogram(self, field=None, value=None, include_audio=False, include_embedding=False, include_ignored=False):
         try:
-            fields = 'ID, RecordingID, Value, Offset, Ignore, SoundTypeID'
+            fields = 'ID, RecordingID, Value, Offset, Ignore, SoundTypeID, SamplingRate, Inserted'
             if include_audio:
                 fields += ', Audio'
             if include_embedding:
@@ -567,22 +572,22 @@ class Database:
 
             results = []
             for row in rows:
-                id, recordingID, value, offset, ignore, sound_type_id = row[:6]
+                id, recordingID, value, offset, ignore, sound_type_id, sampling_rate, inserted = row[:8]
                 if include_audio:
-                    audio = row[6]
+                    audio = row[8]
                     if include_embedding:
-                        embedding = row[7]
+                        embedding = row[9]
                     else:
                         embedding = None
                 elif include_embedding:
                     audio = None
-                    embedding = row[6]
+                    embedding = row[8]
                 else:
                     audio = None
                     embedding = None
 
-                result = SimpleNamespace(id=id, recording_id=recordingID, value=value, offset=offset, ignore=ignore, \
-                                         sound_type_id=sound_type_id, audio=audio, embedding=embedding)
+                result = SimpleNamespace(id=id, recording_id=recordingID, value=value, offset=offset, ignore=ignore, sound_type_id=sound_type_id, \
+                                         sampling_rate=sampling_rate, audio=audio, embedding=embedding, inserted=inserted)
                 results.append(result)
 
             return results
