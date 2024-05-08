@@ -65,26 +65,6 @@ class Audio:
 
         return spec
 
-    # version of get_spectrograms that calls _get_raw_spectrogram separately per offset,
-    # which is faster when just getting a few spectrograms from a large recording
-    def _get_spectrograms_multi_spec(self, signal, offsets, segment_len, low_band=False):
-        last_offset = (len(signal) / cfg.audio.sampling_rate) - segment_len
-        specs = []
-        for offset in offsets:
-            index = int(offset*cfg.audio.sampling_rate)
-            if offset <= last_offset:
-                segment = signal[index:index + int(segment_len * cfg.audio.sampling_rate)]
-            else:
-                segment = signal[index:]
-                pad_amount = int(segment_len * cfg.audio.sampling_rate - segment.shape[0])
-                segment = np.pad(segment, ((0, pad_amount)), 'constant', constant_values=0)
-
-            spec = self._get_raw_spectrogram(segment, low_band=low_band)
-            spec = spec[:cfg.audio.spec_height, :cfg.audio.spec_width] # there is sometimes an extra pixel
-            specs.append(spec)
-
-        return specs
-
     # normalize values between 0 and 1
     def _normalize(self, specs):
         for i in range(len(specs)):
@@ -141,7 +121,7 @@ class Audio:
     # return list of spectrograms for the given offsets (i.e. starting points in seconds);
     # you have to call load() before calling this;
     # if raw_spectrograms array is specified, populate it with spectrograms before normalization
-    def get_spectrograms(self, offsets, segment_len=None, low_band=False, multi_spec=False, raw_spectrograms=None):
+    def get_spectrograms(self, offsets, segment_len=None, low_band=False, raw_spectrograms=None):
         if not self.have_signal:
             return None
 
@@ -150,43 +130,39 @@ class Audio:
             # since cfg.audio.segment_len can be modified after the parameter list is evaluated
             segment_len = cfg.audio.segment_len
 
-        if multi_spec:
-            # call _get_raw_spectrogram separately per offset, which is faster when just getting a few spectrograms from a large recording
-            specs = self._get_spectrograms_multi_spec(self.signal, offsets, segment_len)
-        else:
-            # call _get_raw_spectrogram for the whole signal, then break it up into spectrograms;
-            # this is faster when getting overlapping spectrograms for a whole recording
-            spectrogram = None
-            spec_width_per_sec = int(cfg.audio.spec_width / cfg.audio.segment_len)
+        # call _get_raw_spectrogram for the whole signal, then break it up into spectrograms;
+        # this is faster when getting overlapping spectrograms for a whole recording
+        spectrogram = None
+        spec_width_per_sec = int(cfg.audio.spec_width / cfg.audio.segment_len)
 
-            # create in blocks so we don't run out of GPU memory
-            block_length = cfg.audio.spec_block_seconds * cfg.audio.sampling_rate
-            start = 0
-            i = 0
-            while start < len(self.signal):
-                i += 1
-                length = min(block_length, len(self.signal) - start)
-                if length < cfg.audio.win_length:
-                    break
+        # create in blocks so we don't run out of GPU memory
+        block_length = cfg.audio.spec_block_seconds * cfg.audio.sampling_rate
+        start = 0
+        i = 0
+        while start < len(self.signal):
+            i += 1
+            length = min(block_length, len(self.signal) - start)
+            if length < cfg.audio.win_length:
+                break
 
-                block = self._get_raw_spectrogram(self.signal[start:start+length], low_band=low_band)
+            block = self._get_raw_spectrogram(self.signal[start:start+length], low_band=low_band)
 
-                if spectrogram is None:
-                    spectrogram = block
-                else:
-                    spectrogram = np.concatenate((spectrogram, block), axis=1)
+            if spectrogram is None:
+                spectrogram = block
+            else:
+                spectrogram = np.concatenate((spectrogram, block), axis=1)
 
-                start += length
+            start += length
 
-            specs = []
-            for i, offset in enumerate(offsets):
-                spec = spectrogram[:, int(offset * spec_width_per_sec):int((offset + segment_len) * spec_width_per_sec)]
-                if spec.shape[1] > cfg.audio.spec_width:
-                    spec = spec[:, :cfg.audio.spec_width]
-                elif spec.shape[1] < cfg.audio.spec_width:
-                    spec = np.pad(spec, ((0, 0), (0, cfg.audio.spec_width - spec.shape[1])), 'constant', constant_values=0)
+        specs = []
+        for i, offset in enumerate(offsets):
+            spec = spectrogram[:, int(offset * spec_width_per_sec):int((offset + segment_len) * spec_width_per_sec)]
+            if spec.shape[1] > cfg.audio.spec_width:
+                spec = spec[:, :cfg.audio.spec_width]
+            elif spec.shape[1] < cfg.audio.spec_width:
+                spec = np.pad(spec, ((0, 0), (0, cfg.audio.spec_width - spec.shape[1])), 'constant', constant_values=0)
 
-                specs.append(spec)
+            specs.append(spec)
 
         if raw_spectrograms is not None and len(raw_spectrograms) == len(specs):
             for i, spec in enumerate(specs):
