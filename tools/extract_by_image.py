@@ -33,7 +33,7 @@ class ExtractByImage(extractor.Extractor):
     # get list of specs from directory of images
     def _process_image_dir(self):
         self.offsets = {}
-        for image_path in Path().glob(f"{self.images_path}/*.png"):
+        for image_path in Path().glob(f"{self.images_path}/*.jpeg"):
             name = Path(image_path).stem
             if '~' in name:
                 result = re.split("\S+~(.+)~.*", name)
@@ -67,6 +67,8 @@ class ExtractByImage(extractor.Extractor):
                 dest_path = os.path.join(self.dest_dir, Path(recording_path).name)
                 if not os.path.exists(dest_path):
                     shutil.copy(recording_path, dest_path)
+
+                recording_path = dest_path
 
             print(f"Processing {recording_path}")
             num_inserted += self.insert_spectrograms(recording_path, self.offsets[filename])
