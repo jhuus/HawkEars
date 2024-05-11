@@ -179,7 +179,7 @@ for spec_info in spec_infos:
 
     spec_num += 1
     base, ext = os.path.splitext(filename)
-    spec_path = os.path.join(out_dir, f'{spec_num}~{base}-{offset:.2f}~{distance:.3f}.png')
+    spec_path = os.path.join(out_dir, f'{spec_num}~{base}-{offset:.2f}~{distance:.3f}.jpeg')
 
     if not os.path.exists(spec_path):
         spec **= exponent
