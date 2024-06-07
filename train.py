@@ -43,7 +43,7 @@ class Trainer:
 
             # create model inside loop so parameters are reset for each fold,
             # and so metrics are tracked correctly
-            model = main_model.MainModel(dm.train_class_names, dm.train_class_codes, dm.test_class_names, weights, cfg.train.model_name, cfg.train.load_weights)
+            model = main_model.MainModel(dm.train_class_names, dm.train_class_codes, dm.test_class_names, weights, cfg.train.model_name, cfg.train.load_weights, num_train_specs=dm.num_train_specs)
 
             if cfg.train.compile:
                 model = torch.compile(model)
