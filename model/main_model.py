@@ -322,9 +322,10 @@ class MainModel(LightningModule):
         pred_df = pd.DataFrame(self.predictions)
         pred_df.to_csv('predictions.csv', index=False)
 
-        # "map" stands for "macro-averaged average precision"
-        test_map = metrics.average_precision_score(self.labels, self.predictions)
-        self.log(f"test_map", test_map, prog_bar=True)
+        if cfg.train.multi_label:
+            # "map" stands for "macro-averaged average precision"
+            test_map = metrics.average_precision_score(self.labels, self.predictions)
+            self.log(f"test_map", test_map, prog_bar=True)
 
     def on_train_epoch_end(self):
         epoch_num = torch.tensor(self.epoch_num).type(torch.float32) # eliminates warning
@@ -334,8 +335,9 @@ class MainModel(LightningModule):
         if self.labels is None:
             return
 
-        val_map = metrics.average_precision_score(self.labels, self.predictions)
-        self.log(f"val_map", val_map, prog_bar=True)
+        if cfg.train.multi_label and cfg.train.val_portion > 0:
+            val_map = metrics.average_precision_score(self.labels, self.predictions)
+            self.log(f"val_map", val_map, prog_bar=True)
 
     # define optimizers and LR schedulers
     def configure_optimizers(self):
