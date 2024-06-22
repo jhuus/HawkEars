@@ -382,16 +382,14 @@ class Analyzer:
                 class_info.is_label[i] = True
 
             # raise scores if the species' presence is confirmed
-            if cfg.infer.lower_min_if_confirmed:
+            if cfg.infer.lower_min_if_confirmed and cfg.infer.min_score > 0:
                 # calculate number of seconds labelled so far
                 seconds = 0
                 raised_min_score = cfg.infer.min_score + cfg.infer.raise_min_to_confirm * (1 - cfg.infer.min_score)
                 for i in range(len(class_info.is_label)):
                     if class_info.is_label[i] and scores[i] >= raised_min_score:
                         if i > 0 and class_info.is_label[i - 1]:
-                            seconds += 1
-                        elif i > 0 and class_info.is_label[i - 2]:
-                            seconds += 2
+                            seconds += self.overlap
                         else:
                             seconds += cfg.audio.segment_len
 
@@ -425,7 +423,7 @@ class Analyzer:
         try:
             with open(output_path, 'w') as file:
                 for label in labels:
-                    file.write(f'{label.start_time:.2f}\t{label.end_time:.2f}\t{label.class_name};{label.score:.2f}\n')
+                    file.write(f'{label.start_time:.2f}\t{label.end_time:.2f}\t{label.class_name};{label.score:.3f}\n')
 
         except:
             logging.error(f"Unable to write file {output_path}")
