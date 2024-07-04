@@ -57,11 +57,15 @@ class Analyzer:
         self.region = region
         self.locfile = locfile
         self.debug_mode = debug_mode
-        self.merge_labels = (merge == 1)
         self.overlap = overlap
         self.thread_num = thread_num
         self.device = device
         self.frequencies = {}
+
+        if cfg.infer.min_score == 0:
+            self.merge_labels = False # merging all labels >= min_score makes no sense in this case
+        else:
+            self.merge_labels = (merge == 1)
 
         if self.start_seconds is not None and self.end_seconds is not None and self.end_seconds < self.start_seconds + cfg.audio.segment_len:
                 logging.error(f"Error: end time must be >= start time + {cfg.audio.segment_len} seconds")
@@ -70,11 +74,12 @@ class Analyzer:
         if self.end_seconds is not None:
             self.end_seconds -= cfg.audio.segment_len # convert from end of last segment to start of last segment for processing
 
-        # if no output path specified and input path is a directory,
-        # put the output labels in the input directory
+        # if no output path is specified, put the output labels in the input directory
         if len(self.output_path) == 0:
             if os.path.isdir(self.input_path):
                 self.output_path = self.input_path
+            else:
+                self.output_path = Path(self.input_path).parent
         elif not os.path.exists(self.output_path):
             os.makedirs(self.output_path)
 
@@ -297,11 +302,14 @@ class Analyzer:
         increment = max(0.5, cfg.audio.segment_len - self.overlap)
         self.offsets = np.arange(start_seconds, end_seconds + 1.0, increment).tolist()
         self.raw_spectrograms = [0 for i in range(len(self.offsets))]
-        specs = self.audio.get_spectrograms(self.offsets, segment_len=cfg.audio.segment_len, raw_spectrograms=self.raw_spectrograms)
+        specs = self.audio.get_spectrograms(self.offsets, segment_len=cfg.audio.segment_len, raw_spectrograms=self.raw_spectrograms, clip=True)
 
         spec_array = np.zeros((len(specs), 1, cfg.audio.spec_height, cfg.audio.spec_width))
         for i in range(len(specs)):
-            spec_array[i] = specs[i].reshape((1, cfg.audio.spec_height, cfg.audio.spec_width)).astype(np.float32)
+            if specs[i] is not None:
+                spec_array[i] = specs[i].reshape((1, cfg.audio.spec_height, cfg.audio.spec_width)).astype(np.float32)
+            else:
+                logging.debug(f"No spectrogram returned for offset {i} ({self.offsets[i]:.2f})")
 
         return spec_array
 
@@ -443,7 +451,7 @@ class Analyzer:
             logging.info(f"{code}: {score}")
             predictions[j] = 0
 
-        logging.info(f"{sum=}")
+        logging.info(f"Sum={sum}")
         logging.info("")
 
     def run(self, file_list):
