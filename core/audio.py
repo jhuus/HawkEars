@@ -1,9 +1,12 @@
 # Audio processing, especially extracting and returning spectrograms.
 
 import logging
+import math
+import warnings
+warnings.filterwarnings('ignore') # librosa generates too many warnings
 
 import cv2
-import ffmpeg
+import librosa
 import numpy as np
 import torch
 import torchaudio as ta
@@ -66,8 +69,25 @@ class Audio:
         return spec
 
     # normalize values between 0 and 1
-    def _normalize(self, specs):
+    def _normalize(self, specs, clip=False):
         for i in range(len(specs)):
+            if specs[i] is None:
+                continue
+
+            if clip and cfg.audio.clip_quantile is not None:
+                # clip loud sounds louder than the specified quantile
+                cutoff = np.quantile(specs[i], cfg.audio.clip_quantile)
+                if cutoff >= cfg.audio.min_clip_level:
+                    y = specs[i].copy()
+                    specs[i] = np.clip(specs[i], 0, cutoff)
+
+                    # add back the square root of what was clipped,
+                    # so it's a "smoothed clip" instead of just a "flat top"
+                    y = np.sqrt(y)
+                    y -= math.sqrt(cutoff)
+                    y = np.clip(y, 0, y.max()) # negatives -> 0
+                    specs[i] = specs[i] + y # add it back
+
             max = specs[i].max()
             if max > 0:
                 specs[i] = specs[i] / max
@@ -76,37 +96,42 @@ class Audio:
 
     # stereo recordings sometimes have one clean channel and one noisy one;
     # so rather than just merge them, use heuristics to pick the cleaner one
-    def _choose_channel(self, left_channel, right_channel, scale):
-        left_signal = scale * np.frombuffer(left_channel, '<i2').astype(np.float32)
-        right_signal = scale * np.frombuffer(right_channel, '<i2').astype(np.float32)
+    def _choose_channel(self, left_signal, right_signal):
         recording_seconds = int(len(left_signal) / cfg.audio.sampling_rate)
         check_seconds = min(recording_seconds, cfg.audio.check_seconds)
         if check_seconds == 0:
-            return left_signal, left_channel # make an arbitrary choice
-
-        if recording_seconds >= check_seconds + 1:
-            offsets = [1] # skip the first second
-        else:
-            offsets = [0] # check at the very beginning
+            # make an arbitrary choice, unless a channel is null
+            left_sum = np.sum(left_signal)
+            right_sum = np.sum(right_signal)
+            if left_sum == 0 and right_sum != 0:
+                return right_signal
+            elif left_sum != 0 and right_sum == 0:
+                return left_signal
+            else:
+                return left_signal
 
         self.signal = left_signal
-        left_spec = self.get_spectrograms(offsets, segment_len=check_seconds)[0]
+        left_spec = self.get_spectrograms([0], segment_len=check_seconds)[0]
         self.signal = right_signal
-        right_spec = self.get_spectrograms(offsets, segment_len=check_seconds)[0]
+        right_spec = self.get_spectrograms([0], segment_len=check_seconds)[0]
 
-        if left_spec.sum() == 0 and right_spec.sum() > 0:
+        left_sum = left_spec.sum()
+        right_sum = right_spec.sum()
+        logging.debug(f"Audio::_choose_channel left sum = {left_sum:.4f}, right sum = {right_sum:.4f}")
+
+        if left_sum == 0 and right_sum > 0:
             # left channel is null
-            return right_signal, right_channel
-        elif right_spec.sum() == 0 and left_spec.sum() > 0:
+            return right_signal
+        elif right_sum == 0 and left_sum > 0:
             # right channel is null
-            return left_signal, left_channel
+            return left_signal
 
-        if left_spec.sum() > right_spec.sum():
+        if left_sum > right_sum:
             # more noise in the left channel
-            return right_signal, right_channel
+            return right_signal
         else:
             # more noise in the right channel
-            return left_signal, left_channel
+            return left_signal
 
     # return a spectrogram with a sin wave of the given frequency
     def sin_wave(self, frequency):
@@ -121,7 +146,8 @@ class Audio:
     # return list of spectrograms for the given offsets (i.e. starting points in seconds);
     # you have to call load() before calling this;
     # if raw_spectrograms array is specified, populate it with spectrograms before normalization
-    def get_spectrograms(self, offsets, segment_len=None, low_band=False, raw_spectrograms=None):
+    def get_spectrograms(self, offsets, segment_len=None, clip=False, low_band=False, raw_spectrograms=None):
+        logging.debug(f"Audio::get_spectrograms offsets={offsets}")
         if not self.have_signal:
             return None
 
@@ -130,101 +156,58 @@ class Audio:
             # since cfg.audio.segment_len can be modified after the parameter list is evaluated
             segment_len = cfg.audio.segment_len
 
-        # call _get_raw_spectrogram for the whole signal, then break it up into spectrograms;
-        # this is faster when getting overlapping spectrograms for a whole recording
-        spectrogram = None
-        spec_width_per_sec = int(cfg.audio.spec_width / cfg.audio.segment_len)
-
-        # create in blocks so we don't run out of GPU memory
-        block_length = cfg.audio.spec_block_seconds * cfg.audio.sampling_rate
-        start = 0
-        i = 0
-        while start < len(self.signal):
-            i += 1
-            length = min(block_length, len(self.signal) - start)
-            if length < cfg.audio.win_length:
-                break
-
-            block = self._get_raw_spectrogram(self.signal[start:start+length], low_band=low_band)
-
-            if spectrogram is None:
-                spectrogram = block
-            else:
-                spectrogram = np.concatenate((spectrogram, block), axis=1)
-
-            start += length
-
         specs = []
+        sr = cfg.audio.sampling_rate
         for i, offset in enumerate(offsets):
-            spec = spectrogram[:, int(offset * spec_width_per_sec):int((offset + segment_len) * spec_width_per_sec)]
-            if spec.shape[1] > cfg.audio.spec_width:
-                spec = spec[:, :cfg.audio.spec_width]
-            elif spec.shape[1] < cfg.audio.spec_width:
-                spec = np.pad(spec, ((0, 0), (0, cfg.audio.spec_width - spec.shape[1])), 'constant', constant_values=0)
-
-            specs.append(spec)
+            if int(offset*sr) < len(self.signal):
+                spec = self._get_raw_spectrogram(self.signal[int(offset*sr):int((offset+segment_len)*sr)], low_band=low_band)
+                spec = spec[:cfg.audio.spec_height, :cfg.audio.spec_width]
+                if spec.shape[1] < cfg.audio.spec_width:
+                    spec = np.pad(spec, ((0, 0), (0, cfg.audio.spec_width - spec.shape[1])), 'constant', constant_values=0)
+                specs.append(spec)
+            else:
+                specs.append(None)
 
         if raw_spectrograms is not None and len(raw_spectrograms) == len(specs):
             for i, spec in enumerate(specs):
                 raw_spectrograms[i] = spec
 
-        self._normalize(specs)
+        self._normalize(specs, clip=clip)
 
         return specs
 
     def signal_len(self):
         return len(self.signal) if self.have_signal else 0
 
-    # use ffmpeg to load audio recording into memory, either merging channels or choosing the cleanest channel;
-    # using librosa would simplify the code, but ffmpeg is much faster, and load time is a significant bottleneck
-    def load(self, path, keep_bytes=False):
-        self.have_signal = False
-        self.signal = None
+    # if logging level is DEBUG, librosa.load generates a lot of output,
+    # so temporarily update level
+    def _call_librosa_load(self, path, mono):
+        saved_log_level = logging.root.level
+        logging.root.setLevel(logging.ERROR)
+        signal, sr = librosa.load(path, sr=cfg.audio.sampling_rate, mono=mono)
+        logging.root.setLevel(saved_log_level)
 
+        return signal, sr
+
+    def load(self, path):
         try:
             self.have_signal = True
             self.path = path
 
-            scale = 1.0 / float(1 << ((16) - 1))
-            info = ffmpeg.probe(path)
+            if cfg.audio.choose_channel:
+                self.signal, _ = self._call_librosa_load(path, mono=False)
 
-            if not cfg.audio.choose_channel or not 'channels' in info['streams'][0].keys() or info['streams'][0]['channels'] == 1:
-                bytes, _ = (ffmpeg
-                    .input(path)
-                    .output('-', format='s16le', acodec='pcm_s16le', ac=1, ar=f'{cfg.audio.sampling_rate}')
-                    .overwrite_output()
-                    .run(capture_stdout=True, capture_stderr=True, quiet=True))
-
-                # convert byte array to float array, and then to a numpy array
-                self.signal = scale * np.frombuffer(bytes, '<i2').astype(np.float32)
+                logging.debug(f"Audio::load signal.shape={self.signal.shape}")
+                if len(self.signal.shape) == 2:
+                    self.signal = self._choose_channel(self.signal[0], self.signal[1])
             else:
-                left_channel, _ = (ffmpeg
-                    .input(path)
-                    .filter('channelsplit', channel_layout='stereo', channels='FL')
-                    .output('-', format='s16le', acodec='pcm_s16le', ac=1, ar=f'{cfg.audio.sampling_rate}')
-                    .overwrite_output()
-                    .run(capture_stdout=True, capture_stderr=True, quiet=True))
+                self.signal, _ = self._call_librosa_load(path, mono=True)
 
-                right_channel, _ = (ffmpeg
-                    .input(path)
-                    .filter('channelsplit', channel_layout='stereo', channels='FR')
-                    .output('-', format='s16le', acodec='pcm_s16le', ac=1, ar=f'{cfg.audio.sampling_rate}')
-                    .overwrite_output()
-                    .run(capture_stdout=True, capture_stderr=True, quiet=True))
-
-                self.signal, bytes = self._choose_channel(left_channel, right_channel, scale)
-
-            if keep_bytes:
-                self.bytes = bytes # when we want the raw audio, e.g. to write a segment to a wav file
-
-        except ffmpeg.Error as e:
+        except Exception as e:
             self.have_signal = False
+            self.signal = None
             self.path = None
-            tokens = e.stderr.decode().split('\n')
-            if len(tokens) >= 2:
-                logging.error(f'Caught exception in audio load: {tokens[-2]}')
-            else:
-                logging.error(f'Caught exception in audio load')
+            logging.error(f'Caught exception in audio load: {e}')
 
         logging.debug('Done loading audio file')
         return self.signal, cfg.audio.sampling_rate
