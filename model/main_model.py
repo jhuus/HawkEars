@@ -1,24 +1,22 @@
 from dataclasses import dataclass
+import logging
 
 from core import cfg, metrics
 from model import dla
 from model import efficientnet_v2
 from model import fastvit
 from model import hgnet_v2
-import logging
 from model import mobilenet
 from model import vovnet
 
 import numpy as np
 import pandas as pd
 from pytorch_lightning import LightningModule
-import sklearn
 import timm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchmetrics.functional import accuracy
-import scipy.spatial.distance
 
 # AugMix loss copied from timm and modified for multi-label case.
 # See https://arxiv.org/pdf/1912.02781.pdf.
