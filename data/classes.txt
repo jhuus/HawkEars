@@ -1,12 +1,22 @@
-# These classes are included in training, but ignored in analysis (see ignore.txt)
+# These classes are included in training, but ignored in analysis by default (see ignore.txt)
+American Toad,American Toad
+Boreal Chorus Frog,Boreal Chorus Frog
+Bullfrog,Bullfrog
 Canine,Canine
-Squirrel,Squirrel
-Gray Treefrog,Gray Treefrog
+Boreal Chorus Frog,Boreal Chorus Frog
+Gray Treefrog,Treefrog
+Great Plains Toad,Great Plains Toad
+Green Frog,Green Frog
+Leopard Frog,Leopard Frog
 Mashup,Mashup
 Noise,Noise
 Other,Other
+Plains Spadefoot Toad,Plains Spadefoot Toad
 Rooster,Rooster
 Spring Peeper,Spring Peeper
+Squirrel,Squirrel
+Western Toad,Western Toad
+Wood Frog,Wood Frog
 
 # These bird species are included in the provided model
 Acadian Flycatcher,ACFL
