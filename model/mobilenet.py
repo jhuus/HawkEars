@@ -39,6 +39,7 @@ def get_model(model_name, **kwargs):
     else:
         raise Exception(f"Unknown custom Mobilenet model name: {model_name}")
 
+    # TODO: switch to V4, which trains even faster but gets similar precision/recall
     model = mobilenetv3._gen_mobilenet_v3('mobilenetv3_large_100', channel_multiplier, pretrained=False, in_chans=1, **kwargs)
 
     return model
