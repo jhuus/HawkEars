@@ -27,7 +27,7 @@ def get_model(model_name, **kwargs):
             "stage4": [384, 96, 512, 1, True, True, 5, 3],
         }
     elif model_name == '3A':
-        # custom config with ~3.1M parameters
+        # custom config with ~2.8M parameters
         config = {
             "stem_type": 'v2',
             "stem_chs": [16, 16],
