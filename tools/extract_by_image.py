@@ -36,12 +36,12 @@ class ExtractByImage(extractor.Extractor):
         for image_path in Path().glob(f"{self.images_path}/*.jpeg"):
             name = Path(image_path).stem
             if '~' in name:
-                result = re.split("\S+~(.+)~.*", name)
+                result = re.split("\\S+~(.+)~.*", name)
                 result = re.split("(.+)-(.+)", result[1])
             else:
                 result = re.split("(.+)-(.+)", name)
                 if len(result) != 4:
-                    result = re.split("(\S+)_(\S+)", name)
+                    result = re.split("(\\S+)_(\\S+)", name)
 
             if len(result) != 4:
                 print(f"Error: unknown file name format: {image_path}")
