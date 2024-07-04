@@ -4,13 +4,11 @@ from dataclasses import dataclass
 
 @dataclass
 class Audio:
-    # when changing other parameters, use round(segment_len * sampling_rate / spec_width) as a good
-    # first approximation for hop length, but fine-tune as needed to improve alignment of
-    # spectrograms several minutes into a recording (only an issue when we get one spectrogram
-    # for the whole recording and then split it up)
+    # sampling rate should be a multiple of spec_width / segment_len,
+    # so that hop length formula gives an integer (segment_len * sampling_rate / spec_width)
     segment_len = 3         # spectrogram duration in seconds
-    sampling_rate = 40960
-    hop_length = 320
+    sampling_rate = 32000
+    hop_length = 250
     win_length = 2048
     spec_height = 192       # spectrogram height
     spec_width = 384        # spectrogram width (3 * 128)
@@ -18,10 +16,12 @@ class Audio:
     max_audio_freq = 13000  # need this high for Chestnut-backed Chickadee "seet series"
 
     choose_channel = True   # use heuristic to pick the cleanest audio channel
-    check_seconds = 3       # check prefix of this length when picking cleanest channel
+    check_seconds = 3        # check segment of this length when picking cleanest channel
     mel_scale = True
     power = 1
     spec_block_seconds = 240 # max seconds of spectrogram to create at a time (limited by GPU memory)
+    clip_quantile = .997     # clip amplitudes > this quantile during inference
+    min_clip_level = 2       # only clip if max amplitude is at least this
 
     # low-frequency audio settings for Ruffed Grouse drumming identifier
     low_band_spec_height = 64
@@ -55,7 +55,7 @@ class Training:
     label_smoothing = 0.15
     training_db = "training" # name of training database
     num_folds = 1           # for k-fold cross-validation
-    val_portion = 0         # used only if num_folds > 1
+    val_portion = 0         # used only if num_folds = 1
     model_print_path = "model.txt" # path of text file to print the model (TODO: put in current log directory)
 
     # data augmentation (see core/dataset.py to understand these parameters)
@@ -88,7 +88,7 @@ class Inference:
     use_banding_codes = True     # use banding codes instead of species names in labels
     top_n = 20 # number of top matches to log in debug mode
     min_location_freq = .0001    # ignore if species frequency less than this for location/week
-    file_date_regex = "\S+_(\d+)_.*" # regex to extract date from file name (e.g. HNCAM015_20210529_161122.mp3)
+    file_date_regex = "\\S+_(\\d+)_.*" # regex to extract date from file name (e.g. HNCAM015_20210529_161122.mp3)
     file_date_regex_group = 1    # use group at offset 1
     block_size = 100             # do this many spectrograms at a time to avoid running out of GPU memory
     frequency_db = "frequency"   # eBird barchart data, i.e. species report frequencies
@@ -107,7 +107,7 @@ class Inference:
 class Miscellaneous:
     main_ckpt_folder = "data/ckpt"      # use an ensemble of all checkpoints in this folder for inference
     low_band_ckpt_path = "data/low_band.ckpt"
-    search_ckpt_path = "data/ckpt/custom_efficientnet_5B.ckpt" # checkpoint used in searching and clustering
+    search_ckpt_path = "data/ckpt/custom_efficientnet_5.ckpt" # checkpoint used in searching and clustering
     classes_file = "data/classes.txt"   # list of classes used to generate pickle files
     ignore_file = "data/ignore.txt"     # classes listed in this file are ignored in analysis
     train_pickle = None
@@ -116,11 +116,11 @@ class Miscellaneous:
     # when running extract and no source is defined, get source by matching these regexes in order;
     # this assumes iNaturalist downloads were renamed by adding an N prefix
     source_regexes = [
-        ("XC\d+", "Xeno-Canto"),
-        ("N\d+", "iNaturalist"),
-        ("W\d+", "Wildtrax"),
+        ("XC\\d+", "Xeno-Canto"),
+        ("N\\d+", "iNaturalist"),
+        ("W\\d+", "Wildtrax"),
         ("HNC.*", "HNC"),
-        ("\d+", "Macaulay Library"),
+        ("\\d+", "Macaulay Library"),
         (".*", "Other")]
 
 @dataclass
