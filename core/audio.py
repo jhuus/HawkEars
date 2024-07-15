@@ -69,24 +69,10 @@ class Audio:
         return spec
 
     # normalize values between 0 and 1
-    def _normalize(self, specs, clip=False):
+    def _normalize(self, specs):
         for i in range(len(specs)):
             if specs[i] is None:
                 continue
-
-            if clip and cfg.audio.clip_quantile is not None:
-                # clip loud sounds louder than the specified quantile
-                cutoff = np.quantile(specs[i], cfg.audio.clip_quantile)
-                if cutoff >= cfg.audio.min_clip_level:
-                    y = specs[i].copy()
-                    specs[i] = np.clip(specs[i], 0, cutoff)
-
-                    # add back the square root of what was clipped,
-                    # so it's a "smoothed clip" instead of just a "flat top"
-                    y = np.sqrt(y)
-                    y -= math.sqrt(cutoff)
-                    y = np.clip(y, 0, y.max()) # negatives -> 0
-                    specs[i] = specs[i] + y # add it back
 
             max = specs[i].max()
             if max > 0:
@@ -146,7 +132,7 @@ class Audio:
     # return list of spectrograms for the given offsets (i.e. starting points in seconds);
     # you have to call load() before calling this;
     # if raw_spectrograms array is specified, populate it with spectrograms before normalization
-    def get_spectrograms(self, offsets, segment_len=None, clip=False, low_band=False, raw_spectrograms=None):
+    def get_spectrograms(self, offsets, segment_len=None, low_band=False, raw_spectrograms=None):
         logging.debug(f"Audio::get_spectrograms offsets={offsets}")
         if not self.have_signal:
             return None
@@ -172,7 +158,7 @@ class Audio:
             for i, spec in enumerate(specs):
                 raw_spectrograms[i] = spec
 
-        self._normalize(specs, clip=clip)
+        self._normalize(specs)
 
         return specs
 
