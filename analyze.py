@@ -302,7 +302,7 @@ class Analyzer:
         increment = max(0.5, cfg.audio.segment_len - self.overlap)
         self.offsets = np.arange(start_seconds, end_seconds + 1.0, increment).tolist()
         self.raw_spectrograms = [0 for i in range(len(self.offsets))]
-        specs = self.audio.get_spectrograms(self.offsets, segment_len=cfg.audio.segment_len, raw_spectrograms=self.raw_spectrograms, clip=True)
+        specs = self.audio.get_spectrograms(self.offsets, segment_len=cfg.audio.segment_len, raw_spectrograms=self.raw_spectrograms)
 
         spec_array = np.zeros((len(specs), 1, cfg.audio.spec_height, cfg.audio.spec_width))
         for i in range(len(specs)):
