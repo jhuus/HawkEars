@@ -20,8 +20,6 @@ class Audio:
     mel_scale = True
     power = 1
     spec_block_seconds = 240 # max seconds of spectrogram to create at a time (limited by GPU memory)
-    clip_quantile = .997     # clip amplitudes > this quantile during inference
-    min_clip_level = 2       # only clip if max amplitude is at least this
 
     # low-frequency audio settings for Ruffed Grouse drumming identifier
     low_band_spec_height = 64
@@ -83,7 +81,7 @@ class Training:
 class Inference:
     num_threads = 3              # multiple threads improves performance but uses more GPU memory
     spec_overlap_seconds = 1.5   # number of seconds overlap for adjacent 3-second spectrograms
-    min_score = 0.7              # only generate labels when score is at least this
+    min_score = 0.75             # only generate labels when score is at least this
     score_exponent = .6          # increase scores so they're more like probabilities
     use_banding_codes = True     # use banding codes instead of species names in labels
     top_n = 20 # number of top matches to log in debug mode
