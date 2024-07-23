@@ -11,13 +11,21 @@ def get_model(model_name, **kwargs):
         # ~ 2.0M parameters
         channel_multiplier=0.4
         depth_multiplier=0.5
-    elif model_name == '3':
+    elif model_name == '3A':
+        # ~ 2.9M parameters
+        channel_multiplier=0.48
+        depth_multiplier=0.58
+    elif model_name == '3B':
         # ~ 3.4M parameters
         channel_multiplier=0.5
         depth_multiplier=0.6
     elif model_name == '4':
         # ~ 4.8M parameters
         channel_multiplier=0.6
+        depth_multiplier=0.6
+    elif model_name == '4.1':
+        # ~ 5.3M parameters
+        channel_multiplier=0.63
         depth_multiplier=0.6
     elif model_name == '5':
         # ~ 5.7M parameters

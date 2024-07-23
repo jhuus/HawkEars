@@ -90,13 +90,13 @@ def get_model(model_name, **kwargs):
             attn='eca',
         )
     elif model_name == '5':
-        # about 5.1M parameters
+        # about 5.6M parameters
         config = dict(
-            stem_chs=[64, 64, 128],
+            stem_chs=[32, 32, 64],
             stage_conv_chs=[128, 160, 192, 224],
-            stage_out_chs=[128, 256, 384, 512],
-            layer_per_block=3,
-            block_per_stage=[1, 1, 1, 1],
+            stage_out_chs=[128, 256, 384, 384],
+            layer_per_block=2,
+            block_per_stage=[1, 2, 2, 1],
             residual=True,
             depthwise=False,
             attn='eca',
@@ -114,7 +114,7 @@ def get_model(model_name, **kwargs):
             attn='eca',
         )
     elif model_name == '7':
-        # about 7.6M parameters
+        # about 7.6M parameters (they get much slower with layers_per_block=3 though)
         config = dict(
             stem_chs=[64, 64, 128],
             stage_conv_chs=[128, 160, 192, 224],

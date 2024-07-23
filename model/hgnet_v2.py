@@ -82,7 +82,7 @@ def get_model(model_name, **kwargs):
             "stage4": [512, 192, 1024, 1, True, True, 5, 4],
         }
     elif model_name == '7':
-        # custom config with ~5.0M parameters
+        # custom config with ~5.7M parameters
         config = {
             "stem_type": 'v2',
             "stem_chs": [24, 32],
@@ -93,7 +93,7 @@ def get_model(model_name, **kwargs):
             "stage4": [512, 192, 1024, 1, True, True, 5, 4],
         }
     elif model_name == '8':
-        # custom config with ~5.5M parameters
+        # custom config with ~6.1M parameters
         config = {
             "stem_type": 'v2',
             "stem_chs": [24, 32],

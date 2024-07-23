@@ -13,7 +13,7 @@ def get_model(model_name, **kwargs):
             mlp_ratios=(3, 3, 3, 3),
             token_mixers=("repmixer", "repmixer", "repmixer", "repmixer")
         )
-    elif model_name == '2':
+    elif model_name == '2A':
         # about 2.8M parameters
         model_args = dict(
             layers=(2, 2, 2, 2),
@@ -22,7 +22,7 @@ def get_model(model_name, **kwargs):
             token_mixers=("repmixer", "repmixer", "repmixer", "repmixer")
         )
     elif model_name == '2B':
-        # about 2.8M parameters
+        # about 3.0M parameters
         model_args = dict(
             layers=(2, 2, 3, 2),
             embed_dims=(48, 96, 192, 384),
@@ -46,9 +46,9 @@ def get_model(model_name, **kwargs):
             token_mixers=("repmixer", "repmixer", "repmixer", "repmixer")
         )
     elif model_name == '5':
-        # about 5.7M parameters
+        # about 5.6M parameters
         model_args = dict(
-            layers=(2, 2, 4, 2),
+            layers=(2, 2, 3, 2),
             embed_dims=(64, 128, 256, 512),
             mlp_ratios=(3, 3, 3, 3),
             token_mixers=("repmixer", "repmixer", "repmixer", "repmixer")
