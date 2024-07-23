@@ -4,6 +4,7 @@ Boreal Chorus Frog,Boreal Chorus Frog
 Bullfrog,Bullfrog
 Canine,Canine
 Boreal Chorus Frog,Boreal Chorus Frog
+Canadian Toad,Canadian Toad
 Gray Treefrog,Treefrog
 Great Plains Toad,Great Plains Toad
 Green Frog,Green Frog
@@ -11,6 +12,7 @@ Leopard Frog,Leopard Frog
 Mashup,Mashup
 Noise,Noise
 Other,Other
+Pickerel Frog,Pickerel Frog
 Plains Spadefoot Toad,Plains Spadefoot Toad
 Rooster,Rooster
 Spring Peeper,Spring Peeper
