@@ -18,25 +18,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchmetrics.functional import accuracy
 
-# AugMix loss copied from timm and modified for multi-label case.
-# See https://arxiv.org/pdf/1912.02781.pdf.
-class JsdCrossEntropy(nn.Module):
-    def __init__(self, weight):
-        super().__init__()
-        self.cross_entropy_loss = torch.nn.BCEWithLogitsLoss(weight=weight)
-
-    def __call__(self, logits_list, label):
-        # Compute cross-entropy on the first image
-        loss1 = self.cross_entropy_loss(logits_list[0], label)
-        probs = [torch.sigmoid(logits) for logits in logits_list]
-
-        # Clamp mixture distribution to avoid exploding KL divergence
-        logp_mixture = torch.clamp(torch.stack(probs).mean(axis=0), 1e-7, 1).log()
-        kl_div = sum([F.kl_div(logp_mixture, p_split, reduction='batchmean') for p_split in probs]) / logits_list[0].shape[1]
-        loss2 = cfg.train.augmix_factor * kl_div
-
-        return loss1 + loss2
-
 def get_learning_rate(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
@@ -223,18 +204,9 @@ class MainModel(LightningModule):
 
     # return the loss for a batch
     def training_step(self, batch, batch_idx):
-        if cfg.train.augmix:
-            # the original AugMix paper used an unaugmented image and two augmented ones;
-            # this version omits the unaugmented image
-            x1, x2, y = batch
-            logits1 = self(x1)
-            logits2 = self(x2)
-
-            loss = JsdCrossEntropy(self.weights)([logits1, logits2], y)
-        else:
-            x, y = batch
-            logits = self(x)
-            loss = get_loss_fn(self.weights)(logits, y)
+        x, y = batch
+        logits = self(x)
+        loss = get_loss_fn(self.weights)(logits, y)
 
         detached_loss = loss.detach() # necessary to avoid memory leak
         if self.prev_loss is None:
@@ -250,15 +222,9 @@ class MainModel(LightningModule):
 
     # calculate and log batch accuracy and related metrics during validation phase
     def validation_step(self, batch, batch_idx):
-        if cfg.train.augmix:
-            x1, x2, y = batch
-            logits1 = self(x1)
-            logits2 = self(x2)
-            loss = JsdCrossEntropy(self.weights)([logits1, logits2], y)
-        else:
-            x, y = batch
-            logits = self(x)
-            loss = get_loss_fn(self.weights)(logits, y)
+        x, y = batch
+        logits = self(x)
+        loss = get_loss_fn(self.weights)(logits, y)
 
         if cfg.train.multi_label:
             preds = torch.sigmoid(logits)
@@ -362,12 +328,14 @@ class MainModel(LightningModule):
         with torch.no_grad():
             torch_specs = torch.Tensor(specs).to(device)
             x = self.base_model.forward_features(torch_specs)
-            if 'fastvit' in self.model_name:
+            if any(name in self.model_name for name in ['fastvit', 'hgnet']):
                 x = self.base_model.head.global_pool(x)
             else:
                 x = self.base_model.global_pool(x)
 
-            if 'mobilenetv3' in self.model_name or 'repghostnet' in self.model_name:
+            if 'hgnet' in self.model_name:
+                x = self.base_model.head.flatten(x)
+            elif 'mobilenet' in self.model_name:
                 x = self.base_model.flatten(x)
 
             return x.cpu().detach().numpy()
