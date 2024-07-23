@@ -7,8 +7,8 @@ class Audio:
     # sampling rate should be a multiple of spec_width / segment_len,
     # so that hop length formula gives an integer (segment_len * sampling_rate / spec_width)
     segment_len = 3         # spectrogram duration in seconds
-    sampling_rate = 32000
-    hop_length = 250
+    sampling_rate = 37120
+    hop_length = 290
     win_length = 2048
     spec_height = 192       # spectrogram height
     spec_width = 384        # spectrogram width (3 * 128)
@@ -74,9 +74,6 @@ class Training:
     mixup_weight_min = .2
     mixup_weight_max = .8
 
-    augmix = False
-    augmix_factor = 4
-
 @dataclass
 class Inference:
     num_threads = 3              # multiple threads improves performance but uses more GPU memory
@@ -105,7 +102,7 @@ class Inference:
 class Miscellaneous:
     main_ckpt_folder = "data/ckpt"      # use an ensemble of all checkpoints in this folder for inference
     low_band_ckpt_path = "data/low_band.ckpt"
-    search_ckpt_path = "data/ckpt/custom_efficientnet_5.ckpt" # checkpoint used in searching and clustering
+    search_ckpt_path = "data/ckpt-search/custom_efficientnet_5.ckpt" # checkpoint used in searching and clustering
     classes_file = "data/classes.txt"   # list of classes used to generate pickle files
     ignore_file = "data/ignore.txt"     # classes listed in this file are ignored in analysis
     train_pickle = None
