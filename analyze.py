@@ -431,7 +431,8 @@ class Analyzer:
         try:
             with open(output_path, 'w') as file:
                 for label in labels:
-                    file.write(f'{label.start_time:.2f}\t{label.end_time:.2f}\t{label.class_name};{label.score:.3f}\n')
+                    if label.score > 0: # omit score=0 labels even if min_score=0
+                        file.write(f'{label.start_time:.2f}\t{label.end_time:.2f}\t{label.class_name};{label.score:.3f}\n')
 
         except:
             logging.error(f"Unable to write file {output_path}")
