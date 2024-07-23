@@ -22,17 +22,9 @@ To install HawkEars on Linux or Windows:
 pip install -r requirements.txt
 ```
 
-5.	Install ffmpeg. On Linux, type:
+5. If you have a [CUDA-compatible NVIDIA GPU](https://developer.nvidia.com/cuda-gpus), such as a Geforce RTX, you can gain a major performance improvement by installing [CUDA](https://docs.nvidia.com/cuda/).
 
-```
-sudo apt install ffmpeg
-```
-
-On Windows, download [this zip file](https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip), then unzip it, move it somewhere and add the bin directory to your path. For instance, you could move it to "C:\Program Files\ffmpeg", and then add "C:\Program Files\ffmpeg\bin" to your path by opening Settings, entering "Environment Variables" in the "Find a Setting" box, clicking the Environment Variables button, selecting Path, clicking Edit and adding "C:\Program Files\ffmpeg\bin" at the bottom (without the quotes).
-
-6. If you have a [CUDA-compatible NVIDIA GPU](https://developer.nvidia.com/cuda-gpus), such as a Geforce RTX, you can gain a major performance improvement by installing [CUDA](https://docs.nvidia.com/cuda/). CUDA 11.7 is recommended. Read the installation instructions carefully, since additional steps are needed after running the installer.
-
-7. If you plan to train your own models, you will need to install SQLite. On Windows, follow [these instructions](https://www.sqlitetutorial.net/download-install-sqlite/). On Linux, type:
+6. If you plan to train your own models, you will need to install SQLite. On Windows, follow [these instructions](https://www.sqlitetutorial.net/download-install-sqlite/). On Linux, type:
 
 ```
 sudo apt install sqlite3
@@ -95,3 +87,6 @@ Configuration parameters, including training hyperparameters, are specified with
 
 ### TensorFlow Version
 HawkEars was initially developed using TensorFlow. That code is still available [here](https://github.com/jhuus/HawkEars-TensorFlow). The TensorFlow version is no longer maintained though.
+
+### User Feedback
+If you have any problems during installation or usage, please post an issue here. We would also appreciate any enhancement requests or examples of false positives or false negatives, which can also be posted as issues.
