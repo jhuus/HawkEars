@@ -328,7 +328,7 @@ class MainModel(LightningModule):
         with torch.no_grad():
             torch_specs = torch.Tensor(specs).to(device)
             x = self.base_model.forward_features(torch_specs)
-            if any(name in self.model_name for name in ['fastvit', 'hgnet']):
+            if any(name in self.model_name for name in ['fastvit', 'hgnet', 'vovnet']):
                 x = self.base_model.head.global_pool(x)
             else:
                 x = self.base_model.global_pool(x)
