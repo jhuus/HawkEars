@@ -99,6 +99,12 @@ class Inference:
     confirmed_if_seconds = 8     # need at least this many confirmed seconds >= raised threshold
     lower_min_factor = .6        # if so, include all labels with score >= this * min_score
 
+    # map our species names to the names used by eBird for location/date processing
+    ebird_names = {
+        "American Goshawk": "Northern Goshawk",
+        "Black-crowned Night Heron": "Black-crowned Night-Heron",
+    }
+
 @dataclass
 class Miscellaneous:
     main_ckpt_folder = "data/ckpt"      # use an ensemble of all checkpoints in this folder for inference

@@ -1,4 +1,4 @@
-# Species-specific handling during analysis / inference.
+# Species-specific inference logic.
 # To disable or add a handler, update self.handlers in the constructor below.
 
 import os
@@ -15,7 +15,8 @@ class Species_Handlers:
     def __init__(self, device):
         # update this dictionary to enable/disable handlers
         self.handlers = {
-            'BWHA': self.check_soundalike,
+            'BOOW': self.check_soundalike_with_location,
+            'BWHA': self.check_soundalike_no_location,
             #'LALO': self.check_amplitude,
             #'PIGR': self.check_amplitude,
             'RUGR': self.ruffed_grouse,
@@ -27,15 +28,21 @@ class Species_Handlers:
             'PIGR': SimpleNamespace(low_freq=.46, high_freq=.56, min_ratio=.15),
         }
 
-        self.check_soundalike_config = {
+        # for the check_soundalike_no_location case
+        self.check_soundalike1_config = {
             'BWHA': SimpleNamespace(soundalike_code='WTSP', min_score=.25)
+        }
+
+        # for the check_soundalike_with_location case
+        self.check_soundalike2_config = {
+            'BOOW': SimpleNamespace(soundalike_code='WISN', min_score=.1, min_common=.005, max_rare=.0001),
         }
 
         self.device = device
         self.low_band_model = None
 
     # Prepare for next recording
-    def reset(self, class_infos, offsets, raw_spectrograms, audio):
+    def reset(self, class_infos, offsets, raw_spectrograms, audio, check_frequency, week_num):
         self.class_infos = {}
         for class_info in class_infos:
             self.class_infos[class_info.code] = class_info
@@ -43,6 +50,8 @@ class Species_Handlers:
         self.offsets = offsets
         self.raw_spectrograms = raw_spectrograms
         self.highest_amplitude = None
+        self.check_frequency = check_frequency  # if true, we're checking eBird frequency for given county/week
+        self.week_num = week_num                # for when check_frequency = True
         self.low_band_specs = audio.get_spectrograms(offsets=offsets, low_band=True)
 
         if self.low_band_model is None:
@@ -74,14 +83,14 @@ class Species_Handlers:
             if relative_amplitude < config.min_ratio:
                 class_info.scores[i] = 0
 
-    # Handle cases where one species is frequently mistaken for another. For example,
-    # a fragment of a White-throated Sparrow song is sometimes mistaken for a Broad-winged Hawk.
-    # If we're scanning BWHA and the current or previous label has a significant possibility of WTSP, skip this label.
-    def check_soundalike(self, class_info):
+    # Handle cases where one species is frequently mistaken for another, independently of location/date processing.
+    # For example, a fragment of a White-throated Sparrow song is sometimes mistaken for a Broad-winged Hawk.
+    # This logic checks if the current or previous label has a significant possibility of being the sound-alike.
+    def check_soundalike_no_location(self, class_info):
         if not class_info.has_label:
             return
 
-        config = self.check_soundalike_config[class_info.code]
+        config = self.check_soundalike1_config[class_info.code]
         if config.soundalike_code not in self.class_infos:
             return # must be using a subset of the full species list
 
@@ -92,8 +101,43 @@ class Species_Handlers:
                 continue
 
             # set score = 0 if current or previous soundalike score >= min_score
-            if soundalike_info.scores[i] > config.min_score or (i > 0 and soundalike_info.scores[i - 1] > config.min_score):
+            if soundalike_info.scores[i] >= config.min_score or (i > 0 and soundalike_info.scores[i - 1] >= config.min_score):
                 class_info.scores[i] = 0
+
+    # Handle cases where one species is frequently mistaken for another, using location/date processing.
+    # This handles cases where a relatively common species is sometimes misidentified as a rare one.
+    # For example, Wilson's Snipe songs are similar to Boreal Owl songs.
+    # If a Boreal Owl is identified in an area where it is rare and Wilson's Snipe is not,
+    # and the Wilson's Snipe score is above a (low) threshold, call it a Wilson's Snipe.
+    def check_soundalike_with_location(self, class_info):
+        if not self.check_frequency or not class_info.has_label:
+            return
+
+        config = self.check_soundalike2_config[class_info.code]
+        if config.soundalike_code not in self.class_infos:
+            return # must be using a subset of the full species list
+
+        soundalike_info = self.class_infos[config.soundalike_code] # class_info for the soundalike species
+        for i in range(len(class_info.scores)):
+            # ignore if score < threshold
+            if class_info.scores[i] < cfg.infer.min_score:
+                continue
+
+            # if it is rare and the soundalike is common, and soundalike seems possible given score, identify it as the soundalike
+            if soundalike_info.scores[i] >= config.min_score and soundalike_info.scores[i] < class_info.scores[i]:
+                if self.week_num is None:
+                    # no date specified, so use max eBird frequency across all weeks
+                    class_frequency = class_info.max_frequency
+                    soundalike_frequency = soundalike_info.max_frequency
+                else:
+                    class_frequency = class_info.frequency[self.week_num]
+                    soundalike_frequency = soundalike_info.frequency[self.week_num]
+
+                if soundalike_frequency >= config.min_common and class_frequency <= config.max_rare:
+                    # soundalike species (e.g. WISN) is common and class species (e.g. BOOW) is rare,
+                    # and soundalike score is below class_info and above config.min_score, so change it to the soundalike
+                    soundalike_info.scores[i] = class_info.scores[i]
+                    class_info.scores[i] = 0
 
     # Use the low band spectrogram and model to check for Ruffed Grouse drumming.
     # The frequency is too low to detect properly with the normal spectrogram,

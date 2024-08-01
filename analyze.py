@@ -114,6 +114,7 @@ class Analyzer:
     def _process_location_and_date(self):
         if self.locfile is None and self.region is None and (self.latitude is None or self.longitude is None):
             self.check_frequency = False
+            self.week_num = None
             return
 
         self.check_frequency = True
@@ -184,6 +185,10 @@ class Analyzer:
     def _get_frequencies(self, county_id, class_name):
         if county_id not in self.frequencies:
             self.frequencies[county_id] = {}
+
+        if class_name in cfg.infer.ebird_names:
+            # switch to the name that eBird uses
+            class_name = cfg.infer.ebird_names[class_name]
 
         if class_name in self.frequencies[county_id]:
             return self.frequencies[county_id][class_name]
@@ -362,12 +367,9 @@ class Analyzer:
         self._get_predictions(signal, rate)
 
         # do pre-processing for individual species
-        self.species_handlers.reset(self.class_infos, self.offsets, self.raw_spectrograms, self.audio)
+        self.species_handlers.reset(self.class_infos, self.offsets, self.raw_spectrograms, self.audio, self.check_frequency, self.week_num)
         for class_info in self.class_infos:
-            if class_info.ignore or class_info.ebird_frequency_too_low:
-                continue
-
-            if class_info.code in self.species_handlers.handlers:
+            if  not class_info.ignore and class_info.code in self.species_handlers.handlers:
                 self.species_handlers.handlers[class_info.code](class_info)
 
         # generate labels for one class at a time
