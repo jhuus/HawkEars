@@ -1,4 +1,4 @@
-# Base configuration. Specific configurations only have to specify the parameters they"re changing.
+# Base configuration. Specific configurations only have to specify the parameters they're changing.
 
 from dataclasses import dataclass
 
@@ -88,6 +88,7 @@ class Inference:
     file_date_regex_group = 1    # use group at offset 1
     block_size = 100             # do this many spectrograms at a time to avoid running out of GPU memory
     frequency_db = "frequency"   # eBird barchart data, i.e. species report frequencies
+    all_embeddings = True        # if true, generate embeddings for all spectrograms, otherwise only the labelled ones
 
     # These parameters control a second pass during inference.
     # If lower_min_if_confirmed is true, count the number of seconds for a species in a recording,

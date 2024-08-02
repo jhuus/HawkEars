@@ -8,9 +8,11 @@ import logging
 import multiprocessing as mp
 import os
 from pathlib import Path
+import pickle
 import re
 import threading
 import time
+import zlib
 
 import numpy as np
 import pandas as pd
@@ -46,7 +48,8 @@ class Label:
         self.end_time = end_time
 
 class Analyzer:
-    def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region, filelist, debug_mode, merge, overlap, device, thread_num=1):
+    def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region, filelist,
+                 debug_mode, merge, overlap, device, thread_num=1, embed=False):
         self.input_path = input_path.strip()
         self.output_path = output_path.strip()
         self.start_seconds = self._get_seconds_from_time_string(start_time)
@@ -59,6 +62,7 @@ class Analyzer:
         self.debug_mode = debug_mode
         self.overlap = overlap
         self.thread_num = thread_num
+        self.embed = embed
         self.device = device
         self.frequencies = {}
         self.issued_skip_files_warning = False
@@ -290,6 +294,10 @@ class Analyzer:
                 if (self.class_infos[j].scores[-1] >= cfg.infer.min_score):
                     self.class_infos[j].has_label = True
 
+        # if requested, also generate embeddings
+        if self.embed:
+            self.embeddings = self.embed_model.get_embeddings(specs, self.device)
+
     def _get_seconds_from_time_string(self, time_str):
         time_str = time_str.strip()
         if len(time_str) == 0:
@@ -441,19 +449,44 @@ class Analyzer:
                         prev_label = label
 
         self._save_labels(labels, file_path)
+        if self.embed:
+            self._save_embeddings(file_path)
 
     def _save_labels(self, labels, file_path):
         output_path = os.path.join(self.output_path, f'{Path(file_path).stem}_HawkEars.txt')
-        logging.info(f"Thread {self.thread_num}: Writing output to {output_path}")
+        logging.info(f"Thread {self.thread_num}: Writing {output_path}")
         try:
             with open(output_path, 'w') as file:
+                self.offsets_with_labels = {}
                 for label in labels:
                     if label.score > 0: # omit score=0 labels even if min_score=0
                         file.write(f'{label.start_time:.2f}\t{label.end_time:.2f}\t{label.class_name};{label.score:.3f}\n')
 
+                        # save offsets with labels for use when saving embeddings
+                        curr_time = label.start_time
+                        self.offsets_with_labels[label.start_time] = 1
+                        while abs(label.end_time - curr_time - cfg.audio.segment_len) > .001:
+                            curr_time += self.overlap
+                            self.offsets_with_labels[curr_time] = 1
         except:
             logging.error(f"Unable to write file {output_path}")
             quit()
+
+    def _save_embeddings(self, file_path):
+        embedding_list = []
+
+        if cfg.infer.all_embeddings:
+            for i in range(len(self.embeddings)):
+                embedding_list.append([self.offsets[i], zlib.compress(self.embeddings[i])])
+        else:
+            # save embeddings for offsets with labels only
+            for offset in sorted(list(self.offsets_with_labels.keys())):
+                embedding_list.append([offset, zlib.compress(self.embeddings[int(offset / self.overlap)])])
+
+        output_path = os.path.join(self.output_path, f'{Path(file_path).stem}_HawkEars_embeddings.pickle')
+        logging.info(f"Thread {self.thread_num}: Writing {output_path}")
+        pickle_file = open(output_path, 'wb')
+        pickle.dump(embedding_list, pickle_file)
 
     # in debug mode, output the top predictions for the first segment
     def _log_predictions(self, predictions):
@@ -485,6 +518,10 @@ class Analyzer:
             model.eval() # set inference mode
             self.models.append(model)
 
+        if self.embed:
+            self.embed_model = main_model.MainModel.load_from_checkpoint(cfg.misc.search_ckpt_path, map_location=torch.device(self.device))
+            self.embed_model.eval()
+
         self.audio = audio.Audio(device=self.device)
         self.class_infos = self._get_class_infos()
         self._process_location_and_date()
@@ -498,6 +535,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', '--band', type=int, default=1 * cfg.infer.use_banding_codes, help=f"If 1, use banding codes labels. If 0, use common names. Default = {1 * cfg.infer.use_banding_codes}.")
     parser.add_argument('-d', '--debug', default=False, action='store_true', help='Flag for debug mode (analyze one spectrogram only, and output several top candidates).')
+    parser.add_argument('--embed', default=False, action='store_true', help='If specified, generate a pickle file containing embeddings for each recording processed.')
     parser.add_argument('-e', '--end', type=str, default='', help="Optional end time in hh:mm:ss format, where hh and mm are optional.")
     parser.add_argument('-i', '--input', type=str, default='', help="Input path (single audio file or directory). No default.")
     parser.add_argument('-o', '--output', type=str, default='', help="Output directory to contain label files. Default is input path, if that is a directory.")
@@ -536,7 +574,8 @@ if __name__ == '__main__':
     file_list = Analyzer._get_file_list(args.input)
     if num_threads == 1:
         # keep it simple in case multithreading code has undesirable side-effects (e.g. disabling echo to terminal)
-        analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.filelist, args.debug, args.merge, args.overlap, device)
+        analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region,
+                            args.filelist, args.debug, args.merge, args.overlap, device, 1, args.embed)
         analyzer.run(file_list)
     else:
         # split input files into one group per thread
@@ -548,7 +587,8 @@ if __name__ == '__main__':
         processes = []
         for i in range(num_threads):
             if len(file_lists[i]) > 0:
-                analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region, args.filelist, args.debug, args.merge, args.overlap, device, i + 1)
+                analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region,
+                                    args.filelist, args.debug, args.merge, args.overlap, device, i + 1, args.embed)
                 if os.name == "posix":
                     process = mp.Process(target=analyzer.run, args=(file_lists[i], ))
                 else:
