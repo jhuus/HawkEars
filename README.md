@@ -37,10 +37,10 @@ To run analysis (aka inference), type:
 python analyze.py -i <input path> -o <output path>
 ```
 
-The input path can be a directory or a reference to a single audio file, but the output path must be a directory, where the generated Audacity label files will be stored. As a quick first test, try:
+The input path can be a directory or a reference to a single audio file, but the output path must be a directory, where the generated Audacity label files will be stored. If no output directory is specified, output will be saved in the input directory. As a quick first test, try:
 
 ```
-python analyze.py -i test -o test
+python analyze.py -i test
 ```
 
 This will analyze the recording(s) included in the test directory. There are also a number of optional arguments, which you can review by typing:
@@ -49,15 +49,15 @@ This will analyze the recording(s) included in the test directory. There are als
 python analyze.py -h
 ```
 
-Additional arguments include options for specifying latitude and longitude (or region) and recording date. These are useful for reducing false positives. Classes listed (by common name) in data/ignore.txt are ignored during analysis. If you encounter a species that occurs as a frequent false positive, adding it to ignore.txt will ensure that it no longer appears.
+Additional arguments include options for specifying latitude and longitude (or region) and recording date. These are useful for reducing false positives. Classes listed (by common name) in data/ignore.txt are ignored during analysis. By default it includes all the non-bird classes and none of the bird classes.
 
-If you don't have access to additional recordings for testing, one good source is [xeno-canto](https://xeno-canto.org/). Recordings there are generally single-species, however, and therefore somewhat limited. A source of true field recordings, generally with multiple species, is the [Hamilton Bioacoustics Field Recordings](https://archive.org/details/hamiltonbioacousticsfieldrecordings).
+If you don't have access to additional recordings for testing, one good source is [xeno-canto](https://xeno-canto.org/). Recordings there are generally single-species, however, and therefore somewhat limited. One source of true field recordings, generally with multiple species, is the [Hamilton Bioacoustics Field Recordings](https://archive.org/details/hamiltonbioacousticsfieldrecordings).
 
 After running analysis, you can view the output by opening an audio file in Audacity, clicking File / Import / Labels and selecting the generated label file. Audacity should then look something like this:
 
 ![](audacity-labels.png)
 
-By default, species are identified using [4-letter banding codes](https://www.birdpop.org/pages/birdSpeciesCodes.php), but common names can be shown instead using the "-b 0" argument. The numeric suffix on each label is a confidence level, which is not the same as a statistical probability.
+By default, species are identified using [4-letter banding codes](https://www.birdpop.org/pages/birdSpeciesCodes.php), but common names can be shown instead using the "-b 0" argument. The numeric suffix on each label is a prediction score, which is not the same as a statistical probability.
 
 To show spectrograms by default in Audacity, click Edit / Preferences / Tracks and set Default View Mode = Spectrogram. You can modify the spectrogram settings under Edit / Preferences / Tracks / Spectrograms.
 
@@ -83,7 +83,7 @@ HawkEars is implemented using PyTorch, with a primary model ensemble and a separ
 Spectrograms are extracted from audio files in core/audio.py. The primary models use a mel transform, but the low band model uses linear spectrograms. Spectrogram parameters are specified in core/base_config.py. Training spectrograms are compressed and saved to a SQLite database, but this is not done during inference. The script tools/pickle_spec.py generates a pickle file from spectrograms in a database, given a list of classes. The training code gets input from the pickle file. This improves training performance and makes it easier to share datasets.
 
 ### Configuration Management
-Configuration parameters, including training hyperparameters, are specified with default settings in core/base_config.py. Groups of alternate settings are specified in core/configs.py. Each group is given a name, so it can be selected using a command-line parameter.
+Configuration parameters, including training hyperparameters, are specified with default settings in core/base_config.py. Groups of alternate settings are specified in core/configs.py. Each group is given a name, so it can be selected using a command-line parameter when running training (this feature is not currently available for inference).
 
 ### TensorFlow Version
 HawkEars was initially developed using TensorFlow. That code is still available [here](https://github.com/jhuus/HawkEars-TensorFlow). The TensorFlow version is no longer maintained though.
