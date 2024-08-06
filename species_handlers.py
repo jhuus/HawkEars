@@ -17,6 +17,7 @@ class Species_Handlers:
         self.handlers = {
             'BOOW': self.check_soundalike_with_location,
             'BWHA': self.check_soundalike_no_location,
+            'CBCH': self.check_soundalike_with_location,
             #'LALO': self.check_amplitude,
             #'PIGR': self.check_amplitude,
             'RUGR': self.ruffed_grouse,
@@ -36,6 +37,7 @@ class Species_Handlers:
         # for the check_soundalike_with_location case
         self.check_soundalike2_config = {
             'BOOW': SimpleNamespace(soundalike_code='WISN', min_score=.1, min_common=.005, max_rare=.0001),
+            'CBCH': SimpleNamespace(soundalike_code='BCCH', min_score=0, min_common=.1, max_rare=.0001),
         }
 
         self.device = device
@@ -137,6 +139,8 @@ class Species_Handlers:
                     # soundalike species (e.g. WISN) is common and class species (e.g. BOOW) is rare,
                     # and soundalike score is below class_info and above config.min_score, so change it to the soundalike
                     soundalike_info.scores[i] = class_info.scores[i]
+                    soundalike_info.is_label[i] = True
+                    soundalike_info.has_label = True
                     class_info.scores[i] = 0
 
     # Use the low band spectrogram and model to check for Ruffed Grouse drumming.
