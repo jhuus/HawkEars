@@ -726,6 +726,43 @@ class Database:
             print(f'Error in database get_spectrogram_embeddings: {e}')
 
     # return IDs and embeddings only
+    # TODO: merge this with get_spectrogram_embeddings_by_subcat_name
+    def get_spectrogram_embeddings_by_subcat_code(self, subcategory_code, include_ignored=True):
+        try:
+            fields = 'Spectrogram.ID, Embedding'
+
+            if include_ignored:
+                extra_clause = ''
+            else:
+                extra_clause = 'AND Ignore IS NOT "Y"'
+
+            query = f'''
+                SELECT {fields} FROM Spectrogram
+                INNER JOIN Recording ON RecordingID = Recording.ID
+                WHERE RecordingID IN
+                    (SELECT ID FROM Recording WHERE SubcategoryID IN
+                        (SELECT ID FROM Subcategory WHERE Code = "{subcategory_code}"))
+                {extra_clause}
+                ORDER BY Recording.FileName, Offset
+            '''
+
+            cursor = self.conn.cursor()
+            cursor.execute(query)
+            rows = cursor.fetchall()
+
+            results = []
+            for row in rows:
+                id, embedding = row
+
+                result = SimpleNamespace(id=id, embedding=embedding)
+                results.append(result)
+
+            return results
+
+        except sqlite3.Error as e:
+            print(f'Error in database get_spectrogram_embeddings_by_subcat_code: {e}')
+
+    # return IDs and embeddings only
     def get_spectrogram_embeddings_by_subcat_name(self, subcategory_name, include_ignored=True):
         try:
             fields = 'Spectrogram.ID, Embedding'
