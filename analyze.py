@@ -32,11 +32,12 @@ class ClassInfo:
         self.code = code
         self.ignore = ignore
         self.max_frequency = 0
+        self.is_bird = True
         self.reset()
 
     def reset(self):
-        self.has_label = False
         self.ebird_frequency_too_low = False
+        self.has_label = False
         self.scores = [] # predictions (one per segment)
         self.is_label = [] # True iff corresponding offset is a label
 
@@ -48,8 +49,8 @@ class Label:
         self.end_time = end_time
 
 class Analyzer:
-    def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region, filelist,
-                 debug_mode, merge, overlap, device, thread_num=1, embed=False):
+    def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region,
+                 filelist, debug_mode, merge, overlap, device, thread_num=1, embed=False):
         self.input_path = input_path.strip()
         self.output_path = output_path.strip()
         self.start_seconds = self._get_seconds_from_time_string(start_time)
@@ -66,6 +67,7 @@ class Analyzer:
         self.device = device
         self.frequencies = {}
         self.issued_skip_files_warning = False
+        self.have_rarities_directory = False
 
         if cfg.infer.min_score == 0:
             self.merge_labels = False # merging all labels >= min_score makes no sense in this case
@@ -87,6 +89,9 @@ class Analyzer:
                 self.output_path = Path(self.input_path).parent
         elif not os.path.exists(self.output_path):
             os.makedirs(self.output_path)
+
+        # save labels here if they were excluded because of location/date processing
+        self.rarities_output_path = os.path.join(self.output_path, 'rarities')
 
     @staticmethod
     def _get_file_list(input_path):
@@ -129,9 +134,13 @@ class Analyzer:
         self.get_date_from_file_name = False
         self.freq_db = frequency_db.Frequency_DB()
         self.counties = self.freq_db.get_all_counties()
-        self.week_num = None
+        self.ebird_species_names = {}
+        results = self.freq_db.get_all_species()
+        for r in results:
+            self.ebird_species_names[r.name] = 1
 
         # if a location file is specified, use that
+        self.week_num = None
         self.location_date_dict = None
         if self.filelist is not None:
             if os.path.exists(self.filelist):
@@ -210,6 +219,10 @@ class Analyzer:
     def _update_class_frequency_stats(self, counties):
         class_infos = {}
         for class_info in self.class_infos:
+            if not class_info.name in cfg.infer.ebird_names and not class_info.name in self.ebird_species_names:
+                class_info.is_bird = False
+                continue
+
             class_infos[class_info.name] = class_info # copy from list to dict for faster reference
             if not class_info.ignore:
                 # get sums of weekly frequencies for this species across specified counties
@@ -375,7 +388,7 @@ class Analyzer:
         # clear info from previous recording, and mark classes where frequency of eBird reports is too low
         for class_info in self.class_infos:
             class_info.reset()
-            if check_frequency and not class_info.ignore:
+            if check_frequency and class_info.is_bird and not class_info.ignore:
                 if self.week_num is None and not self.get_date_from_file_name:
                     if class_info.max_frequency < cfg.infer.min_location_freq:
                         class_info.ebird_frequency_too_low = True
@@ -397,8 +410,9 @@ class Analyzer:
 
         # generate labels for one class at a time
         labels = []
+        rarities_labels = []
         for class_info in self.class_infos:
-            if class_info.ignore or class_info.ebird_frequency_too_low or not class_info.has_label:
+            if class_info.ignore or not class_info.has_label:
                 continue
 
             if cfg.infer.use_banding_codes:
@@ -409,7 +423,7 @@ class Analyzer:
             # set is_label[i] = True for any offset that qualifies in a first pass
             scores = class_info.scores
             for i in range(len(scores)):
-                if scores[i] < cfg.infer.min_score:
+                if scores[i] < cfg.infer.min_score or scores[i] == 0: # check for -p 0 case
                     continue
 
                 class_info.is_label[i] = True
@@ -445,24 +459,41 @@ class Analyzer:
                         prev_label.score = max(scores[i], prev_label.score)
                     else:
                         label = Label(name, scores[i], self.offsets[i], end_time)
-                        labels.append(label)
+
+                        if class_info.ebird_frequency_too_low:
+                            rarities_labels.append(label)
+                        else:
+                            labels.append(label)
+
                         prev_label = label
 
-        self._save_labels(labels, file_path)
+        self._save_labels(labels, file_path, False)
+        self._save_labels(rarities_labels, file_path, True)
         if self.embed:
             self._save_embeddings(file_path)
 
-    def _save_labels(self, labels, file_path):
-        output_path = os.path.join(self.output_path, f'{Path(file_path).stem}_HawkEars.txt')
+    def _save_labels(self, labels, file_path, rarities):
+        if rarities:
+            if len(labels) == 0:
+                return # don't write to rarities if none for this species
+
+            if not self.have_rarities_directory and not os.path.exists(self.rarities_output_path):
+                os.makedirs(self.rarities_output_path)
+                self.have_rarities_directory = True
+
+            output_path = os.path.join(self.rarities_output_path, f'{Path(file_path).stem}_HawkEars.txt')
+        else:
+            output_path = os.path.join(self.output_path, f'{Path(file_path).stem}_HawkEars.txt')
+
         logging.info(f"Thread {self.thread_num}: Writing {output_path}")
         try:
             with open(output_path, 'w') as file:
-                self.offsets_with_labels = {}
                 for label in labels:
-                    if label.score > 0: # omit score=0 labels even if min_score=0
-                        file.write(f'{label.start_time:.2f}\t{label.end_time:.2f}\t{label.class_name};{label.score:.3f}\n')
+                    file.write(f'{label.start_time:.2f}\t{label.end_time:.2f}\t{label.class_name};{label.score:.3f}\n')
 
+                    if not rarities:
                         # save offsets with labels for use when saving embeddings
+                        self.offsets_with_labels = {}
                         curr_time = label.start_time
                         self.offsets_with_labels[label.start_time] = 1
                         while abs(label.end_time - curr_time - cfg.audio.segment_len) > .001:
@@ -548,7 +579,7 @@ if __name__ == '__main__':
     parser.add_argument('--lon', type=float, default=None, help=f'Longitude. Use with latitude to identify an eBird county and ignore corresponding rarities.')
     parser.add_argument('--filelist', type=str, default=None, help=f'Path to optional CSV file containing input file names, latitudes, longitudes and recording dates.')
     parser.add_argument('--threads', type=int, default=cfg.infer.num_threads, help=f'Number of threads. Default = {cfg.infer.num_threads}')
-    parser.add_argument('-r', '--region', type=str, default=None, help=f'eBird region code, e.g. "CA-AB" for Alberta. Use as an alternative to latitude/longitude.')
+    parser.add_argument('--region', type=str, default=None, help=f'eBird region code, e.g. "CA-AB" for Alberta. Use as an alternative to latitude/longitude.')
     args = parser.parse_args()
 
     level = logging.DEBUG if args.debug else logging.INFO
