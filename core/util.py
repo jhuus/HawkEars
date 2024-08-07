@@ -166,6 +166,6 @@ def labels_to_list(input_path, unmerge=True):
                 while abs(end_offset - current - cfg.audio.segment_len) > fuzz_factor and current < end_offset:
                     unmerged = True
                     current += cfg.infer.spec_overlap_seconds
-                    label_list.append(SimpleNamespace(file_prefix=file_prefix, species=species, offset=current, score=score))
+                    label_list.append(SimpleNamespace(file_prefix=file_prefix, species=species, start=current, end=current + cfg.audio.segment_len, score=score))
 
     return label_list, unmerged
