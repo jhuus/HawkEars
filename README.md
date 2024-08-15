@@ -40,7 +40,7 @@ python analyze.py -i <input path> -o <output path>
 The input path can be a directory or a reference to a single audio file, but the output path must be a directory, where the generated Audacity label files will be stored. If no output directory is specified, output will be saved in the input directory. As a quick first test, try:
 
 ```
-python analyze.py -i test
+python analyze.py -i recordings
 ```
 
 This will analyze the recording(s) included in the test directory. There are also a number of optional arguments, which you can review by typing:
