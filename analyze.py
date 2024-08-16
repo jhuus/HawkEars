@@ -491,7 +491,7 @@ class Analyzer:
                 for label in labels:
                     file.write(f'{label.start_time:.2f}\t{label.end_time:.2f}\t{label.class_name};{label.score:.3f}\n')
 
-                    if not rarities:
+                    if self.embed and not rarities:
                         # save offsets with labels for use when saving embeddings
                         self.offsets_with_labels = {}
                         curr_time = label.start_time
