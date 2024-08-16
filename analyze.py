@@ -497,7 +497,11 @@ class Analyzer:
                         curr_time = label.start_time
                         self.offsets_with_labels[label.start_time] = 1
                         while abs(label.end_time - curr_time - cfg.audio.segment_len) > .001:
-                            curr_time += self.overlap
+                            if self.overlap > 0:
+                                curr_time += self.overlap
+                            else:
+                                curr_time += cfg.audio.segment_len
+
                             self.offsets_with_labels[curr_time] = 1
         except:
             logging.error(f"Unable to write file {output_path}")
