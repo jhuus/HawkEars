@@ -642,7 +642,7 @@ class Database:
         except sqlite3.Error as e:
             print(f'Error in database get_spectrogram_by_recid_and_offset: {e}')
 
-    def get_spectrogram_by_subcat_name(self, subcategory_name, include_audio=False, include_embedding=False, include_ignored=False):
+    def get_spectrogram_by_subcat_name(self, subcategory_name, include_audio=False, include_embedding=False, include_ignored=False, limit=None):
         try:
             fields = 'Spectrogram.ID, RecordingID, Recording.FileName, Value, Offset, Ignore, SoundTypeID'
             if include_audio:
@@ -655,6 +655,11 @@ class Database:
             else:
                 extra_clause = 'AND Ignore IS NOT "Y"'
 
+            if limit is None:
+                limit_clause = ''
+            else:
+                limit_clause = f'LIMIT {limit}'
+
             query = f'''
                 SELECT {fields} FROM Spectrogram
                 INNER JOIN Recording ON RecordingID = Recording.ID
@@ -663,6 +668,7 @@ class Database:
                         (SELECT ID FROM Subcategory WHERE Name = "{subcategory_name}"))
                 {extra_clause}
                 ORDER BY Recording.FileName, Offset
+                {limit_clause}
             '''
 
             cursor = self.conn.cursor()
