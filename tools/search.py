@@ -32,7 +32,7 @@ class SpecInfo:
         self.embedding = embedding
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-e', type=float, default=1.0, help='Raise spectrograms to this exponent to show background sounds. Default = 1.0.')
+parser.add_argument('-e', type=float, default=0.5, help='Raise spectrograms to this exponent to show background sounds. Default = 1.0.')
 parser.add_argument('-f', type=str, default='training', help='Database name (or upper case species code, or HNC).')
 parser.add_argument('-m', type=float, default=0.6, help='Stop plotting when distance exceeds this. Default = 0.6.')
 parser.add_argument('-n', type=int, default=60, help='Number of top matches to plot.')
@@ -55,6 +55,10 @@ max_dist = args.m
 num_to_plot = args.n
 out_dir = args.o
 check_db_name = args.x
+
+if check_db_name is not None and species_name is None and skip_species_name is None:
+    print(f'Error: either -s or -s2 must be specified with the -x parameter')
+    quit()
 
 if not os.path.exists(out_dir):
     os.makedirs(out_dir)
