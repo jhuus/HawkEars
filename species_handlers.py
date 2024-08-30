@@ -19,8 +19,11 @@ class Species_Handlers:
             'BWHA': self.check_soundalike_no_location,
             'CBCH': self.check_soundalike_with_location,
             #'LALO': self.check_amplitude,
+            'MOCH': self.check_soundalike_with_location,
+            'NOPO': self.check_soundalike_with_location,
             #'PIGR': self.check_amplitude,
             'RUGR': self.ruffed_grouse,
+            'YTWA': self.check_soundalike_with_location,
         }
 
         # handler parameters, so it's easy to use the same logic for multiple species
@@ -38,6 +41,9 @@ class Species_Handlers:
         self.check_soundalike2_config = {
             'BOOW': SimpleNamespace(soundalike_code='WISN', min_score=.1, min_common=.005, max_rare=.0001),
             'CBCH': SimpleNamespace(soundalike_code='BCCH', min_score=0, min_common=.1, max_rare=.0001),
+            'MOCH': SimpleNamespace(soundalike_code='BCCH', min_score=0, min_common=.1, max_rare=.0001),
+            'NOPO': SimpleNamespace(soundalike_code='CORA', min_score=.1, min_common=.005, max_rare=.0001),
+            'YTWA': SimpleNamespace(soundalike_code='SWSP', min_score=.1, min_common=.005, max_rare=.0001),
         }
 
         self.device = device
