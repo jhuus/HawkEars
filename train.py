@@ -2,8 +2,6 @@
 
 import argparse
 import logging
-import os
-import random
 import time
 
 from core import cfg, configs, data_module, set_config
@@ -18,9 +16,12 @@ import torch.nn.functional as F
 
 class Trainer:
     def __init__(self):
-        torch.set_float32_matmul_precision('medium') # may improve performance a little
+        torch.set_float32_matmul_precision('medium')
         if not cfg.train.seed is None:
-            pl.seed_everything(cfg.train.seed)
+            pl.seed_everything(cfg.train.seed, workers=True)
+
+        if cfg.train.deterministic:
+            cfg.train.num_workers = 1
 
     def run(self):
         # load all the data once for performance, then split as needed in each fold
@@ -36,6 +37,7 @@ class Trainer:
                 deterministic=cfg.train.deterministic,
                 devices=1 if torch.cuda.is_available() else None,
                 max_epochs=cfg.train.num_epochs,
+                precision='16-mixed' if cfg.train.mixed_precision else 32,
                 logger=TensorBoardLogger(save_dir='logs', name=f'fold-{k}', default_hp_metric=False),
             )
 
