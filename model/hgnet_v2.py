@@ -5,26 +5,26 @@ from timm.models import hgnet
 
 def get_model(model_name, **kwargs):
     if model_name == '1':
-        # custom config with ~1.3M parameters
+        # custom config with ~830K parameters
         config = {
             "stem_type": 'v2',
             "stem_chs": [16, 16],
             # in_chs, mid_chs, out_chs, blocks, downsample, light_block, kernel_size, layer_num
-            "stage1": [16, 16, 64, 1, False, False, 3, 3],
-            "stage2": [64, 32, 128, 1, True, False, 3, 3],
-            "stage3": [128, 64, 256, 2, True, True, 5, 3],
-            "stage4": [256, 64, 384, 1, True, True, 5, 3],
+            "stage1": [16, 16, 32, 1, False, False, 3, 1],
+            "stage2": [32, 32, 64, 1, True, False, 3, 1],
+            "stage3": [64, 64, 128, 2, True, False, 3, 1],
+            "stage4": [128, 64, 256, 1, True, True, 5, 1],
         }
     elif model_name == '2':
-        # custom config with ~2.0M parameters
+        # custom config with ~1.6M parameters
         config = {
             "stem_type": 'v2',
             "stem_chs": [16, 16],
             # in_chs, mid_chs, out_chs, blocks, downsample, light_block, kernel_size, layer_num
-            "stage1": [16, 16, 64, 1, False, False, 3, 3],
-            "stage2": [64, 32, 256, 1, True, False, 3, 3],
-            "stage3": [256, 64, 384, 2, True, True, 5, 3],
-            "stage4": [384, 96, 512, 1, True, True, 5, 3],
+            "stage1": [16, 16, 64, 1, False, False, 3, 1],
+            "stage2": [64, 32, 128, 1, True, False, 3, 1],
+            "stage3": [128, 64, 256, 2, True, True, 5, 1],
+            "stage4": [256, 64, 512, 1, True, True, 5, 1],
         }
     elif model_name == '3A':
         # custom config with ~2.8M parameters
@@ -120,6 +120,7 @@ def get_model(model_name, **kwargs):
     model = hgnet.HighPerfGpuNet(
         cfg=config,
         in_chans=1,
+        use_lab=True,
         **kwargs
     )
 
