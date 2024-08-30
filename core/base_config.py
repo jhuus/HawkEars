@@ -7,12 +7,12 @@ class Audio:
     # sampling rate should be a multiple of spec_width / segment_len,
     # so that hop length formula gives an integer (segment_len * sampling_rate / spec_width)
     segment_len = 3         # spectrogram duration in seconds
-    sampling_rate = 37120
-    hop_length = 290
 
-    win_length = 2048
     spec_height = 192       # spectrogram height
     spec_width = 384        # spectrogram width (3 * 128)
+    sampling_rate = 37120
+    hop_length = int(segment_len * sampling_rate /spec_width)
+    win_length = 2048
     min_audio_freq = 200    # need this low for American Bittern
     max_audio_freq = 13000  # need this high for Chestnut-backed Chickadee "seet series"
 
@@ -31,12 +31,12 @@ class Audio:
 @dataclass
 class Training:
     compile = False
-    mixed_precision = True  # usually improves performance, especially with larger models
+    mixed_precision = False  # usually improves performance, especially with larger models
     multi_label = True
     deterministic = False
     seed = None
     learning_rate = .0025   # base learning rate
-    batch_size = 32
+    batch_size = 64
     model_name = "tf_efficientnetv2_b0" # 5.9M parameters
     load_weights = False    # passed as "weights" to timm.create_model
     use_class_weights = True
@@ -51,7 +51,7 @@ class Training:
     num_epochs = 10
     LR_epochs = None        # default = num_epochs, higher values reduce effective learning rate decay
     save_last_n = 3         # save checkpoints for this many last epochs
-    label_smoothing = 0.15
+    label_smoothing = 0.125
     training_db = "training" # name of training database
     num_folds = 1           # for k-fold cross-validation
     val_portion = 0         # used only if num_folds = 1
@@ -66,14 +66,11 @@ class Training:
     prob_exponent = .25
     prob_shift = 1
     max_shift = 6
-    min_fade = .1
+    min_fade = .05
     max_fade = .8
-    speckle_variance = .009
-    min_exponent = 1
+    speckle_variance = .012
+    min_exponent = 1.0
     max_exponent = 1.6
-    mixup_weights = False
-    mixup_weight_min = .2
-    mixup_weight_max = .8
 
 @dataclass
 class Inference:

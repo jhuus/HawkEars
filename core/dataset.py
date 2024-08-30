@@ -143,16 +143,9 @@ class CustomDataset(Dataset):
 
         other_spec = util.expand_spectrogram(self.spec_df.loc[other_idx, 'spec'])
 
-        if cfg.train.mixup_weights:
-            # combine the two spectrograms and the two labels using mixup logic
-            # but with a uniform distribution instead of the usual beta distribution
-            _lambda = random.uniform(.2, .8)
-            spec = _lambda * spec + (1 - _lambda) * other_spec
-            merged_label = _lambda * label + (1 - _lambda) * self.label[other_idx]
-        else:
-            # combine the two spectrograms and the two labels using a simple unweighted merge
-            spec += other_spec
-            merged_label = label + self.label[other_idx]
+        # combine the two spectrograms and the two labels using a simple unweighted merge
+        spec += other_spec
+        merged_label = label + self.label[other_idx]
 
         return spec, merged_label
 
