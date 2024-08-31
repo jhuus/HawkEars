@@ -120,7 +120,6 @@ def get_model(model_name, **kwargs):
     model = hgnet.HighPerfGpuNet(
         cfg=config,
         in_chans=1,
-        use_lab=True,
         **kwargs
     )
 
