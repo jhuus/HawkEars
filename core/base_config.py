@@ -103,6 +103,31 @@ class Inference:
         "Black-crowned Night Heron": "Black-crowned Night-Heron",
     }
 
+    # Low/high/band-pass filters can be used during inference and have to be enabled and configured here.
+    # Inference will then use the max prediction per species, with and without the filter(s).
+    # Using a single filter adds ~50% to elapsed time for large datasets, but less for small ones where
+    # the overhead of loading models etc. is a bigger factor.
+
+    do_unfiltered = True # set False to run inference with filters only
+
+    # low-pass filter parameters
+    do_lpf = False
+    lpf_damp = 1 # amount of damping, where 0 does nothing and 1 reduces sounds in the filtered range to 0
+    lpf_start_freq = 3500 # start the transition at about this frequency
+    lpf_end_freq = 5000 # end the transition at about this frequency
+
+    # high-pass filter parameters
+    do_hpf = False
+    hpf_damp = .9 # amount of damping, where 0 does nothing and 1 reduces sounds in the filtered range to 0
+    hpf_start_freq = 2000 # start the transition at about this frequency
+    hpf_end_freq = 4000 # end the transition at about this frequency
+
+    # band-pass filter parameters
+    do_bpf = False
+    bpf_damp = .9 # amount of damping, where 0 does nothing and 1 reduces sounds in the filtered range to 0
+    bpf_start_freq = 1200 # bottom frequency for band-pass filter is about here
+    bpf_end_freq = 7000 # top frequency for band-pass filter is about here
+
 @dataclass
 class Miscellaneous:
     main_ckpt_folder = "data/ckpt"      # use an ensemble of all checkpoints in this folder for inference

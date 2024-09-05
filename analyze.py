@@ -17,11 +17,11 @@ import zlib
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn.functional as F
 
 import species_handlers
 from core import audio
 from core import cfg
+from core import filters
 from core import frequency_db
 from core import util
 from model import main_model
@@ -38,8 +38,8 @@ class ClassInfo:
     def reset(self):
         self.ebird_frequency_too_low = False
         self.has_label = False
-        self.scores = [] # predictions (one per segment)
-        self.is_label = [] # True iff corresponding offset is a label
+        self.scores = []     # predictions (one per segment)
+        self.is_label = []   # True iff corresponding offset is a label
 
 class Label:
     def __init__(self, class_name, score, start_time, end_time):
@@ -68,6 +68,15 @@ class Analyzer:
         self.frequencies = {}
         self.issued_skip_files_warning = False
         self.have_rarities_directory = False
+
+        if cfg.infer.do_lpf:
+            self.low_pass_filter = filters.low_pass_filter(cfg.infer.lpf_start_freq, cfg.infer.lpf_end_freq, cfg.infer.lpf_damp)
+
+        if cfg.infer.do_hpf:
+            self.high_pass_filter = filters.high_pass_filter(cfg.infer.hpf_start_freq, cfg.infer.hpf_end_freq, cfg.infer.hpf_damp)
+
+        if cfg.infer.do_bpf:
+            self.band_pass_filter = filters.band_pass_filter(cfg.infer.bpf_start_freq, cfg.infer.bpf_end_freq, cfg.infer.bpf_damp)
 
         if cfg.infer.min_score == 0:
             self.merge_labels = False # merging all labels >= min_score makes no sense in this case
@@ -277,6 +286,24 @@ class Analyzer:
         avg_pred /= len(predictions)
         return avg_pred ** cfg.infer.score_exponent
 
+    # get predictions using a low-pass, high-pass or band-pass filter,
+    # and then set each score to the max of the filtered and unfiltered score
+    def _apply_filter(self, original_specs, filter):
+        specs = original_specs.copy()
+        for i, spec in enumerate(specs):
+            spec = spec.reshape((cfg.audio.spec_height, cfg.audio.spec_width))
+            specs[i] = (spec.T * filter).T
+
+        predictions = self._call_models(specs)
+        for i in range(len(specs)):
+            for j in range(len(self.class_infos)):
+                if self.class_infos[j].ignore:
+                    continue
+
+                self.class_infos[j].scores[i] = max(self.class_infos[j].scores[i], predictions[i][j])
+                if (self.class_infos[j].scores[i] >= cfg.infer.min_score):
+                    self.class_infos[j].has_label = True
+
     def _get_predictions(self, signal, rate):
         # if needed, pad the signal with zeros to get the last spectrogram
         total_seconds = signal.shape[0] / rate
@@ -294,20 +321,35 @@ class Analyzer:
         logging.debug(f"Analyzing from {start_seconds} to {end_seconds} seconds")
         logging.debug(f"Retrieved {len(specs)} spectrograms")
 
-        predictions = self._call_models(specs)
+        if cfg.infer.do_unfiltered:
+            predictions = self._call_models(specs)
 
-        if self.debug_mode:
-            self._log_predictions(predictions)
+            if self.debug_mode:
+                self._log_predictions(predictions)
 
-        # populate class_infos with predictions
+        # populate class_infos with predictions using unfiltered spectrograms
         for i in range(len(self.offsets)):
             for j in range(len(self.class_infos)):
-                self.class_infos[j].scores.append(predictions[i][j])
+                if cfg.infer.do_unfiltered:
+                    self.class_infos[j].scores.append(predictions[i][j])
+                else:
+                    self.class_infos[j].scores.append(0)
+
                 self.class_infos[j].is_label.append(False)
                 if (self.class_infos[j].scores[-1] >= cfg.infer.min_score):
                     self.class_infos[j].has_label = True
 
-        # if requested, also generate embeddings
+        # optionally process low-pass, high-pass and band-pass filters
+        if cfg.infer.do_lpf:
+            self._apply_filter(specs, self.low_pass_filter)
+
+        if cfg.infer.do_hpf:
+            self._apply_filter(specs, self.high_pass_filter)
+
+        if cfg.infer.do_bpf:
+            self._apply_filter(specs, self.band_pass_filter)
+
+        # optionally generate embeddings
         if self.embed:
             self.embeddings = self.embed_model.get_embeddings(specs, self.device)
 
@@ -578,12 +620,30 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--merge', type=int, default=1, help=f'Specify 0 to not merge adjacent labels of same species. Default = 1, i.e. merge.')
     parser.add_argument('-p', '--min_score', type=float, default=cfg.infer.min_score, help=f"Generate label if score >= this. Default = {cfg.infer.min_score}.")
     parser.add_argument('-s', '--start', type=str, default='', help="Optional start time in hh:mm:ss format, where hh and mm are optional.")
+    parser.add_argument('--threads', type=int, default=cfg.infer.num_threads, help=f'Number of threads. Default = {cfg.infer.num_threads}')
+
+    # arguments for location/date processing
     parser.add_argument('--date', type=str, default=None, help=f'Date in yyyymmdd, mmdd, or file. Specifying file extracts the date from the file name, using the file_date_regex in base_config.py.')
     parser.add_argument('--lat', type=float, default=None, help=f'Latitude. Use with longitude to identify an eBird county and ignore corresponding rarities.')
     parser.add_argument('--lon', type=float, default=None, help=f'Longitude. Use with latitude to identify an eBird county and ignore corresponding rarities.')
     parser.add_argument('--filelist', type=str, default=None, help=f'Path to optional CSV file containing input file names, latitudes, longitudes and recording dates.')
-    parser.add_argument('--threads', type=int, default=cfg.infer.num_threads, help=f'Number of threads. Default = {cfg.infer.num_threads}')
     parser.add_argument('--region', type=str, default=None, help=f'eBird region code, e.g. "CA-AB" for Alberta. Use as an alternative to latitude/longitude.')
+
+    # arguments for low-pass, high-pass and band-pass filters
+    parser.add_argument('--unfilt', type=int, default=cfg.infer.do_unfiltered, help=f'Specify 0 to omit unfiltered inference when using filters. If set to 1, use max of filtered and unfiltered predictions (default = {cfg.infer.do_unfiltered}).')
+    parser.add_argument('--lpf', type=int, default=cfg.infer.do_lpf, help=f'Specify 1 to enable low-pass filter (default = {cfg.infer.do_lpf}).')
+    parser.add_argument('--lpfstart', type=int, default=cfg.infer.lpf_start_freq, help=f'Start frequency for low-pass filter curve (default = {cfg.infer.lpf_start_freq}).')
+    parser.add_argument('--lpfend', type=int, default=cfg.infer.lpf_end_freq, help=f'End frequency for low-pass filter curve (default = {cfg.infer.lpf_end_freq}).')
+    parser.add_argument('--lpfdamp', type=float, default=cfg.infer.lpf_damp, help=f'Amount of damping from 0 to 1 for low-pass filter (default = {cfg.infer.lpf_damp}).')
+    parser.add_argument('--hpf', type=int, default=cfg.infer.do_hpf, help=f'Specify 1 to enable high-pass filter (default = {cfg.infer.do_hpf}).')
+    parser.add_argument('--hpfstart', type=int, default=cfg.infer.hpf_start_freq, help=f'Start frequency for high-pass filter curve (default = {cfg.infer.hpf_start_freq}).')
+    parser.add_argument('--hpfend', type=int, default=cfg.infer.hpf_end_freq, help=f'End frequency for high-pass filter curve (default = {cfg.infer.hpf_end_freq}).')
+    parser.add_argument('--hpfdamp', type=float, default=cfg.infer.hpf_damp, help=f'Amount of damping from 0 to 1 for high-pass filter (default = {cfg.infer.hpf_damp}).')
+    parser.add_argument('--bpf', type=int, default=cfg.infer.do_bpf, help=f'Specify 1 to enable band-pass filter (default = {cfg.infer.do_bpf}).')
+    parser.add_argument('--bpfstart', type=int, default=cfg.infer.bpf_start_freq, help=f'Start frequency for band-pass filter curve (default = {cfg.infer.bpf_start_freq}).')
+    parser.add_argument('--bpfend', type=int, default=cfg.infer.bpf_end_freq, help=f'End frequency for band-pass filter curve (default = {cfg.infer.bpf_end_freq}).')
+    parser.add_argument('--bpfdamp', type=float, default=cfg.infer.bpf_damp, help=f'Amount of damping from 0 to 1 for band-pass filter (default = {cfg.infer.bpf_damp}).')
+
     args = parser.parse_args()
 
     level = logging.DEBUG if args.debug else logging.INFO
@@ -605,6 +665,22 @@ if __name__ == '__main__':
         # TODO: use openvino to improve performance when no GPU is available
         device = 'cpu'
         logging.info(f"Using CPU")
+
+    cfg.infer.do_unfiltered = args.unfilt
+    cfg.infer.do_lpf = args.lpf
+    cfg.infer.lpf_start_freq = args.lpfstart
+    cfg.infer.lpf_end_freq = args.lpfend
+    cfg.infer.lpf_damp = args.lpfdamp
+
+    cfg.infer.do_hpf = args.hpf
+    cfg.infer.hpf_start_freq = args.hpfstart
+    cfg.infer.hpf_end_freq = args.hpfend
+    cfg.infer.hpf_damp = args.hpfdamp
+
+    cfg.infer.do_bpf = args.bpf
+    cfg.infer.bpf_start_freq = args.bpfstart
+    cfg.infer.bpf_end_freq = args.bpfend
+    cfg.infer.bpf_damp = args.bpfdamp
 
     file_list = Analyzer._get_file_list(args.input)
     if num_threads == 1:
