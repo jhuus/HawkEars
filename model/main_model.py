@@ -30,6 +30,22 @@ def get_loss_fn(weights):
         # single-label (multi-class) embeddings, usually for binary classifiers
         return torch.nn.CrossEntropyLoss(weight=weights, label_smoothing=cfg.train.label_smoothing)
 
+# https://github.com/facebookresearch/mixup-cifar10/blob/main/train.py
+def mixup(data, targets, alpha=1.0, device='cuda'):
+    '''Returns mixed inputs, pairs of targets, and lambda'''
+    if alpha > 0:
+        lam = np.random.beta(alpha, alpha)
+    else:
+        lam = 1
+
+    batch_size = data.size()[0]
+
+    index = torch.randperm(batch_size).to(device)
+
+    mixed_x = lam * data + (1 - lam) * data[index, :]
+    shuffled_targets = targets[index]
+    return mixed_x, targets, shuffled_targets, lam
+
 class MainModel(LightningModule):
     # This constructor is called in several situations:
     #
@@ -205,8 +221,13 @@ class MainModel(LightningModule):
     # return the loss for a batch
     def training_step(self, batch, batch_idx):
         x, y = batch
-        logits = self(x)
-        loss = get_loss_fn(self.weights)(logits, y)
+        if cfg.train.classic_mixup:
+            x, y, shuffled_y, lam = mixup(x, y, alpha=cfg.train.classic_mixup_alpha, device=self.device)
+            logits = self(x)
+            loss = lam * get_loss_fn(self.weights)(logits, y) + (1 - lam) * get_loss_fn(self.weights)(logits, shuffled_y)
+        else:
+            logits = self(x)
+            loss = get_loss_fn(self.weights)(logits, y)
 
         detached_loss = loss.detach() # necessary to avoid memory leak
         if self.prev_loss is None:
