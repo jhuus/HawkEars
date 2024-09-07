@@ -30,7 +30,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--config', type=str, default="base", help=f'Configuration name. Default = "base".')
 parser.add_argument('-d', '--dbname', type=str, default=cfg.train.training_db, help=f'Database name. Default = "{cfg.train.training_db}".')
 parser.add_argument('-k', '--classes', type=str, default="classes", help=f'Class file name. Default = "classes".')
-parser.add_argument('-m', '--max', type=int, default=None, help=f'If specified, this is maximum number of spectrogram per class (double it for Noise).')
+parser.add_argument('-m', '--max', type=int, default=None, help=f'If specified, this is maximum number of spectrogram per class.')
 parser.add_argument('-o', '--output', type=str, default=f"{output_path}", help=f'Output path. Default = "{output_path}".')
 
 args = parser.parse_args()
@@ -68,8 +68,6 @@ for i in range(len(class_names)):
     count = db.get_spectrogram_count(class_names[i])
     if max_count is None:
         use_count = count
-    elif class_names[i] == 'Noise':
-        use_count = min(count, 2 * max_count)
     else:
         use_count = min(count, max_count)
 
