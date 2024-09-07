@@ -72,7 +72,7 @@ else:
 
 num_plotted = 0
 for r in results:
-    if len(prefix) > 0 and not r.filename.startswith(prefix):
+    if len(prefix) > 0 and not r.filename.lower().startswith(prefix):
         continue
     elif include_file is not None and r.filename not in include_dict:
         continue
