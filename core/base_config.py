@@ -19,7 +19,7 @@ class Audio:
     choose_channel = True   # use heuristic to pick the cleanest audio channel
     check_seconds = 3        # check segment of this length when picking cleanest channel
     mel_scale = True
-    power = 1
+    power = 1.0
     spec_block_seconds = 240 # max seconds of spectrogram to create at a time (limited by GPU memory)
 
     # low-frequency audio settings for Ruffed Grouse drumming identifier
@@ -59,18 +59,21 @@ class Training:
 
     # data augmentation (see core/dataset.py to understand these parameters)
     augmentation = True
-    prob_mixup = 0.35
+    prob_simple_merge = 0.35
     prob_real_noise = 0.3
     prob_speckle = .1
-    prob_fade = .2
-    prob_exponent = .25
+    prob_fade1 = .2
+    prob_fade2 = 1
     prob_shift = 1
     max_shift = 6
-    min_fade = .05
-    max_fade = .8
+    min_fade1 = .05
+    max_fade1 = .8
+    min_fade2 = .1
+    max_fade2 = 1
     speckle_variance = .012
-    min_exponent = 1.0
-    max_exponent = 1.6
+
+    classic_mixup = False # classic mixup is implemented in main_model.py
+    classic_mixup_alpha = 1.0
 
 @dataclass
 class Inference:
@@ -78,6 +81,7 @@ class Inference:
     spec_overlap_seconds = 1.5   # number of seconds overlap for adjacent 3-second spectrograms
     min_score = 0.75             # only generate labels when score is at least this
     score_exponent = .6          # increase scores so they're more like probabilities
+    audio_exponent = .85         # power parameter for mel spectrograms during inference
     use_banding_codes = True     # use banding codes instead of species names in labels
     top_n = 20                   # number of top matches to log in debug mode
     min_location_freq = .0001    # ignore if species frequency less than this for location/week

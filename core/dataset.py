@@ -61,13 +61,20 @@ class CustomDataset(Dataset):
             class_index = self.spec_df.loc[idx, 'class_index'] # could also get this from label
             class_name = self.class_df.loc[class_index, 'name']
 
-            if cfg.train.multi_label and random.uniform(0, 1) < cfg.train.prob_mixup and class_name != 'Noise':
+            self.merged, self.added_noise = False, False
+            if cfg.train.multi_label and random.uniform(0, 1) < cfg.train.prob_simple_merge and class_name != 'Noise':
                 spec, label = self._merge_specs(spec, label, class_name)
+                self.merged = True
 
             if np.max(spec) > 0: # skip augmentation for null spectrograms
                 spec = self._augment(spec)
 
         spec = self._normalize_spec(spec)
+
+        # reducing the max level after normalization improves detection of faint sounds
+        if random.uniform(0, 1) < cfg.train.prob_fade2:
+            spec *= random.uniform(cfg.train.min_fade2, cfg.train.max_fade2)
+
         spec = self.transform(spec)
 
         # apply label smoothing here for multi-label case
@@ -85,17 +92,13 @@ class CustomDataset(Dataset):
     def _augment(self, spec):
         if random.uniform(0, 1) < cfg.train.prob_real_noise:
             spec = self._add_real_noise(spec)
+            self.added_noise = True
         elif random.uniform(0, 1) < cfg.train.prob_speckle:
             spec = self._speckle(spec)
         elif random.uniform(0, 1) < cfg.train.prob_shift:
             spec = self._shift_horizontal(spec)
 
         spec = spec.clip(0, 1) # set negative numbers to 0
-
-        # raise to an exponent so smaller values are relatively reduced
-        if random.uniform(0, 1) < cfg.train.prob_exponent:
-            spec = spec ** random.uniform(cfg.train.min_exponent, cfg.train.max_exponent)
-
         return spec
 
     def _create_transforms(self):
@@ -112,8 +115,8 @@ class CustomDataset(Dataset):
         noise_spec = util.expand_spectrogram(self.spec_df.loc[index, 'spec'])
 
         # fade the spec sometimes if it's not too noisy (so not too many pixels < .05)
-        if random.uniform(0, 1) < cfg.train.prob_fade and np.sum(spec > .05) < 2500:
-            spec *= random.uniform(cfg.train.min_fade, cfg.train.max_fade)
+        if random.uniform(0, 1) < cfg.train.prob_fade1 and np.sum(spec > .05) < 2500:
+            spec *= random.uniform(cfg.train.min_fade1, cfg.train.max_fade1)
 
         spec += noise_spec
         return spec
