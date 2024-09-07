@@ -621,6 +621,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--min_score', type=float, default=cfg.infer.min_score, help=f"Generate label if score >= this. Default = {cfg.infer.min_score}.")
     parser.add_argument('-s', '--start', type=str, default='', help="Optional start time in hh:mm:ss format, where hh and mm are optional.")
     parser.add_argument('--threads', type=int, default=cfg.infer.num_threads, help=f'Number of threads. Default = {cfg.infer.num_threads}')
+    parser.add_argument('--power', type=float, default=cfg.infer.audio_exponent, help=f'Power parameter to mel spectrograms. Default = {cfg.infer.audio_exponent}')
 
     # arguments for location/date processing
     parser.add_argument('--date', type=str, default=None, help=f'Date in yyyymmdd, mmdd, or file. Specifying file extracts the date from the file name, using the file_date_regex in base_config.py.')
@@ -653,6 +654,7 @@ if __name__ == '__main__':
 
     num_threads = args.threads
     cfg.infer.use_banding_codes = args.band
+    cfg.audio.power = args.power
     cfg.infer.min_score = args.min_score
     if cfg.infer.min_score < 0:
         logging.error("Error: min_score must be >= 0")
