@@ -1,24 +1,23 @@
 # These classes are included in training, but ignored in analysis by default (see ignore.txt)
-American Toad,American Toad
-Boreal Chorus Frog,Boreal Chorus Frog
-Bullfrog,Bullfrog
+American Bullfrog,FROG-BULL
+American Toad,TOAD-AMER
+Boreal Chorus Frog,FROG-BOCH
 Canine,Canine
-Boreal Chorus Frog,Boreal Chorus Frog
-Canadian Toad,Canadian Toad
-Gray Treefrog,Treefrog
-Great Plains Toad,Great Plains Toad
-Green Frog,Green Frog
-Leopard Frog,Leopard Frog
+Canadian Toad,TOAD-CANA
+Gray Treefrog,FROG-GRTR
+Great Plains Toad,TOAD-GRPL
+Green Frog,FROG-GREN
+Leopard Frog,FROG-LEOP
 Mashup,Mashup
 Noise,Noise
 Other,Other
-Pickerel Frog,Pickerel Frog
-Plains Spadefoot Toad,Plains Spadefoot Toad
+Pickerel Frog,FROG-PICK
+Plains Spadefoot Toad,TOAD-PLSP
 Rooster,Rooster
-Spring Peeper,Spring Peeper
+Spring Peeper,FROG-PEEP
 Squirrel,Squirrel
-Western Toad,Western Toad
-Wood Frog,Wood Frog
+Western Toad,TOAD-WEST
+Wood Frog,FROG-WOOD
 
 # These bird species are included in the provided model
 Acadian Flycatcher,ACFL
@@ -83,6 +82,7 @@ Brown Creeper,BRCR
 Brown Thrasher,BRTH
 Brown-headed Cowbird,BHCO
 Bufflehead,BUFF
+California Gull,CAGU
 California Quail,CAQU
 Canada Goose,CANG
 Canada Jay,CAJA
@@ -108,6 +108,7 @@ Common Grackle,COGR
 Common Loon,COLO
 Common Merganser,COME
 Common Nighthawk,CONI
+Common Poorwill,COPO
 Common Raven,CORA
 Common Redpoll,CORE
 Common Tern,COTE
@@ -137,6 +138,7 @@ Forster's Tern,FOTE
 Fox Sparrow,FOSP
 Franklin's Gull,FRGU
 Gadwall,GADW
+Golden Eagle,GOEA
 Golden-crowned Kinglet,GCKI
 Golden-crowned Sparrow,GCSP
 Golden-winged Warbler,GWWA
@@ -182,9 +184,11 @@ Lesser Black-backed Gull,LBBG
 Lesser Yellowlegs,LEYE
 Lincoln's Sparrow,LISP
 Loggerhead Shrike,LOSH
+Long-billed Curlew,LBCU
 Long-billed Dowitcher,LBDO
 Long-eared Owl,LEOW
 Long-tailed Duck,LTDU
+Louisiana Waterthrush,LOWA
 MacGillivray's Warbler,MGWA
 Magnolia Warbler,MAWA
 Mallard,MALL
@@ -232,6 +236,7 @@ Prothonotary Warbler,PROW
 Purple Finch,PUFI
 Purple Martin,PUMA
 Red Crossbill,RECR
+Redhead,REDH
 Red-bellied Woodpecker,RBWO
 Red-breasted Nuthatch,RBNU
 Red-eyed Vireo,REVI
@@ -252,6 +257,7 @@ Rose-breasted Grosbeak,RBGR
 Rough-legged Hawk,RLHA
 Ruby-crowned Kinglet,RCKI
 Ruby-throated Hummingbird,RTHU
+Ruddy Duck,RUDU
 Ruddy Turnstone,RUTU
 Ruffed Grouse,RUGR
 Rufous Hummingbird,RUHU
@@ -282,6 +288,7 @@ Swainson's Hawk,SWHA
 Swainson's Thrush,SWTH
 Swamp Sparrow,SWSP
 Tennessee Warbler,TEWA
+Thick-billed Longspur,TBLO
 Townsend's Solitaire,TOSO
 Townsend's Warbler,TOWA
 Tree Swallow,TRES
