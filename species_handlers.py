@@ -15,30 +15,30 @@ class Species_Handlers:
     def __init__(self, device):
         # update this dictionary to enable/disable handlers
         self.handlers = {
-            'BOOW': self.check_soundalike_with_location,
-            'BWHA': self.check_soundalike_no_location,
-            'CBCH': self.check_soundalike_with_location,
-            #'LALO': self.check_amplitude,
-            'MOCH': self.check_soundalike_with_location,
-            'NOPO': self.check_soundalike_with_location,
-            #'PIGR': self.check_amplitude,
+            'BOOW': self.soundalike_with_location,
+            'BWHA': self.soundalike_no_location,
+            'CBCH': self.soundalike_with_location,
+            #'LALO': self.amplitude,
+            'MOCH': self.soundalike_with_location,
+            'NOPO': self.soundalike_with_location,
+            #'PIGR': self.amplitude,
             'RUGR': self.ruffed_grouse,
-            'YTWA': self.check_soundalike_with_location,
+            'YTWA': self.soundalike_with_location,
         }
 
         # handler parameters, so it's easy to use the same logic for multiple species
-        self.check_amplitude_config = {
+        self.amplitude_config = {
             'LALO': SimpleNamespace(low_freq=.49, high_freq=.69, min_ratio=.15),
             'PIGR': SimpleNamespace(low_freq=.46, high_freq=.56, min_ratio=.15),
         }
 
-        # for the check_soundalike_no_location case
-        self.check_soundalike1_config = {
+        # for the soundalike_no_location case
+        self.soundalike_no_location_config = {
             'BWHA': SimpleNamespace(soundalike_code='WTSP', min_score=.25)
         }
 
-        # for the check_soundalike_with_location case
-        self.check_soundalike2_config = {
+        # for the soundalike_with_location case
+        self.soundalike_with_location_config = {
             'BOOW': SimpleNamespace(soundalike_code='WISN', min_score=.1, min_common=.005, max_rare=.0001),
             'CBCH': SimpleNamespace(soundalike_code='BCCH', min_score=0, min_common=.1, max_rare=.0001),
             'MOCH': SimpleNamespace(soundalike_code='BCCH', min_score=0, min_common=.1, max_rare=.0001),
@@ -69,11 +69,11 @@ class Species_Handlers:
     # Handle cases where a faint vocalization is mistaken for another species.
     # For example, distant songs of American Robin and similar-sounding species are sometimes mistaken for Pine Grosbeak,
     # so we ignore Pine Grosbeak sounds that are too quiet.
-    def check_amplitude(self, class_info):
+    def amplitude(self, class_info):
         if not class_info.has_label:
             return
 
-        config = self.check_amplitude_config[class_info.code]
+        config = self.amplitude_config[class_info.code]
         low_index = int(config.low_freq * cfg.audio.spec_height)   # bottom of frequency range
         high_index = int(config.high_freq * cfg.audio.spec_height) # top of frequency range
 
@@ -94,11 +94,11 @@ class Species_Handlers:
     # Handle cases where one species is frequently mistaken for another, independently of location/date processing.
     # For example, a fragment of a White-throated Sparrow song is sometimes mistaken for a Broad-winged Hawk.
     # This logic checks if the current or previous label has a significant possibility of being the sound-alike.
-    def check_soundalike_no_location(self, class_info):
+    def soundalike_no_location(self, class_info):
         if not class_info.has_label:
             return
 
-        config = self.check_soundalike1_config[class_info.code]
+        config = self.soundalike_no_location_config[class_info.code]
         if config.soundalike_code not in self.class_infos:
             return # must be using a subset of the full species list
 
@@ -117,11 +117,11 @@ class Species_Handlers:
     # For example, Wilson's Snipe songs are similar to Boreal Owl songs.
     # If a Boreal Owl is identified in an area where it is rare and Wilson's Snipe is not,
     # and the Wilson's Snipe score is above a (low) threshold, call it a Wilson's Snipe.
-    def check_soundalike_with_location(self, class_info):
+    def soundalike_with_location(self, class_info):
         if not self.check_frequency or not class_info.has_label:
             return
 
-        config = self.check_soundalike2_config[class_info.code]
+        config = self.soundalike_with_location_config[class_info.code]
         if config.soundalike_code not in self.class_infos:
             return # must be using a subset of the full species list
 
