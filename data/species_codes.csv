@@ -61,6 +61,7 @@ Brown Creeper,BRCR,brncre
 Brown Thrasher,BRTH,brnthr
 Brown-headed Cowbird,BHCO,bnhcow
 Bufflehead,BUFF,buffle
+California Gull,CAGU,calgul
 California Quail,CAQU,calqua
 Canada Goose,CANG,cangoo
 Canada Jay,CAJA,gryjay
@@ -86,6 +87,7 @@ Common Grackle,COGR,comgra
 Common Loon,COLO,comloo
 Common Merganser,COME,commer
 Common Nighthawk,CONI,comnig
+Common Poorwill,COPO,compoo
 Common Raven,CORA,comrav
 Common Redpoll,CORE,comred
 Common Tern,COTE,comter
@@ -115,6 +117,7 @@ Forster's Tern,FOTE,forter
 Fox Sparrow,FOSP,foxspa
 Franklin's Gull,FRGU,fragul
 Gadwall,GADW,gadwal
+Golden Eagle,GOEA,goleag
 Golden-crowned Kinglet,GCKI,gockin
 Golden-crowned Sparrow,GCSP,gocspa
 Golden-winged Warbler,GWWA,gowwar
@@ -160,9 +163,11 @@ Lesser Black-backed Gull,LBBG,lbbgul
 Lesser Yellowlegs,LEYE,lesyel
 Lincoln's Sparrow,LISP,linspa
 Loggerhead Shrike,LOSH,logshr
+Long-billed Curlew,LBCU,lobcur
 Long-billed Dowitcher,LBDO,lobdow
 Long-eared Owl,LEOW,loeowl
 Long-tailed Duck,LTDU,lotduc
+Louisiana Waterthrush,LOWA,louwat
 MacGillivray's Warbler,MGWA,macwar
 Magnolia Warbler,MAWA,magwar
 Mallard,MALL,mallar3
@@ -210,6 +215,7 @@ Prothonotary Warbler,PROW,prowar
 Purple Finch,PUFI,purfin
 Purple Martin,PUMA,purmar
 Red Crossbill,RECR,redcro
+Redhead,REDH,redhea
 Red-bellied Woodpecker,RBWO,rebwoo
 Red-breasted Nuthatch,RBNU,rebnut
 Red-eyed Vireo,REVI,reevir1
@@ -230,6 +236,7 @@ Rose-breasted Grosbeak,RBGR,robgro
 Rough-legged Hawk,RLHA,rolhaw
 Ruby-crowned Kinglet,RCKI,ruckin
 Ruby-throated Hummingbird,RTHU,rthhum
+Ruddy Duck,RUDU,rudduc
 Ruddy Turnstone,RUTU,rudtur
 Ruffed Grouse,RUGR,rufgro
 Rufous Hummingbird,RUHU,rufhum
@@ -260,6 +267,7 @@ Swainson's Hawk,SWHA,swahaw
 Swainson's Thrush,SWTH,swathr
 Swamp Sparrow,SWSP,swaspa
 Tennessee Warbler,TEWA,tenwar
+Thick-billed Longspur,TBLO,mcclon
 Townsend's Solitaire,TOSO,towsol
 Townsend's Warbler,TOWA,towwar
 Tree Swallow,TRES,treswa
