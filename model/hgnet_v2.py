@@ -92,6 +92,17 @@ def get_model(model_name, **kwargs):
             "stage3": [256, 96, 512, 3, True, True, 5, 4],
             "stage4": [512, 192, 1024, 1, True, True, 5, 4],
         }
+    elif model_name == '7B':
+        # same as #7 except for larger kernels
+        config = {
+            "stem_type": 'v2',
+            "stem_chs": [24, 32],
+            # in_chs, mid_chs, out_chs, blocks, downsample, light_block, kernel_size, layer_num
+            "stage1": [32, 32, 64, 1, False, False, 5, 4],
+            "stage2": [64, 48, 256, 1, True, False, 5, 4],
+            "stage3": [256, 96, 512, 3, True, True, 7, 4],
+            "stage4": [512, 192, 1024, 1, True, True, 7, 4],
+        }
     elif model_name == '8':
         # custom config with ~6.1M parameters
         config = {
