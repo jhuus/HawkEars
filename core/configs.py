@@ -22,7 +22,9 @@ class Low_Band(base_config.BaseConfig):
         self.train.augmentation = True
         self.train.prob_real_noise = 0
         self.prob_shift = .2
-        self.train.prob_exponent = 0
+        self.train.prob_speckle = 0
+        self.train.prob_fade1 = 0
+        self.train.prob_fade2 = 0
         self.train.label_smoothing = 0.15
         self.train.deterministic = False
         self.train.learning_rate = .001
