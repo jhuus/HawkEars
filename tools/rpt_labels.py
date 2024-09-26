@@ -3,10 +3,9 @@
 # column per species identified.
 
 import argparse
-import glob
 import inspect
 import os
-from pathlib import Path
+import pandas as pd
 import sys
 
 # this is necessary before importing from a peer directory
@@ -14,18 +13,17 @@ currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentfram
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 
-from core import cfg
 from core import util
-
-import pandas as pd
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', '--input', type=str, default='', help="Input path (directory containing text files). No default.")
 parser.add_argument('-o', '--output', type=str, default=None, help="Output directory (required).")
+parser.add_argument('-t', '--threshold', type=float, default=0, help="Ignore labels with score less than this.")
 args = parser.parse_args()
 
 input_path = args.input
 output_path = args.output
+threshold = args.threshold
 
 if output_path is None:
     print("Required -o argument is missing")
@@ -34,35 +32,11 @@ if output_path is None:
 if not os.path.exists(output_path):
     os.makedirs(output_path)
 
-'''
-species_count = {}
-file_info = {}
-label_list, _ = util.labels_to_list(input_path, unmerge=False)
-for item in label_list:
-    if item.score < cfg.infer.min_score:
-        continue
-
-    if item.species not in species_count:
-        species_count[item.species] = 0
-
-    species_count[item.species] += 1
-
-    if item.file_prefix not in file_info:
-        file_info[item.file_prefix] = {}
-
-    if item.species not in file_info[item.file_prefix]:
-        file_info[item.file_prefix][item.species] = 0
-
-    file_info[item.file_prefix][item.species] += 1
-
-species_names = sorted(species_count.keys())
-'''
-
 # get dict with list of labels per file/species
 label_dict = {}
 label_list, _ = util.labels_to_list(input_path, unmerge=False)
 for label in label_list:
-    if label.score < cfg.infer.min_score:
+    if label.score < threshold:
         continue
 
     if label.file_prefix not in label_dict:
