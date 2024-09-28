@@ -6,7 +6,8 @@ American Bittern,AMBI,amebit
 American Coot,AMCO,y00475
 American Crow,AMCR,amecro
 American Golden-Plover,AMGP,amgplo
-American Goldfinch,AMGO,amegfi
+American Goldfinch,AGOL,amegfi
+American Goshawk,AGOS,norgos
 American Kestrel,AMKE,amekes
 American Pipit,AMPI,amepip
 American Redstart,AMRE,amered
@@ -183,7 +184,6 @@ Nashville Warbler,NAWA,naswar
 Nelson's Sparrow,NESP,nstspa
 Northern Cardinal,NOCA,norcar
 Northern Flicker,NOFL,norfli
-Northern Goshawk,NOGO,norgos
 Northern Harrier,NOHA,norhar2
 Northern Hawk Owl,NHOW,nohowl
 Northern Parula,NOPA,norpar
@@ -215,7 +215,6 @@ Prothonotary Warbler,PROW,prowar
 Purple Finch,PUFI,purfin
 Purple Martin,PUMA,purmar
 Red Crossbill,RECR,redcro
-Redhead,REDH,redhea
 Red-bellied Woodpecker,RBWO,rebwoo
 Red-breasted Nuthatch,RBNU,rebnut
 Red-eyed Vireo,REVI,reevir1
@@ -227,6 +226,7 @@ Red-shouldered Hawk,RSHA,reshaw
 Red-tailed Hawk,RTHA,rethaw
 Red-throated Loon,RTLO,retloo
 Red-winged Blackbird,RWBL,rewbla
+Redhead,REDH,redhea
 Ring-billed Gull,RBGU,ribgul
 Ring-necked Duck,RNDU,rinduc
 Ring-necked Pheasant,RNEP,rinphe1
