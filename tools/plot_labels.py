@@ -19,9 +19,10 @@ from core import plot
 from core import util
 
 class Main:
-    def __init__(self, audio_folder, label_folder, output_folder, species):
+    def __init__(self, audio_folder, label_folder, min_score, output_folder, species):
         self.audio_folder = audio_folder
         self.label_folder = os.path.join(audio_folder, label_folder)
+        self.min_score = min_score
         self.output_folder = output_folder
         if not os.path.exists(self.output_folder):
             os.mkdir(self.output_folder)
@@ -34,8 +35,8 @@ class Main:
         label_list, _ = util.labels_to_list(self.label_folder)
         count = 0
         for label in label_list:
-            if label.score < cfg.infer.min_score:
-                continue # only plot if score >= threshold
+            if label.score < self.min_score:
+                continue # only plot if score >= specified threshold
 
             if label.species != self.species:
                 continue # only plot the requested species
@@ -73,6 +74,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', type=str, default=None, help=f'Folder containing audio files (required).')
     parser.add_argument('-L', type=str, default=None, help=f'Name of sub-folder containing labels (required).')
+    parser.add_argument('-m', type=float, default=cfg.infer.min_score, help=f'Only plot if prediction is at least this. Default = {cfg.infer.min_score}')
     parser.add_argument('-o', type=str, default=None, help=f'Output folder (required).')
     parser.add_argument('-s', type=str, default=None, help=f'Species code (required).')
 
@@ -82,5 +84,5 @@ if __name__ == '__main__':
         print("All four parameters are required.")
         quit()
 
-    Main(args.d, args.L, args.o, args.s).run()
+    Main(args.d, args.L, args.m, args.o, args.s).run()
 
