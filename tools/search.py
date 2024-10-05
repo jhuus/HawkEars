@@ -33,7 +33,7 @@ class SpecInfo:
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-e', type=float, default=0.5, help='Raise spectrograms to this exponent to show background sounds. Default = 1.0.')
-parser.add_argument('-f', type=str, default='training', help='Database name (or upper case species code, or HNC).')
+parser.add_argument('-f', type=str, default='training', help='Database name.')
 parser.add_argument('-m', type=float, default=0.6, help='Stop plotting when distance exceeds this. Default = 0.6.')
 parser.add_argument('-n', type=int, default=60, help='Number of top matches to plot.')
 parser.add_argument('-o', type=str, default='output', help='Output directory for plotting matches.')
@@ -89,16 +89,7 @@ image_path = os.path.join(out_dir, f'0~{audio_file_name}-{target_offset:.2f}~0.0
 plot.plot_spec(target_spec ** exponent, image_path)
 
 # get spectrograms from the database
-
-# Upper-case 4-letter db names are assumed to refer to $(DATA_DIR)/{code}/{code}.db;
-# e.g. "AMRO" refers to $(DATA_DIR)/AMRO/AMRO.db.
-# Otherwise we assume it refers to ../data/{db name}.db.
-data_dir = os.environ.get('DATA_DIR')
-if data_dir is not None and len(db_name) == 4 and db_name.isupper():
-    # db name is a species code (or dummy species code in some cases)
-    db_path = f"{data_dir}/{db_name}/{db_name}.db"
-else:
-    db_path = (f"../data/{db_name}.db")
+db_path = (f"../data/{db_name}.db")
 
 print(f"Opening database to search at {db_path}")
 db = database.Database(db_path)
