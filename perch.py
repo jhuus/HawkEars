@@ -1,17 +1,23 @@
 # Run inference using the Google "Perch" classifier: https://www.kaggle.com/models/google/bird-vocalization-classifier
-# Load Perch from the Kitzes Lab Model Zoo: https://github.com/kitzeslab/bioacoustics-model-zoo
 # Output Audacity labels in the format used by HawkEars, including only those species
 # supported by HawkEars.
 # Perch outputs 6-letter species codes, but convert those to the 4-letter codes used by HawkEars.
+#
+# Before running this, the following setup is needed:
+#    pip install opensoundscape
+#    pip install tensorflow
+#    pip install tensorflow_hub
+#
+# If you get "libdevice not found" errors, you may need a command like this:
+#    export XLA_FLAGS=--xla_gpu_cuda_data_dir=/usr/lib/cuda/
 
 import argparse
 import logging
-import multiprocessing as mp
 import os
 from pathlib import Path
-import threading
 import time
 
+from opensoundscape.ml import bioacoustics_model_zoo as bmz
 import pandas as pd
 import torch
 
@@ -66,7 +72,7 @@ class Analyzer:
             for key in row.keys():
                 if key in self.species_info:
                     score = torch.sigmoid(torch.Tensor([row[key]]))[0]
-                    if score >= cfg.infer.min_score:
+                    if score >= cfg.infer.min_score and score > 0.005:
                         label = Label(self.species_info[key][1], score, start_offset, end_offset)
                         labels.append(label)
 
@@ -90,7 +96,7 @@ class Analyzer:
         for i, row in df.iterrows():
             self.species_info[row["CODE6"]] = (row["COMMON_NAME"], row["CODE4"])
 
-        self.model = torch.hub.load("kitzeslab/bioacoustics-model-zoo", "Perch")
+        self.model = bmz.load("Perch")
         file_list = self._get_file_list(self.input_path)
         for file_path in file_list:
             self._analyze_file(file_path)
