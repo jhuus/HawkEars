@@ -121,7 +121,7 @@ class PerSoundTester(BaseTester):
 
             if recording in self.annotations: # some recordings may have no annotations
                 for annotation in self.annotations[recording]:
-                    segments = self.get_segments(annotation.start_time, annotation.end_time)
+                    segments = self.get_segments(annotation.start_time, annotation.end_time, segment_len=cfg.audio.segment_len)
                     for segment in segments:
                         segment_dict[recording][segment][annotation.species] = 1
 
@@ -481,6 +481,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', type=str, default='test_results1', help='Name of output directory.')
     parser.add_argument('-r', '--recordings', type=str, default=None, help='Recordings directory.')
     parser.add_argument('-s', '--species', type=str, default=None, help='If specified, include only this species (default = None).')
+    parser.add_argument('--slen', type=float, default=cfg.audio.segment_len, help=f'Segment length. Default = {cfg.audio.segment_len}.')
     parser.add_argument('-t', '--threshold', type=float, default=cfg.infer.min_score, help=f'Provide detailed reports for this threshold (default = {cfg.infer.min_score})')
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s.%(msecs)03d %(message)s', datefmt='%H:%M:%S')
@@ -492,6 +493,7 @@ if __name__ == '__main__':
     recording_dir = args.recordings
     report_species = args.species
     threshold = args.threshold
+    cfg.audio.segment_len = args.slen
 
     if annotation_path is None or recording_dir is None:
         logging.error(f"Error: both the annotation path (-a) and recording directory (-r) parameters are required.")
