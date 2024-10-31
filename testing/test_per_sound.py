@@ -41,30 +41,36 @@ class Annotation:
         self.end_time = end_time
         self.species = species
 
+# The command-line arguments allow you to specify only one annotation_path and recording_dir,
+# but we support a list of each so other scripts can call this one to combine tests.
+# If multiple directories are used, we assume no two recording names are the same.
 class PerSoundTester(BaseTester):
-    def __init__(self, annotation_path, recording_dir, label_dir, output_dir, threshold, report_species):
+    def __init__(self, annotation_paths, recording_dirs, label_dir, output_dir, threshold, report_species):
         super().__init__()
-        self.annotation_path = annotation_path
-        self.recording_dir = recording_dir
+        self.annotation_paths = annotation_paths
+        self.recording_dirs = recording_dirs
         self.output_dir = output_dir
         self.threshold = threshold
         self.report_species = report_species
 
-        self.label_dir = os.path.join(recording_dir, label_dir)
-        if not os.path.exists(self.label_dir):
-            logging.error(f"Error: directory {self.label_dir} not found.")
-            quit()
+        self.label_dirs = []
+        for recording_dir in self.recording_dirs:
+            self.label_dirs.append(os.path.join(recording_dir, label_dir))
+            if not os.path.exists(self.label_dirs[-1]):
+                logging.error(f"Error: directory {self.label_dirs[-1]} not found.")
+                quit()
 
         # map for cases where old species codes might be used in annotations
         self.map_codes = {'AMGO': 'AGOL', 'NOGO': 'AGOS', 'GRAJ': 'CAJA'}
 
     # create a dict with the duration in seconds of every recording
     def get_recording_info(self):
-        recordings = util.get_audio_files(self.recording_dir)
         self.recording_duration = {}
-        for recording in recordings:
-            duration = librosa.get_duration(path=recording)
-            self.recording_duration[Path(recording).stem] = duration
+        for recording_dir in self.recording_dirs:
+            recordings = util.get_audio_files(recording_dir)
+            for recording in recordings:
+                duration = librosa.get_duration(path=recording)
+                self.recording_duration[Path(recording).stem] = duration
 
     # read CSV files giving ground truth data, and save as a list of Annotation objects
     # in self.annotations[recording] for each recording.
@@ -78,29 +84,30 @@ class PerSoundTester(BaseTester):
         unknown_species = {} # so we only report each unknown species once
         self.annotations = {}
         self.annotated_species_dict = {}
-        df = pd.read_csv(self.annotation_path, dtype={'recording': str})
-        for i, row in df.iterrows():
-            species = row['species']
-            if species in self.map_codes:
-                species = self.map_codes[species]
+        for annotation_path in self.annotation_paths:
+            df = pd.read_csv(annotation_path, dtype={'recording': str})
+            for i, row in df.iterrows():
+                species = row['species']
+                if species in self.map_codes:
+                    species = self.map_codes[species]
 
-            if self.report_species is not None and species != self.report_species:
-                continue # when self.report_species is specified, ignore all others
+                if self.report_species is not None and species != self.report_species:
+                    continue # when self.report_species is specified, ignore all others
 
-            if species not in trained_species_dict:
-                if species not in unknown_species:
-                    logging.warning(f"Unknown species {species} will be ignored")
-                    unknown_species[species] = 1 # so we don't report it again
+                if species not in trained_species_dict:
+                    if species not in unknown_species:
+                        logging.warning(f"Unknown species {species} will be ignored")
+                        unknown_species[species] = 1 # so we don't report it again
 
-                continue # exclude from saved annotations
+                    continue # exclude from saved annotations
 
-            annotation = Annotation(row['start_time'], row['end_time'], species)
-            recording = row['recording']
-            if recording not in self.annotations:
-                self.annotations[recording] = []
+                annotation = Annotation(row['start_time'], row['end_time'], species)
+                recording = row['recording']
+                if recording not in self.annotations:
+                    self.annotations[recording] = []
 
-            self.annotations[recording].append(annotation)
-            self.annotated_species_dict[annotation.species] = 1
+                self.annotations[recording].append(annotation)
+                self.annotated_species_dict[annotation.species] = 1
 
         self.annotated_species = sorted(self.annotated_species_dict.keys())
         self.trained_species = sorted(trained_species_dict.keys())
@@ -113,7 +120,7 @@ class PerSoundTester(BaseTester):
         self.segments_per_recording = {}
         segment_dict = {}
         for recording in self.recording_duration:
-            num_segments = int(math.ceil(self.recording_duration[recording]) / cfg.audio.segment_len)
+            num_segments = int(math.ceil(self.recording_duration[recording] / cfg.audio.segment_len))
             self.segments_per_recording[recording] = [i for i in range(num_segments)]
             segment_dict[recording]= {}
             for segment in range(num_segments):
@@ -434,7 +441,7 @@ class PerSoundTester(BaseTester):
         # initialize y_true and y_pred and save them as CSV files
         logging.info('Initializing')
         self.init_y_true()
-        self.init_y_pred([self.label_dir], self.report_species, segment_len=3, segments_per_recording=self.segments_per_recording)
+        self.init_y_pred(self.label_dirs, self.report_species, segment_len=3, segments_per_recording=self.segments_per_recording)
         if self.labels_overlap:
             logging.error("Error: overlapping labels found.")
             quit()
@@ -499,4 +506,4 @@ if __name__ == '__main__':
         logging.error(f"Error: both the annotation path (-a) and recording directory (-r) parameters are required.")
         quit()
 
-    PerSoundTester(annotation_path, recording_dir, label_dir, output_dir, threshold, report_species).run()
+    PerSoundTester([annotation_path], [recording_dir], label_dir, output_dir, threshold, report_species).run()

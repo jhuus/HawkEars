@@ -289,8 +289,8 @@ class BaseTester:
         ret_dict['precision_annotated'] = metrics.precision_score(self.y_true_annotated, y_pred_annotated, average=average, zero_division=0)
         ret_dict['recall_annotated'] = metrics.recall_score(self.y_true_annotated, y_pred_annotated, average=average, zero_division=0)
 
-        ret_dict['precision_trained'] = metrics.precision_score(self.y_true_trained, y_pred_trained, average=average, zero_division=0)
-        ret_dict['recall_trained'] = metrics.recall_score(self.y_true_trained, y_pred_trained, average=average, zero_division=0)
+        ret_dict['precision_trained'] = metrics.precision_score(self.y_true_trained, y_pred_trained, average='micro', zero_division=0)
+        ret_dict['recall_trained'] = metrics.recall_score(self.y_true_trained, y_pred_trained, average='micro', zero_division=0)
 
         # per-second precision is different from above only if segments used here are longer than label segments
         precision_secs, tp_secs, fp_secs, species_valid, species_invalid = self._calc_precision_in_seconds(threshold, details=details)
