@@ -153,6 +153,7 @@ class PerMinuteTester(BaseTester):
         plt.xlabel('Threshold')
         plt.legend()
         plt.savefig(os.path.join(self.output_dir, f'{name}.png'))
+        plt.close()
 
     # output recall per precision
     def _output_pr_curve(self, precision, recall, name):
@@ -167,6 +168,7 @@ class PerMinuteTester(BaseTester):
         ax.set_xlabel('Precision')
         ax.set_ylabel('Recall')
         plt.savefig(os.path.join(self.output_dir, f'{name}.png'))
+        plt.close()
 
     # output various ROC curves
     def _output_roc_curves(self, threshold, tpr, fpr, precision, recall, suffix):
@@ -182,6 +184,7 @@ class PerMinuteTester(BaseTester):
         ax.set_xlabel('False Positive Rate')
         ax.set_ylabel('True Positive Rate')
         plt.savefig(os.path.join(self.output_dir, f'roc_classic_curve_{suffix}.png'))
+        plt.close()
 
         # flip the axes of the ROC curve so recall is on the x axis and add a precision line
         one_minus_fpr = 1 - fpr
@@ -223,6 +226,7 @@ class PerMinuteTester(BaseTester):
         plt.xlabel('Recall')
         plt.legend()
         plt.savefig(os.path.join(self.output_dir, f'roc_inverted_curve_{suffix}.png'))
+        plt.close()
 
     # calculate area under PR curve from precision = .9 to 1.0, so we can assess performance
     # at the high-precision end of the curve

@@ -178,6 +178,7 @@ class PerSoundTester(BaseTester):
         plt.xlabel('Threshold')
         plt.legend()
         plt.savefig(os.path.join(self.output_dir, f'{name}.png'))
+        plt.close()
 
     # output recall per precision
     def _output_pr_curve(self, precision, recall, name):
@@ -192,6 +193,7 @@ class PerSoundTester(BaseTester):
         ax.set_xlabel('Precision')
         ax.set_ylabel('Recall')
         plt.savefig(os.path.join(self.output_dir, f'{name}.png'))
+        plt.close()
 
     # output various ROC curves
     def _output_roc_curves(self, threshold, tpr, fpr, precision, recall, suffix):
@@ -207,6 +209,7 @@ class PerSoundTester(BaseTester):
         ax.set_xlabel('False Positive Rate')
         ax.set_ylabel('True Positive Rate')
         plt.savefig(os.path.join(self.output_dir, f'roc_classic_curve_{suffix}.png'))
+        plt.close()
 
         # flip the axes of the ROC curve so recall is on the x axis and add a precision line
         one_minus_fpr = 1 - fpr
@@ -248,6 +251,7 @@ class PerSoundTester(BaseTester):
         plt.xlabel('Recall')
         plt.legend()
         plt.savefig(os.path.join(self.output_dir, f'roc_inverted_curve_{suffix}.png'))
+        plt.close()
 
     # calculate area under PR curve from precision = .9 to 1.0, so we can assess performance
     # at the high-precision end of the curve
@@ -327,6 +331,9 @@ class PerSoundTester(BaseTester):
         rpt.append(f"   For threshold = {self.threshold}:\n")
         rpt.append(f"      Precision = {100 * self.details_dict['precision_trained']:.2f}%\n")
         rpt.append(f"      Recall = {100 * self.details_dict['recall_trained']:.2f}%\n")
+        rpt.append("")
+        rpt.append(f"Average of macro-MAP-annotated and micro-MAP-trained = {self.combined_map_score:.4f}\n")
+
         print()
         with open(os.path.join(self.output_dir, "summary_report.txt"), 'w') as summary:
             for rpt_line in rpt:
@@ -478,8 +485,21 @@ class PerSoundTester(BaseTester):
         self.pr_table_dict['trained_precisions'] = precision
         self.pr_table_dict['trained_recalls'] = recall
 
+        self.combined_map_score = (self.map_dict['macro_map'] + self.map_dict['micro_map_trained']) / 2
+
+        # save main stats in a dict to return to caller of this script
+        stats = {}
+        stats['macro_map'] = self.map_dict['macro_map']
+        stats['micro_map_annotated'] = self.map_dict['micro_map_annotated']
+        stats['micro_map_trained'] = self.map_dict['micro_map_trained']
+        stats['combined_map'] = self.combined_map_score
+        stats['macro_roc'] = self.roc_dict['macro_roc']
+        stats['micro_roc_annotated'] = self.roc_dict['micro_roc_annotated']
+        stats['micro_roc_trained'] = self.roc_dict['micro_roc_trained']
+
         logging.info(f'Creating reports in {self.output_dir}')
         self._produce_reports()
+        return stats
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
