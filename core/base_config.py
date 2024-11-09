@@ -136,7 +136,7 @@ class Inference:
 class Miscellaneous:
     main_ckpt_folder = "data/ckpt"      # use an ensemble of all checkpoints in this folder for inference
     low_band_ckpt_path = "data/low_band.ckpt"
-    search_ckpt_path = "data/ckpt-search/custom_efficientnet_5.ckpt" # checkpoint used in searching and clustering
+    search_ckpt_path = "data/ckpt/effnet1.ckpt" # checkpoint used in searching and clustering
     classes_file = "data/classes.txt"   # list of classes used to generate pickle files
     ignore_file = "data/ignore.txt"     # classes listed in this file are ignored in analysis
     train_pickle = None
