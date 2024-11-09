@@ -5,6 +5,7 @@ American Avocet,AMAV,ameavo
 American Bittern,AMBI,amebit
 American Coot,AMCO,y00475
 American Crow,AMCR,amecro
+American Dipper,AMDI,amedip
 American Golden-Plover,AMGP,amgplo
 American Goldfinch,AGOL,amegfi
 American Goshawk,AGOS,norgos
@@ -22,6 +23,7 @@ Baird's Sandpiper,BASA,baisan
 Baird's Sparrow,BAIS,baispa
 Bald Eagle,BAEA,baleag
 Baltimore Oriole,BAOR,balori
+Band-tailed Pigeon,BTPI,batpig1
 Bank Swallow,BANS,banswa
 Barn Owl,BANO,brnowl
 Barn Swallow,BARS,barswa
@@ -30,7 +32,9 @@ Bay-breasted Warbler,BBWA,babwar
 Bell's Vireo,BEVI,belvir
 Belted Kingfisher,BEKI,belkin1
 Bewick's Wren,BEWR,bewwre
+Black Oystercatcher,BLOY,blkoys
 Black Tern,BLTE,blkter
+Black Turnstone,BLTU,blktur
 Black-and-white Warbler,BAWW,bawwar
 Black-backed Woodpecker,BBWO,bkbwoo
 Black-bellied Plover,BBPL,bkbplo
@@ -62,6 +66,8 @@ Brown Creeper,BRCR,brncre
 Brown Thrasher,BRTH,brnthr
 Brown-headed Cowbird,BHCO,bnhcow
 Bufflehead,BUFF,buffle
+Bullock’s Oriole,BUOR,bulori
+Bushtit,BUSH,bushti
 California Gull,CAGU,calgul
 California Quail,CAQU,calqua
 Canada Goose,CANG,cangoo
@@ -71,6 +77,7 @@ Cape May Warbler,CMWA,camwar
 Carolina Wren,CARW,carwre
 Caspian Tern,CATE,caster1
 Cassin's Vireo,CAVI,casvir
+Cassin’s Finch,CAFI,casfin
 Cedar Waxwing,CEDW,cedwax
 Cerulean Warbler,CERW,cerwar
 Chestnut-backed Chickadee,CBCH,chbchi
@@ -87,6 +94,7 @@ Common Goldeneye,COGO,comgol
 Common Grackle,COGR,comgra
 Common Loon,COLO,comloo
 Common Merganser,COME,commer
+Common Murre,COMU,commur
 Common Nighthawk,CONI,comnig
 Common Poorwill,COPO,compoo
 Common Raven,CORA,comrav
@@ -118,6 +126,7 @@ Forster's Tern,FOTE,forter
 Fox Sparrow,FOSP,foxspa
 Franklin's Gull,FRGU,fragul
 Gadwall,GADW,gadwal
+Glaucous-winged Gull,GWGU,glwgul
 Golden Eagle,GOEA,goleag
 Golden-crowned Kinglet,GCKI,gockin
 Golden-crowned Sparrow,GCSP,gocspa
@@ -138,6 +147,7 @@ Greater Yellowlegs,GRYE,greyel
 Green Heron,GRHE,grnher
 Green-winged Teal,GWTE,gnwtea
 Hairy Woodpecker,HAWO,haiwoo
+Hammond’s Flycatcher,HAFL,hamfly
 Harris's Sparrow,HASP,harspa
 Henslow's Sparrow,HESP,henspa
 Hermit Thrush,HETH,herthr
@@ -173,6 +183,7 @@ MacGillivray's Warbler,MGWA,macwar
 Magnolia Warbler,MAWA,magwar
 Mallard,MALL,mallar3
 Marbled Godwit,MAGO,margod
+Marbled Murrelet,MAMU,marmur
 Marsh Wren,MAWR,marwre
 Merlin,MERL,merlin
 Mountain Bluebird,MOBL,moublu
@@ -217,6 +228,7 @@ Purple Martin,PUMA,purmar
 Red Crossbill,RECR,redcro
 Red-bellied Woodpecker,RBWO,rebwoo
 Red-breasted Nuthatch,RBNU,rebnut
+Red-breasted Sapsucker,RBSA,rebsap
 Red-eyed Vireo,REVI,reevir1
 Red-headed Woodpecker,RHWO,rehwoo
 Red-naped Sapsucker,RNSA,rensap
@@ -252,6 +264,7 @@ Semipalmated Sandpiper,SESA,semsan
 Sharp-shinned Hawk,SSHA,shshaw
 Sharp-tailed Grouse,STGR,shtgro
 Short-billed Dowitcher,SBDO,shbdow
+Short-billed Gull,SBIG,mewgul2
 Short-eared Owl,SEOW,sheowl
 Snow Bunting,SNBU,snobun
 Snow Goose,SNGO,snogoo
@@ -276,6 +289,7 @@ Tufted Titmouse,TUTI,tuftit
 Tundra Swan,TUSW,tunswa
 Upland Sandpiper,UPSA,uplsan
 Varied Thrush,VATH,varthr
+Vaux's Swift,VASW,vauswi
 Veery,VEER,veery
 Vesper Sparrow,VESP,vesspa
 Violet-green Swallow,VGSW,vigswa
