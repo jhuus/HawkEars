@@ -66,7 +66,7 @@ class Training:
     prob_fade2 = 1
     prob_shift = 1
     max_shift = 6
-    min_fade1 = .05
+    min_fade1 = .1
     max_fade1 = .8
     min_fade2 = .1
     max_fade2 = 1
