@@ -26,6 +26,7 @@ American Avocet,AMAV
 American Bittern,AMBI
 American Coot,AMCO
 American Crow,AMCR
+American Dipper,AMDI
 American Golden-Plover,AMGP
 American Goldfinch,AGOL
 American Kestrel,AMKE
@@ -42,6 +43,7 @@ Baird's Sparrow,BAIS
 Baird's Sandpiper,BASA
 Bald Eagle,BAEA
 Baltimore Oriole,BAOR
+Band-tailed Pigeon,BTPI
 Bank Swallow,BANS
 Barn Owl,BANO
 Barn Swallow,BARS
@@ -50,7 +52,9 @@ Bay-breasted Warbler,BBWA
 Bell's Vireo,BEVI
 Belted Kingfisher,BEKI
 Bewick's Wren,BEWR
+Black Oystercatcher,BLOY
 Black Tern,BLTE
+Black Turnstone,BLTU
 Black-and-white Warbler,BAWW
 Black-backed Woodpecker,BBWO
 Black-bellied Plover,BBPL
@@ -82,6 +86,8 @@ Brown Creeper,BRCR
 Brown Thrasher,BRTH
 Brown-headed Cowbird,BHCO
 Bufflehead,BUFF
+Bullock's Oriole,BUOR
+Bushtit,BUSH
 California Gull,CAGU
 California Quail,CAQU
 Canada Goose,CANG
@@ -90,6 +96,7 @@ Canada Warbler,CAWA
 Cape May Warbler,CMWA
 Carolina Wren,CARW
 Caspian Tern,CATE
+Cassin's Finch,CAFI
 Cassin's Vireo,CAVI
 Cedar Waxwing,CEDW
 Cerulean Warbler,CERW
@@ -107,6 +114,7 @@ Common Goldeneye,COGO
 Common Grackle,COGR
 Common Loon,COLO
 Common Merganser,COME
+Common Murre,COMU
 Common Nighthawk,CONI
 Common Poorwill,COPO
 Common Raven,CORA
@@ -138,6 +146,7 @@ Forster's Tern,FOTE
 Fox Sparrow,FOSP
 Franklin's Gull,FRGU
 Gadwall,GADW
+Glaucous-winged Gull,GWGU
 Golden Eagle,GOEA
 Golden-crowned Kinglet,GCKI
 Golden-crowned Sparrow,GCSP
@@ -158,6 +167,7 @@ Greater Yellowlegs,GRYE
 Green Heron,GRHE
 Green-winged Teal,GWTE
 Hairy Woodpecker,HAWO
+Hammond's Flycatcher,HAFL
 Harris's Sparrow,HASP
 Henslow's Sparrow,HESP
 Hermit Thrush,HETH
@@ -193,6 +203,7 @@ MacGillivray's Warbler,MGWA
 Magnolia Warbler,MAWA
 Mallard,MALL
 Marbled Godwit,MAGO
+Marbled Murrelet,MAMU
 Marsh Wren,MAWR
 Merlin,MERL
 Mountain Bluebird,MOBL
@@ -239,6 +250,7 @@ Red Crossbill,RECR
 Redhead,REDH
 Red-bellied Woodpecker,RBWO
 Red-breasted Nuthatch,RBNU
+Red-breasted Sapsucker,RBSA
 Red-eyed Vireo,REVI
 Red-headed Woodpecker,RHWO
 Red-naped Sapsucker,RNSA
@@ -273,6 +285,7 @@ Semipalmated Sandpiper,SESA
 Sharp-shinned Hawk,SSHA
 Sharp-tailed Grouse,STGR
 Short-billed Dowitcher,SBDO
+Short-billed Gull,SBIG
 Short-eared Owl,SEOW
 Snow Bunting,SNBU
 Snow Goose,SNGO
@@ -297,6 +310,7 @@ Tufted Titmouse,TUTI
 Tundra Swan,TUSW
 Upland Sandpiper,UPSA
 Varied Thrush,VATH
+Vaux's Swift,VASW
 Veery,VEER
 Vesper Sparrow,VESP
 Violet-green Swallow,VGSW
