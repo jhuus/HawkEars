@@ -120,7 +120,9 @@ class PerSoundTester(BaseTester):
         self.segments_per_recording = {}
         segment_dict = {}
         for recording in self.recording_duration:
-            num_segments = int(math.ceil(self.recording_duration[recording] / cfg.audio.segment_len))
+            # calculate num_segments exactly as it's done in analyze.py so they match
+            offsets = np.arange(0, self.recording_duration[recording] - cfg.audio.segment_len + 1.0, cfg.audio.segment_len).tolist()
+            num_segments = len(offsets)
             self.segments_per_recording[recording] = [i for i in range(num_segments)]
             segment_dict[recording]= {}
             for segment in range(num_segments):
@@ -130,7 +132,8 @@ class PerSoundTester(BaseTester):
                 for annotation in self.annotations[recording]:
                     segments = self.get_segments(annotation.start_time, annotation.end_time, segment_len=cfg.audio.segment_len)
                     for segment in segments:
-                        segment_dict[recording][segment][annotation.species] = 1
+                        if segment in segment_dict[recording]:
+                            segment_dict[recording][segment][annotation.species] = 1
 
         # convert to 2D array with a row per segment and a column per species;
         # set cells to 1 if species is present and 0 if not present
