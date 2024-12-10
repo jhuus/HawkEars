@@ -72,13 +72,13 @@ class BaseTester:
     # Unknown species are ignored and missing species are included as all zeros.
     # Make no assumptions about label duration.
     # Save seconds per segment or recording in self.y_pred_seconds so we can calculate per-second precision and recall.
-    def init_y_pred(self, label_paths, report_species=None, per_recording=False, segment_len=3, segments_per_recording=None):
+    def init_y_pred(self, label_paths, per_recording=False, segment_len=3, segments_per_recording=None):
         self.per_recording = per_recording
         if not per_recording:
             self.segment_len = segment_len
             self.segments_per_recording = segments_per_recording
 
-        self._get_labels(label_paths, segment_len, report_species)
+        self._get_labels(label_paths, segment_len)
 
         if self.per_recording:
             self._init_y_pred_per_recording()
@@ -453,7 +453,7 @@ class BaseTester:
     # Read all labels files in the given directories,
     # setting self.labels[recording] = [labels in that file].
     # If report_species is not None, include only that species.
-    def _get_labels(self, label_paths, segment_len, report_species):
+    def _get_labels(self, label_paths, segment_len, report_species=None):
         self.prediction_scores = [] # subclass may want to report on score stats, e.g. median prediction
         self.labels = {}
         for label_path in label_paths:
