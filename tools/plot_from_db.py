@@ -1,4 +1,4 @@
-# Generate a png file for every spectrogram in the database for the given species.
+# Generate an image file for every spectrogram for the specified class/database.
 
 import argparse
 import inspect
@@ -20,26 +20,28 @@ from core import util
 
 # command-line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('-f', type=str, default=f'../data/{cfg.train.training_db}.db', help='Database path.')
-parser.add_argument('-l', type=int, default=0, help='1 = low frequency band (used by Ruffed Grouse drumming detector).')
-parser.add_argument('-m', type=int, default=0, help='Mode 0 = exclude ignored specs, 1 = include ignored, 2 = only ignored. Default = 0.')
-parser.add_argument('-n', type=int, default=0, help='If > 0, stop after this many images. Default = 0.')
-parser.add_argument('-s', type=str, default='', help='Species name.')
-parser.add_argument('-o', type=str, default='', help='Output directory.')
-parser.add_argument('-p', type=str, default='', help='Only plot spectrograms if file name starts with this (case-insensitive).')
-parser.add_argument('--include_file', type=str, default=None, help='Only plot spectrograms if file name is listed in this file.')
-parser.add_argument('-w', type=int, default=0, help='1 = overwrite existing image files.')
+parser.add_argument('-d', '--db', type=str, default=f'../data/{cfg.train.training_db}.db', help='Database path.')
+parser.add_argument('-e', '--exp', type=float, default=.8, help='Raise spectrograms to this exponent.')
+parser.add_argument('-l', '--low', type=int, default=0, help='1 = low frequency band (used by Ruffed Grouse drumming detector).')
+parser.add_argument('-m', '--mode', type=int, default=0, help='Mode 0 = exclude ignored specs, 1 = include ignored, 2 = only ignored. Default = 0.')
+parser.add_argument('-n', '--max', type=int, default=0, help='If > 0, stop after this many images. Default = 0.')
+parser.add_argument('-s', '--name', type=str, default='', help='Species name.')
+parser.add_argument('-o', '--out', type=str, default='', help='Output directory.')
+parser.add_argument('-p', '--prefix', type=str, default='', help='Only plot spectrograms if file name starts with this (case-insensitive).')
+parser.add_argument('-i', '--include_file', type=str, default=None, help='Only plot spectrograms if file name is listed in this file.')
+parser.add_argument('-w', '--over', type=int, default=0, help='1 = overwrite existing image files.')
 
 args = parser.parse_args()
 
-db_path = args.f
-species_name = args.s
-prefix = args.p.lower()
-mode = args.m
-num_to_plot = args.n
-low_band = (args.l == 1)
-overwrite = (args.w == 1)
-out_dir = args.o
+db_path = args.db
+exponent = args.exp
+species_name = args.name
+prefix = args.prefix.lower()
+mode = args.mode
+num_to_plot = args.max
+low_band = (args.low == 1)
+overwrite = (args.over == 1)
+out_dir = args.out
 include_file = args.include_file
 
 if not os.path.exists(out_dir):
@@ -87,7 +89,7 @@ for r in results:
             print(f"    min={np.min(spec)}, max={np.max(spec)}")
 
         num_plotted += 1
-        plot.plot_spec(spec, spec_path, low_band=low_band)
+        plot.plot_spec(spec ** exponent, spec_path, low_band=low_band)
 
     if num_to_plot > 0 and num_plotted == num_to_plot:
         break
