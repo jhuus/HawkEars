@@ -32,29 +32,29 @@ class SpecInfo:
         self.embedding = embedding
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-e', type=float, default=0.5, help='Raise spectrograms to this exponent to show background sounds. Default = 1.0.')
-parser.add_argument('-f', type=str, default='training', help='Database name.')
-parser.add_argument('-m', type=float, default=0.6, help='Stop plotting when distance exceeds this. Default = 0.6.')
-parser.add_argument('-n', type=int, default=60, help='Number of top matches to plot.')
-parser.add_argument('-o', type=str, default='output', help='Output directory for plotting matches.')
-parser.add_argument('-i', type=str, default='', help='Path to file containing spectrogram to search for.')
-parser.add_argument('-s', type=str, default=None, help='Species name to search for.')
-parser.add_argument('-s2', type=str, default=None, help='Species name to use in target DB if -x is specified. If this is omitted, default to -s option.')
-parser.add_argument('-t', type=float, default=0, help='Offset of spectrogram to search for.')
-parser.add_argument('-x', type=str, default=None, help='If specified (e.g. "training"), skip spectrograms that exist in this database. Default = None.')
+parser.add_argument('-e', '--exp', type=float, default=0.5, help='Raise spectrograms to this exponent to show background sounds. Default = 1.0.')
+parser.add_argument('-f', '--db', type=str, default='training', help='Database name.')
+parser.add_argument('-m', '--dist', type=float, default=0.5, help='Stop plotting when distance exceeds this. Default = 0.5.')
+parser.add_argument('-n', '--num', type=int, default=200, help='Number of top matches to plot.')
+parser.add_argument('-o', '--out', type=str, default='output', help='Output directory for plotting matches.')
+parser.add_argument('-i', '--inp', type=str, default='', help='Path to file containing spectrogram to search for.')
+parser.add_argument('-s', '--name', type=str, default=None, help='Species name to search for.')
+parser.add_argument('-s2', '--name2', type=str, default=None, help='Species name to use in target DB if -x is specified. If this is omitted, default to -s option.')
+parser.add_argument('-t', '--offset', type=float, default=0, help='Offset of spectrogram to search for.')
+parser.add_argument('-x', '--omit', type=str, default=None, help='If specified (e.g. "training"), skip spectrograms that exist in this database. Default = None.')
 
 args = parser.parse_args()
 
-exponent = args.e
-db_name = args.f
-target_path = args.i
-target_offset = args.t
-species_name = args.s
-skip_species_name = args.s2
-max_dist = args.m
-num_to_plot = args.n
-out_dir = args.o
-check_db_name = args.x
+exponent = args.exp
+db_name = args.db
+target_path = args.inp
+target_offset = args.offset
+species_name = args.name
+skip_species_name = args.name2
+max_dist = args.dist
+num_to_plot = args.num
+out_dir = args.out
+check_db_name = args.omit
 
 if check_db_name is not None and species_name is None and skip_species_name is None:
     print(f'Error: either -s or -s2 must be specified with the -x parameter')
