@@ -79,44 +79,44 @@ if __name__ == '__main__':
 
     # command-line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-a', type=str, default=None, help='Source of recordings. By default, use the file names to get the source.')
-    parser.add_argument('-b', type=str, default='bird', help='Category. Default = "bird"')
-    parser.add_argument('-c', type=str, default=None, help='Species code (required)')
-    parser.add_argument('-d', type=str, default=None, help='Directory containing recordings (required).')
-    parser.add_argument('-e', type=str, default=None, help='Directory to copy recordings to (optional).')
-    parser.add_argument('-f', type=str, default='training', help='Database name or full path ending in ".db". Default = "training"')
-    parser.add_argument('-i', type=str, default=None, help='Directory containing spectrogram images (required).')
-    parser.add_argument('-l', type=int, default=0, help='1 = low band (default=0)')
-    parser.add_argument('-s', type=str, default=None, help='Species name (required)')
+    parser.add_argument('--cat', type=str, default='bird', help='Category. Default = "bird"')
+    parser.add_argument('--code', type=str, default=None, help='Species code (required)')
+    parser.add_argument('--db', type=str, default='training', help='Database name or full path ending in ".db". Default = "training"')
+    parser.add_argument('--dir', type=str, default=None, help='Directory containing recordings (required).')
+    parser.add_argument('--dir2', type=str, default=None, help='Directory to copy recordings to (optional).')
+    parser.add_argument('--inp', type=str, default=None, help='Directory containing spectrogram images (required).')
+    parser.add_argument('--low', type=int, default=0, help='1 = low band (default=0)')
+    parser.add_argument('--name', type=str, default=None, help='Species name (required)')
+    parser.add_argument('--src', type=str, default=None, help='Source of recordings. By default, use the file names to get the source.')
 
     args = parser.parse_args()
-    if args.d is None:
-        print("Error: -d argument is required (directory containing recordings).")
+    if args.dir is None:
+        print("Error: --dir argument is required (directory containing recordings).")
         quit()
     else:
-        audio_path = args.d
+        audio_path = args.dir
 
-    if args.i is None:
-        print("Error: -i argument is required (directory containing images).")
+    if args.inp is None:
+        print("Error: --inp argument is required (directory containing images).")
         quit()
     else:
-        image_path = args.i
+        image_path = args.inp
 
-    if args.s is None:
-        print("Error: -s argument is required (species name).")
+    if args.name is None:
+        print("Error: --name argument is required (species name).")
         quit()
     else:
-        species_name = args.s
+        species_name = args.name
 
-    if args.c is None:
-        print("Error: -c argument is required (species code).")
+    if args.code is None:
+        print("Error: --code argument is required (species code).")
         quit()
     else:
-        species_code = args.c
+        species_code = args.code
 
     run_start_time = time.time()
 
-    ExtractByImage(audio_path, image_path, args.f, args.a, args.b, species_name, species_code, args.l, args.e).run()
+    ExtractByImage(audio_path, image_path, args.db, args.src, args.cat, species_name, species_code, args.low, args.dir2).run()
 
     elapsed = time.time() - run_start_time
     print(f'elapsed seconds = {elapsed:.1f}')

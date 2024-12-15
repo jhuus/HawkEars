@@ -48,12 +48,10 @@ def sort_key(recording):
         return 6
 
 class Main:
-    def __init__(self, species_name, output_path, max_downloads, min_seconds, max_seconds, seen_only, ignore_nonderiv):
+    def __init__(self, species_name, output_path, max_downloads, seen_only, ignore_nonderiv):
         self.species_name = species_name
         self.output_path = output_path
         self.max_downloads = max_downloads
-        self.min_seconds = min_seconds
-        self.max_seconds = max_seconds
         self.seen_only = seen_only
         self.ignore_nonderiv = ignore_nonderiv
 
@@ -126,35 +124,20 @@ class Main:
         else:
             self.exclude_list = []
 
-        # get list of recordings and remove any that are too short or too long
+        # get list of recordings, sort it and start downloading
         self._get_recordings_list()
-        remove = []
-        for recording in self.recordings:
-            seconds = extract_seconds(recording['length'])
-
-            if self.min_seconds > 0 and seconds < self.min_seconds:
-                remove.append(recording)
-            elif self.max_seconds > 0 and seconds > self.max_seconds:
-                remove.append(recording)
-
-        for recording in remove:
-            self.recordings.remove(recording)
-
-        # sort the list, then start downloading
         self.recordings.sort(key=sort_key)
         self._download_recordings()
 
 if __name__ == '__main__':
     # command-line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', type=str, default='', help='Species name.')
-    parser.add_argument('-o', type=str, default='', help='Path to output directory.')
-    parser.add_argument('-n', type=int, default=0, help='Maximum number of recordings to download. Default = 0, i.e. all available.')
-    parser.add_argument('-m1', type=int, default=0, help='Minimum recording length in seconds. Default = 0, i.e. no minimum.')
-    parser.add_argument('-m2', type=int, default=0, help='Maximum recording length in seconds. Default = 0, i.e. no maximum.')
-    parser.add_argument('-x', type=int, default=0, help='If 1, download only if bird-seen=yes. Default = 0.')
-    parser.add_argument('-z', type=int, default=1, help='If 1, ignore recordings with license BY-NC-ND. Default = 1.')
+    parser.add_argument('--dir', type=str, default='', help='Path to output directory.')
+    parser.add_argument('--license', type=int, default=1, help='If 1, ignore recordings with license BY-NC-ND. Default = 1.')
+    parser.add_argument('--max', type=int, default=500, help='Maximum number of recordings to download. Default = 500.')
+    parser.add_argument('--name', type=str, default=None, help='Species name.')
+    parser.add_argument('--seen', type=int, default=0, help='If 1, download only if bird-seen=yes. Default = 0.')
 
     args = parser.parse_args()
 
-    Main(args.s, args.o, args.n, args.m1, args.m2, args.x == 1, args.z == 1).run()
+    Main(args.name, args.dir, args.max, args.seen == 1, args.license == 1).run()

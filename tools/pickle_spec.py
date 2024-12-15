@@ -27,15 +27,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s.%(msecs)03d %(messag
 output_path = "../data/specs.pickle"
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-c', '--config', type=str, default="base", help=f'Configuration name. Default = "base".')
-parser.add_argument('-d', '--dbname', type=str, default=cfg.train.training_db, help=f'Database name. Default = "{cfg.train.training_db}".')
+parser.add_argument('-c', '--cfg', type=str, default="base", help=f'Configuration name. Default = "base".')
+parser.add_argument('-d', '--db', type=str, default=cfg.train.training_db, help=f'Database name. Default = "{cfg.train.training_db}".')
 parser.add_argument('-k', '--classes', type=str, default="classes", help=f'Class file name. Default = "classes".')
 parser.add_argument('-m', '--max', type=int, default=None, help=f'If specified, this is maximum number of spectrogram per class.')
-parser.add_argument('-o', '--output', type=str, default=f"{output_path}", help=f'Output path. Default = "{output_path}".')
+parser.add_argument('-o', '--out', type=str, default=f"{output_path}", help=f'Output path. Default = "{output_path}".')
 
 args = parser.parse_args()
 max_count = args.max
-cfg_name = args.config
+cfg_name = args.cfg
 if cfg_name in configs:
     set_config(cfg_name)
 else:
@@ -49,7 +49,7 @@ class_codes = []
 for name in class_names:
     class_codes.append(classes_dict[name])
 
-db_path = f"../data/{args.dbname}.db"
+db_path = f"../data/{args.db}.db"
 logging.info(f'Opening database {db_path}')
 db = database.Database(db_path)
 
@@ -119,5 +119,5 @@ spec_df = pd.DataFrame({'spec': spec, 'spec_index': spec_index, 'rec_name': rec_
 class_df = pd.DataFrame({'name': class_names, 'code': class_codes})
 save_dict = {'spec': spec_df, 'class': class_df}
 
-pickle_file = open(args.output, 'wb')
+pickle_file = open(args.out, 'wb')
 pickle.dump(save_dict, pickle_file)

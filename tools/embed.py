@@ -75,12 +75,12 @@ class Main:
 if __name__ == '__main__':
     # command-line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-f', type=str, default='training', help='Database name. Default = "training"')
-    parser.add_argument('-s', type=str, default='', help='Optional species name. Default = blank, so update all species.')
+    parser.add_argument('--db', type=str, default='training', help='Database name. Default = "training"')
+    parser.add_argument('--name', type=str, default='', help='Optional species name. Default = blank, so update all species.')
     args = parser.parse_args()
 
-    db_name = args.f
-    species_name = args.s
+    db_name = args.db
+    species_name = args.name
 
     start_time = time.time()
 

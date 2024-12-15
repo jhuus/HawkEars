@@ -97,13 +97,13 @@ class Main:
 if __name__ == '__main__':
     # command-line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-o', type=str, default='', help='Path to output directory.')
-    parser.add_argument('-b', type=int, default=None, help='If specified, ignore recording numbers below this. Default = None.')
-    parser.add_argument('-n', type=int, default=500, help='Maximum number of recordings to download. Default = 500.')
-    parser.add_argument('-p', type=int, default=0, help='1 = only download from observations with photos, to ensure correct ID. Default = 0.')
-    parser.add_argument('-r', type=int, default=1, help='1 = rename by adding an N prefix, 0 = do not rename (default = 1).')
-    parser.add_argument('-s', type=str, default='', help='Species name.')
+    parser.add_argument('--dir', type=str, default='', help='Path to output directory.')
+    parser.add_argument('--max', type=int, default=500, help='Maximum number of recordings to download. Default = 500.')
+    parser.add_argument('--name', type=str, default='', help='Species name.')
+    parser.add_argument('--photo', type=int, default=0, help='1 = only download from observations with photos, to ensure correct ID. Default = 0.')
+    parser.add_argument('--rec_min', type=int, default=None, help='If specified, ignore recording numbers below this. Default = None.')
+    parser.add_argument('--rename', type=int, default=1, help='1 = rename by adding an N prefix, 0 = do not rename (default = 1).')
 
     args = parser.parse_args()
 
-    Main(args.s, args.o, args.n, args.r == 1, args.p == 1, args.b).run()
+    Main(args.name, args.dir, args.max, args.rename == 1, args.photo == 1, args.rec_min).run()
