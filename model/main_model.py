@@ -5,6 +5,7 @@ from core import cfg, metrics
 from model import dla
 from model import efficientnet_v2
 from model import fastvit
+from model import gernet
 from model import hgnet_v2
 from model import mobilenet
 from model import vovnet
@@ -132,6 +133,9 @@ class MainModel(LightningModule):
         elif model_name.startswith('custom_fastvit'):
             tokens = model_name.split('_')
             model = fastvit.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
+        elif model_name.startswith('custom_gernet'):
+            tokens = model_name.split('_')
+            model = gernet.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
         elif model_name.startswith('custom_hgnet'):
             tokens = model_name.split('_')
             model = hgnet_v2.get_model(tokens[-1], num_classes=self.num_train_classes, **kwargs)
