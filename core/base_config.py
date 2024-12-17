@@ -31,10 +31,11 @@ class Audio:
 @dataclass
 class Training:
     compile = False
-    mixed_precision = False  # usually improves performance, especially with larger models
+    mixed_precision = False
     multi_label = True
     deterministic = False
     seed = None
+    fast_optimizer = False  # slow optimizer is more accurate but takes 25-30% longer to train
     learning_rate = .0025   # base learning rate
     batch_size = 64
     model_name = "tf_efficientnetv2_b0" # 5.9M parameters

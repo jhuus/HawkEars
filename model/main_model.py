@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchmetrics.functional import accuracy
+from timm.optim import AdamP, RAdam
 
 def get_learning_rate(optimizer):
     for param_group in optimizer.param_groups:
@@ -330,7 +331,11 @@ class MainModel(LightningModule):
 
     # define optimizers and LR schedulers
     def configure_optimizers(self):
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=cfg.train.learning_rate)
+        if cfg.train.fast_optimizer:
+            self.optimizer = RAdam(self.parameters(), lr=cfg.train.learning_rate)
+        else:
+            # takes 25-30% longer to train, but produces a better model
+            self.optimizer = AdamP(self.parameters(), lr=cfg.train.learning_rate)
 
         # set LR_epochs > num_epochs to increase final learning rate
         if cfg.train.LR_epochs is None or cfg.train.LR_epochs < cfg.train.num_epochs:
