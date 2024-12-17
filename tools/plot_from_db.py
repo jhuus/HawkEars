@@ -20,7 +20,7 @@ from core import util
 
 # command-line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('-d', '--db', type=str, default=f'../data/{cfg.train.training_db}.db', help='Database path.')
+parser.add_argument('-d', '--db', type=str, default=cfg.train.training_db, help='Database name.')
 parser.add_argument('-e', '--exp', type=float, default=.8, help='Raise spectrograms to this exponent.')
 parser.add_argument('-l', '--low', type=int, default=0, help='1 = low frequency band (used by Ruffed Grouse drumming detector).')
 parser.add_argument('-m', '--mode', type=int, default=0, help='Mode 0 = exclude ignored specs, 1 = include ignored, 2 = only ignored. Default = 0.')
@@ -33,7 +33,7 @@ parser.add_argument('-w', '--over', type=int, default=0, help='1 = overwrite exi
 
 args = parser.parse_args()
 
-db_path = args.db
+db_path = f"../data/{args.db}.db"
 exponent = args.exp
 species_name = args.name
 prefix = args.prefix.lower()
