@@ -6,7 +6,35 @@ import timm
 from timm.models import byobnet
 
 def get_model(model_name, **kwargs):
-    if model_name == '3':
+    if model_name == '1':
+        # ~550K parameters
+        config=byobnet.ByoModelCfg(
+            blocks=(
+                byobnet.ByoBlockCfg(type='basic', d=1, c=48, s=2, gs=0, br=1.),
+                byobnet.ByoBlockCfg(type='basic', d=3, c=48, s=2, gs=0, br=1.),
+                byobnet.ByoBlockCfg(type='bottle', d=3, c=64, s=2, gs=0, br=1 / 4),
+                byobnet.ByoBlockCfg(type='bottle', d=2, c=128, s=2, gs=1, br=3.),
+                byobnet.ByoBlockCfg(type='bottle', d=1, c=64, s=1, gs=1, br=3.),
+            ),
+            stem_chs=13,
+            stem_pool=None,
+            num_features=1920,
+        )
+    elif model_name == '2':
+        # ~1.5M parameters
+        config=byobnet.ByoModelCfg(
+            blocks=(
+                byobnet.ByoBlockCfg(type='basic', d=1, c=48, s=2, gs=0, br=1.),
+                byobnet.ByoBlockCfg(type='basic', d=3, c=48, s=2, gs=0, br=1.),
+                byobnet.ByoBlockCfg(type='bottle', d=3, c=128, s=2, gs=0, br=1 / 4),
+                byobnet.ByoBlockCfg(type='bottle', d=2, c=256, s=2, gs=1, br=3.),
+                byobnet.ByoBlockCfg(type='bottle', d=1, c=128, s=1, gs=1, br=3.),
+            ),
+            stem_chs=13,
+            stem_pool=None,
+            num_features=1920,
+        )
+    elif model_name == '3':
         # ~3.3M parameters
         config=byobnet.ByoModelCfg(
             blocks=(
