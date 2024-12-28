@@ -36,6 +36,7 @@ class ClassInfo:
         self.reset()
 
     def reset(self):
+        self.check_frequency = False
         self.ebird_frequency_too_low = False
         self.has_label = False
         self.scores = []     # predictions (one per segment)
@@ -315,6 +316,7 @@ class Analyzer:
 
         start_seconds = 0 if self.start_seconds is None else self.start_seconds
         max_end_seconds = max(0, (signal.shape[0] / rate) - cfg.audio.segment_len)
+        max_end_seconds = max(max_end_seconds, start_seconds)
         end_seconds = max_end_seconds if self.end_seconds is None else self.end_seconds
 
         specs = self._get_specs(start_seconds, end_seconds)
@@ -431,6 +433,7 @@ class Analyzer:
         for class_info in self.class_infos:
             class_info.reset()
             if check_frequency and class_info.is_bird and not class_info.ignore:
+                class_info.check_frequency = True
                 if self.week_num is None and not self.get_date_from_file_name:
                     if class_info.max_frequency < cfg.infer.min_location_freq:
                         class_info.ebird_frequency_too_low = True

@@ -118,7 +118,7 @@ class Species_Handlers:
     # If a Boreal Owl is identified in an area where it is rare and Wilson's Snipe is not,
     # and the Wilson's Snipe score is above a (low) threshold, call it a Wilson's Snipe.
     def soundalike_with_location(self, class_info):
-        if not self.check_frequency or not class_info.has_label:
+        if not self.check_frequency or not class_info.has_label or not class_info.check_frequency:
             return
 
         config = self.soundalike_with_location_config[class_info.code]
