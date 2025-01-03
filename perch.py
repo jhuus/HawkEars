@@ -17,7 +17,6 @@ import os
 from pathlib import Path
 import time
 
-from opensoundscape.ml import bioacoustics_model_zoo as bmz
 import pandas as pd
 import torch
 
@@ -96,7 +95,7 @@ class Analyzer:
         for i, row in df.iterrows():
             self.species_info[row["CODE6"]] = (row["COMMON_NAME"], row["CODE4"])
 
-        self.model = bmz.load("Perch")
+        self.model = torch.hub.load('kitzeslab/bioacoustics-model-zoo', 'Perch', trust_repo=True)
         file_list = self._get_file_list(self.input_path)
         for file_path in file_list:
             self._analyze_file(file_path)
