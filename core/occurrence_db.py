@@ -1,4 +1,4 @@
-# SQLite database interface for eBird barchart data.
+# SQLite database interface for species occurrence data.
 
 import sqlite3
 from types import SimpleNamespace
@@ -6,11 +6,11 @@ import zlib
 
 import numpy as np
 
-class Frequency_DB:
-    def __init__(self, filename='data/frequency.db'):
+class Occurrence_DB:
+    def __init__(self, path='data/occurrence.db'):
         self.conn = None
         try:
-            self.conn = sqlite3.connect(filename)
+            self.conn = sqlite3.connect(path)
             self._create_tables()
         except sqlite3.Error as e:
             print(f'Error in database init: {e}')
@@ -42,7 +42,7 @@ class Frequency_DB:
             cursor.execute(query)
 
             query = '''
-                CREATE TABLE IF NOT EXISTS Frequency (
+                CREATE TABLE IF NOT EXISTS Occurrence (
                     CountyID INTEGER NOT NULL,
                     SpeciesID INTEGER NOT NULL,
                     Value BLOB NOT NULL
@@ -54,10 +54,10 @@ class Frequency_DB:
             query = 'CREATE UNIQUE INDEX IF NOT EXISTS idx_species_name ON Species (Name)'
             cursor.execute(query)
 
-            query = 'CREATE INDEX IF NOT EXISTS idx_county_id ON Frequency (CountyID)'
+            query = 'CREATE INDEX IF NOT EXISTS idx_county_id ON Occurrence (CountyID)'
             cursor.execute(query)
 
-            query = 'CREATE INDEX IF NOT EXISTS idx_species_id ON Frequency (SpeciesID)'
+            query = 'CREATE INDEX IF NOT EXISTS idx_species_id ON Occurrence (SpeciesID)'
             cursor.execute(query)
 
             self.conn.commit()
@@ -106,10 +106,10 @@ class Frequency_DB:
         except sqlite3.Error as e:
             print(f'Error in database get_all_species: {e}')
 
-    def get_frequencies(self, county_id, species_name):
+    def get_occurrences(self, county_id, species_name):
         try:
             query = f'''
-                SELECT SpeciesID, Value FROM Frequency WHERE CountyID = {county_id}
+                SELECT SpeciesID, Value FROM Occurrence WHERE CountyID = {county_id}
                     AND SpeciesID = (SELECT ID From Species WHERE Name = "{species_name}")
             '''
             cursor = self.conn.cursor()
@@ -131,7 +131,7 @@ class Frequency_DB:
 
             return results
         except sqlite3.Error as e:
-            print(f'Error in database get_frequencies_by_county_id: {e}')
+            print(f'Error in database get_occurrences: {e}')
 
     def insert_county(self, name, code, min_x, max_x, min_y, max_y):
         try:
@@ -145,23 +145,23 @@ class Frequency_DB:
         except sqlite3.Error as e:
             print(f'Error in database insert_county: {e}')
 
-    def insert_frequencies(self, county_id, species_id, value):
+    def insert_occurrences(self, county_id, species_id, value):
         try:
-            # value is a numpy array of 48 floats (a frequency per week, four weeks/month);
+            # value is a numpy array of 48 floats (occurrence per week, four weeks/month);
             # convert it to a float16 array and zip that to keep the database small
             reduced = value.astype(np.float16)
             bytes = reduced.tobytes()
             compressed = zlib.compress(bytes)
 
             query = '''
-                INSERT INTO Frequency (CountyID, SpeciesID, Value) Values (?, ?, ?)
+                INSERT INTO Occurrence (CountyID, SpeciesID, Value) Values (?, ?, ?)
             '''
             cursor = self.conn.cursor()
             cursor.execute(query, (county_id, species_id, compressed))
             self.conn.commit()
 
         except sqlite3.Error as e:
-            print(f'Error in database insert_frequencies: {e}')
+            print(f'Error in database insert_occurrences: {e}')
 
     def insert_species(self, name):
         try:
