@@ -85,11 +85,11 @@ class Inference:
     audio_exponent = .85         # power parameter for mel spectrograms during inference
     use_banding_codes = True     # use banding codes instead of species names in labels
     top_n = 20                   # number of top matches to log in debug mode
-    min_location_freq = .0001    # ignore if species frequency less than this for location/week
+    min_occurrence = .0001       # ignore species if occurrence less than this for location/week
     file_date_regex = "\\S+_(\\d+)_.*" # regex to extract date from file name (e.g. HNCAM015_20210529_161122.mp3)
     file_date_regex_group = 1    # use group at offset 1
     block_size = 100             # do this many spectrograms at a time to avoid running out of GPU memory
-    frequency_db = "frequency"   # eBird barchart data, i.e. species report frequencies
+    occurrence_db = "occurrence" # name of species occurrence database
     all_embeddings = True        # if true, generate embeddings for all spectrograms, otherwise only the labelled ones
 
     # These parameters control a second pass during inference.
