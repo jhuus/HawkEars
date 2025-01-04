@@ -22,7 +22,7 @@ import species_handlers
 from core import audio
 from core import cfg
 from core import filters
-from core import frequency_db
+from core import occurrence_db
 from core import util
 from model import main_model
 
@@ -31,13 +31,13 @@ class ClassInfo:
         self.name = name
         self.code = code
         self.ignore = ignore
-        self.max_frequency = 0
+        self.max_occurrence = 0
         self.is_bird = True
         self.reset()
 
     def reset(self):
-        self.check_frequency = False
-        self.ebird_frequency_too_low = False
+        self.check_occurrence = False
+        self.occurrence_too_low = False
         self.has_label = False
         self.scores = []     # predictions (one per segment)
         self.is_label = []   # True iff corresponding offset is a label
@@ -66,7 +66,7 @@ class Analyzer:
         self.thread_num = thread_num
         self.embed = embed
         self.device = device
-        self.frequencies = {}
+        self.occurrences = {}
         self.issued_skip_files_warning = False
         self.have_rarities_directory = False
 
@@ -136,16 +136,16 @@ class Analyzer:
     # or province (e.g. CA-AB)
     def _process_location_and_date(self):
         if self.filelist is None and self.region is None and (self.latitude is None or self.longitude is None):
-            self.check_frequency = False
+            self.check_occurrence = False
             self.week_num = None
             return
 
-        self.check_frequency = True
+        self.check_occurrence = True
         self.get_date_from_file_name = False
-        self.freq_db = frequency_db.Frequency_DB()
-        self.counties = self.freq_db.get_all_counties()
+        self.occur_db = occurrence_db.Occurrence_DB(path=os.path.join("data", f"{cfg.infer.occurrence_db}.db"))
+        self.counties = self.occur_db.get_all_counties()
         self.ebird_species_names = {}
-        results = self.freq_db.get_all_species()
+        results = self.occur_db.get_all_species()
         for r in results:
             self.ebird_species_names[r.name] = 1
 
@@ -206,27 +206,27 @@ class Analyzer:
         else:
             logging.info(f'Matching species in region {self.region}')
 
-        self._update_class_frequency_stats(counties)
+        self._update_class_occurrence_stats(counties)
 
-    # cache eBird species frequencies for performance
-    def _get_frequencies(self, county_id, class_name):
-        if county_id not in self.frequencies:
-            self.frequencies[county_id] = {}
+    # cache species occurrence data for performance
+    def _get_occurrences(self, county_id, class_name):
+        if county_id not in self.occurrences:
+            self.occurrences[county_id] = {}
 
         if class_name in cfg.infer.ebird_names:
             # switch to the name that eBird uses
             class_name = cfg.infer.ebird_names[class_name]
 
-        if class_name in self.frequencies[county_id]:
-            return self.frequencies[county_id][class_name]
+        if class_name in self.occurrences[county_id]:
+            return self.occurrences[county_id][class_name]
         else:
-            results = self.freq_db.get_frequencies(county_id, class_name)
-            self.frequencies[county_id][class_name] = results
+            results = self.occur_db.get_occurrences(county_id, class_name)
+            self.occurrences[county_id][class_name] = results
             return results
 
-    # update the weekly frequency data per species, where frequency is the
-    # percent of eBird checklists containing a species in a given county/week;
-    def _update_class_frequency_stats(self, counties):
+    # update the occurrence data per species, where occurrence is
+    # the probability of encountering a species in given county/week
+    def _update_class_occurrence_stats(self, counties):
         class_infos = {}
         for class_info in self.class_infos:
             if not class_info.name in cfg.infer.ebird_names and not class_info.name in self.ebird_species_names:
@@ -235,26 +235,26 @@ class Analyzer:
 
             class_infos[class_info.name] = class_info # copy from list to dict for faster reference
             if not class_info.ignore:
-                # get sums of weekly frequencies for this species across specified counties
-                frequency = [0 for i in range(48)] # eBird uses 4 weeks per month
+                # get sums of weekly occurrences for this species across specified counties
+                occurrence = [0 for i in range(48)] # eBird uses 4 weeks per month
                 for county in counties:
-                    results = self._get_frequencies(county.id, class_info.name)
+                    results = self._get_occurrences(county.id, class_info.name)
                     for i in range(len(results)):
                         # for each week use the maximum of it and the adjacent weeks
-                        frequency[i] = max(max(results[i].value, results[(i + 1) % 48].value), results[(i - 1) % 48].value)
+                        occurrence[i] = max(max(results[i].value, results[(i + 1) % 48].value), results[(i - 1) % 48].value)
 
                 if len(counties) > 1:
                     # get the average across counties
                     for week_num in range(48):
-                        frequency[week_num] /= len(counties)
+                        occurrence[week_num] /= len(counties)
 
                 # update the info associated with this species
-                class_info.frequency = [0 for i in range(48)]
-                class_info.max_frequency = 0
+                class_info.occurrence = [0 for i in range(48)]
+                class_info.max_occurrence = 0
                 for week_num in range(48):
                     # if no date is specified we will use the maximum across all weeks
-                    class_info.max_frequency = max(class_info.max_frequency, frequency[week_num])
-                    class_info.frequency[week_num] = frequency[week_num]
+                    class_info.max_occurrence = max(class_info.max_occurrence, occurrence[week_num])
+                    class_info.occurrence[week_num] = occurrence[week_num]
 
     # get class names and codes from the model, which gets them from the checkpoint
     def _get_class_infos(self):
@@ -388,14 +388,14 @@ class Analyzer:
         return spec_array
 
     def _analyze_file(self, file_path):
-        check_frequency = self.check_frequency
-        if check_frequency:
+        check_occurrence = self.check_occurrence
+        if check_occurrence:
             if self.location_date_dict is not None:
                 filename = Path(file_path).name
                 if filename in self.location_date_dict:
                     latitude, longitude, self.week_num = self.location_date_dict[filename]
                     if self.week_num is None:
-                        check_frequency = False
+                        check_occurrence = False
                     else:
                         county = None
                         for c in self.counties:
@@ -404,10 +404,10 @@ class Analyzer:
                                 break
 
                         if county is None:
-                            check_frequency = False
+                            check_occurrence = False
                             logging.warning(f"Warning: no matching county found for latitude={latitude} and longitude={longitude}")
                         else:
-                            self._update_class_frequency_stats([county])
+                            self._update_class_occurrence_stats([county])
                 else:
                     # when a filelist is specified, only the recordings in that file are processed;
                     # so you can specify a filelist with no locations or dates if you want to restrict the recording
@@ -425,20 +425,20 @@ class Analyzer:
                     self.week_num = self._get_week_num_from_date_str(date_str)
                     if self.week_num is None:
                         logging.error(f'Error: invalid date string: {self.date_str} extracted from {file_path}')
-                        check_frequency = False # ignore species frequencies for this file
+                        check_occurrence = False # ignore species occurrence data for this file
 
         logging.info(f"Thread {self.thread_num}: Analyzing {file_path}")
 
-        # clear info from previous recording, and mark classes where frequency of eBird reports is too low
+        # clear info from previous recording, and mark classes where occurrence of eBird reports is too low
         for class_info in self.class_infos:
             class_info.reset()
-            if check_frequency and class_info.is_bird and not class_info.ignore:
-                class_info.check_frequency = True
+            if check_occurrence and class_info.is_bird and not class_info.ignore:
+                class_info.check_occurrence = True
                 if self.week_num is None and not self.get_date_from_file_name:
-                    if class_info.max_frequency < cfg.infer.min_location_freq:
-                        class_info.ebird_frequency_too_low = True
-                elif class_info.frequency[self.week_num - 1] < cfg.infer.min_location_freq:
-                    class_info.ebird_frequency_too_low = True
+                    if class_info.max_occurrence < cfg.infer.min_occurrence:
+                        class_info.occurrence_too_low = True
+                elif class_info.occurrence[self.week_num - 1] < cfg.infer.min_occurrence:
+                    class_info.occurrence_too_low = True
 
         signal, rate = self.audio.load(file_path)
 
@@ -448,7 +448,7 @@ class Analyzer:
         self._get_predictions(signal, rate)
 
         # do pre-processing for individual species
-        self.species_handlers.reset(self.class_infos, self.offsets, self.raw_spectrograms, self.audio, self.check_frequency, self.week_num)
+        self.species_handlers.reset(self.class_infos, self.offsets, self.raw_spectrograms, self.audio, self.check_occurrence, self.week_num)
         for class_info in self.class_infos:
             if  not class_info.ignore and class_info.code in self.species_handlers.handlers:
                 self.species_handlers.handlers[class_info.code](class_info)
@@ -505,7 +505,7 @@ class Analyzer:
                     else:
                         label = Label(name, scores[i], self.offsets[i], end_time)
 
-                        if class_info.ebird_frequency_too_low:
+                        if class_info.occurrence_too_low:
                             rarities_labels.append(label)
                         else:
                             labels.append(label)
