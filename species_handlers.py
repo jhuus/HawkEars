@@ -50,7 +50,7 @@ class Species_Handlers:
         self.low_band_model = None
 
     # Prepare for next recording
-    def reset(self, class_infos, offsets, raw_spectrograms, audio, check_frequency, week_num):
+    def reset(self, class_infos, offsets, raw_spectrograms, audio, check_occurrence, week_num):
         self.class_infos = {}
         for class_info in class_infos:
             self.class_infos[class_info.code] = class_info
@@ -58,8 +58,8 @@ class Species_Handlers:
         self.offsets = offsets
         self.raw_spectrograms = raw_spectrograms
         self.highest_amplitude = None
-        self.check_frequency = check_frequency  # if true, we're checking eBird frequency for given county/week
-        self.week_num = week_num                # for when check_frequency = True
+        self.check_occurrence = check_occurrence  # if true, we're checking species occurrence for given county/week
+        self.week_num = week_num                # for when check_occurrence = True
         self.low_band_specs = audio.get_spectrograms(offsets=offsets, low_band=True)
 
         if self.low_band_model is None:
@@ -118,7 +118,7 @@ class Species_Handlers:
     # If a Boreal Owl is identified in an area where it is rare and Wilson's Snipe is not,
     # and the Wilson's Snipe score is above a (low) threshold, call it a Wilson's Snipe.
     def soundalike_with_location(self, class_info):
-        if not self.check_frequency or not class_info.has_label or not class_info.check_frequency:
+        if not self.check_occurrence or not class_info.has_label or not class_info.check_occurrence:
             return
 
         config = self.soundalike_with_location_config[class_info.code]
@@ -134,14 +134,14 @@ class Species_Handlers:
             # if it is rare and the soundalike is common, and soundalike seems possible given score, identify it as the soundalike
             if soundalike_info.scores[i] >= config.min_score and soundalike_info.scores[i] < class_info.scores[i]:
                 if self.week_num is None:
-                    # no date specified, so use max eBird frequency across all weeks
-                    class_frequency = class_info.max_frequency
-                    soundalike_frequency = soundalike_info.max_frequency
+                    # no date specified, so use max species occurrence across all weeks
+                    class_occurrence = class_info.max_occurrence
+                    soundalike_occurrence = soundalike_info.max_occurrence
                 else:
-                    class_frequency = class_info.frequency[self.week_num]
-                    soundalike_frequency = soundalike_info.frequency[self.week_num]
+                    class_occurrence = class_info.occurrence[self.week_num]
+                    soundalike_occurrence = soundalike_info.occurrence[self.week_num]
 
-                if soundalike_frequency >= config.min_common and class_frequency <= config.max_rare:
+                if soundalike_occurrence >= config.min_common and class_occurrence <= config.max_rare:
                     # soundalike species (e.g. WISN) is common and class species (e.g. BOOW) is rare,
                     # and soundalike score is below class_info and above config.min_score, so change it to the soundalike
                     soundalike_info.scores[i] = class_info.scores[i]
