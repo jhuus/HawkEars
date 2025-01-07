@@ -102,7 +102,7 @@ After running search, the output directory will contain images of matching spect
 
 ![](images/search_results.png)
 
-The second image name above is 1~N464010-3.00~0.085.jpeg. The first 1 indicates that it is the closest match (the one starting with 0 is the spectrogram we are searching for). The N464010-3.00 indicates that it is 3 seconds into recording N464010, and the final 0.085 is the cosine distance.
+The second image name above is 1\~N464010-3.00~0.085.jpeg. The first 1 indicates that it is the closest match (the one starting with 0 is the spectrogram we are searching for). The N464010-3.00 indicates that it is 3 seconds into recording N464010, and the final 0.085 is the cosine distance.
 
 Next you should scan the output images, deleting any that clearly contain secondary species, or are problematic in other ways.
 
