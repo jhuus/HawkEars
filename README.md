@@ -1,4 +1,4 @@
-![](HawkEars-Logo_Horiz_Descriptor_Full-Colour.png)
+![](images/HawkEars-Logo_Horiz_Descriptor_Full-Colour.png)
 
 ## Introduction
 HawkEars is a desktop program that scans audio recordings for bird sounds and generates [Audacity](https://www.audacityteam.org/) label files. It is inspired by [BirdNET](https://github.com/kahst/BirdNET), and intended as an improved productivity tool for analyzing field recordings. This repository includes the source code and trained models for a list of 328 bird species found in Canada. The complete list is found [here](https://github.com/jhuus/HawkEars/blob/main/data/classes.txt). The repository does not include the raw data or spectrograms used to train the model. The class list also include 13 amphibian species found in Canada, but very limited testing has done for them.
@@ -57,7 +57,7 @@ If you don't have access to additional recordings for testing, one good source i
 
 After running analysis, you can view the output by opening an audio file in Audacity, clicking File / Import / Labels and selecting the generated label file. Audacity should then look something like this:
 
-![](audacity-labels.png)
+![](images/audacity-labels.png)
 
 By default, species are identified using [4-letter banding codes](https://www.birdpop.org/pages/birdSpeciesCodes.php), but common names can be shown instead using the "-b 0" argument. The numeric suffix on each label is a prediction score, which is not the same as a statistical probability.
 
