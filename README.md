@@ -68,14 +68,8 @@ You can click a label to view or listen to that segment. You can also edit a lab
 ## Limitations
 Some bird species are difficult to identify by sound alone. This includes mimics, for obvious reasons, which is why Northern Mockingbird is not currently included in the species list. European Starlings are included, but often mimic other birds and are therefore sometimes challenging to identify.
 
-## Training Your Own Model
-Setting up your own model mostly consists of finding good recordings, selecting segments within the recordings, and converting them to spectrograms stored in a SQLite database (see Implementation Notes below). Model training is performed by train.py. To see available parameters, type:
-
-```
-python train.py -h
-```
-
-If this is something you want to do, and you would like some help, please contact me, e.g. by posting an issue to this repository.
+## Creating Your Own Classifier Using HawkEars
+[Here is a detailed description](creating_your_own_classifier.md) of how to create your own classifier using HawkEars.
 
 ## Implementation Notes
 ### Neural Networks
