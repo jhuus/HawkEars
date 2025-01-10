@@ -11,7 +11,6 @@ class Audio:
     spec_height = 192       # spectrogram height
     spec_width = 384        # spectrogram width (3 * 128)
     sampling_rate = 37120
-    hop_length = int(segment_len * sampling_rate /spec_width)
     win_length = 2048
     min_audio_freq = 200    # need this low for American Bittern
     max_audio_freq = 13000  # need this high for Chestnut-backed Chickadee "seet series"
@@ -101,12 +100,6 @@ class Inference:
     raise_min_to_confirm = .5    # to be confirmed, score must be >= min_score + this * (1 - min_score)
     confirmed_if_seconds = 8     # need at least this many confirmed seconds >= raised threshold
     lower_min_factor = .6        # if so, include all labels with score >= this * min_score
-
-    # map our species names to the names used by eBird for location/date processing
-    ebird_names = {
-        "American Goshawk": "Northern Goshawk",
-        "Black-crowned Night Heron": "Black-crowned Night-Heron",
-    }
 
     # Low/high/band-pass filters can be used during inference and have to be enabled and configured here.
     # Inference will then use the max prediction per species, with and without the filter(s).
