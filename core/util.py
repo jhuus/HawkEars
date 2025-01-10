@@ -40,6 +40,13 @@ def expand_spectrogram(spec, low_band=False):
 
     return spec
 
+def format_elapsed_time(start_time, end_time):
+    elapsed_time = end_time - start_time
+    hours = int(elapsed_time // 3600)
+    minutes = int((elapsed_time % 3600) // 60)
+    seconds = int(elapsed_time % 60)
+    return f"{hours:02}H:{minutes:02}M:{seconds:02}S"
+
 # return list of audio files in the given directory;
 # returned file names are fully qualified paths, unless short_names=True
 def get_audio_files(path, short_names=False):
@@ -113,6 +120,15 @@ def get_source_name(filename):
             return source
 
     return "Unknown"
+
+# return the version number, as defined in HawkEars/version.txt
+def get_version(file_path="version.txt"):
+    if os.path.exists(file_path):
+        lines = get_file_lines(file_path)
+        if len(lines) > 0:
+            return lines[0]
+
+    return ""
 
 # return True iff given path is an audio file
 def is_audio_file(file_path):
