@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from datetime import datetime
 import logging
+import uuid
 
-from core import cfg, metrics
+from core import cfg, metrics, util
 from model import dla
 from model import efficientnet_v2
 from model import fastvit
@@ -394,3 +396,52 @@ class MainModel(LightningModule):
 
         return predictions
 
+    # save metadata in the checkpoint
+    def on_save_checkpoint(self, checkpoint):
+        if not hasattr(self, 'metadata'):
+            self.metadata = {
+                "version": util.get_version(),
+                "date": datetime.today().strftime('%Y-%m-%d'),
+                "identifier": str(uuid.uuid4()).upper(),
+                "segment_len": cfg.audio.segment_len,
+                "spec_height": cfg.audio.spec_height,
+                "spec_width": cfg.audio.spec_width,
+                "sampling_rate": cfg.audio.sampling_rate,
+                "win_length": cfg.audio.win_length,
+                "min_audio_freq": cfg.audio.min_audio_freq,
+                "max_audio_freq": cfg.audio.max_audio_freq,
+            }
+
+        checkpoint['metadata'] = self.metadata
+
+    def on_load_checkpoint(self, checkpoint):
+        if 'metadata' in checkpoint:
+            self.metadata = checkpoint['metadata']
+        else:
+            self.metadata = None
+
+    # return a summary of the model, formatted as a dict
+    def summary(self):
+        if hasattr(self, 'metadata') and not self.metadata is None:
+            return [
+                {"identifier": self.metadata["identifier"]},
+                {"type": self.model_name},
+                {"training_version": self.metadata["version"]},
+                {"training_date": self.metadata["date"]},
+                {"classes": len(self.train_class_names)},
+                {"parameters": sum(p.numel() for p in self.parameters())},
+                {"segment_len": self.metadata["segment_len"]},
+                {"spec_height": self.metadata["spec_height"]},
+                {"spec_width": self.metadata["spec_width"]},
+                {"sampling_rate": self.metadata["sampling_rate"]},
+                {"win_length": self.metadata["win_length"]},
+                {"min_audio_freq": self.metadata["min_audio_freq"]},
+                {"max_audio_freq": self.metadata["max_audio_freq"]},
+            ]
+        else:
+            # for older models without associated metadata
+            return [
+                {"type": self.model_name},
+                {"classes": len(self.train_class_names)},
+                {"parameters": sum(p.numel() for p in self.parameters())},
+            ]

@@ -3,6 +3,7 @@
 # with the class predictions.
 
 import argparse
+from datetime import datetime
 import glob
 import logging
 import multiprocessing as mp
@@ -12,6 +13,7 @@ import pickle
 import re
 import threading
 import time
+import yaml
 import zlib
 
 import numpy as np
@@ -144,10 +146,10 @@ class Analyzer:
         self.get_date_from_file_name = False
         self.occur_db = occurrence_db.Occurrence_DB(path=os.path.join("data", f"{cfg.infer.occurrence_db}.db"))
         self.counties = self.occur_db.get_all_counties()
-        self.ebird_species_names = {}
+        self.occurrence_species = {}
         results = self.occur_db.get_all_species()
         for r in results:
-            self.ebird_species_names[r.name] = 1
+            self.occurrence_species[r.name] = 1
 
         # if a location file is specified, use that
         self.week_num = None
@@ -213,10 +215,6 @@ class Analyzer:
         if county_id not in self.occurrences:
             self.occurrences[county_id] = {}
 
-        if class_name in cfg.infer.ebird_names:
-            # switch to the name that eBird uses
-            class_name = cfg.infer.ebird_names[class_name]
-
         if class_name in self.occurrences[county_id]:
             return self.occurrences[county_id][class_name]
         else:
@@ -229,7 +227,7 @@ class Analyzer:
     def _update_class_occurrence_stats(self, counties):
         class_infos = {}
         for class_info in self.class_infos:
-            if not class_info.name in cfg.infer.ebird_names and not class_info.name in self.ebird_species_names:
+            if not class_info.name in self.occurrence_species:
                 class_info.is_bird = False
                 continue
 
@@ -585,15 +583,87 @@ class Analyzer:
         logging.info(f"Sum={sum}")
         logging.info("")
 
+    # write a text file in YAML format, summarizing the inference and model parameters
+    def _write_summary(self):
+        time_struct = time.localtime(self.start_time)
+        formatted_time = time.strftime("%H:%M:%S", time_struct)
+        elapsed_time = util.format_elapsed_time(self.start_time, time.time())
+
+        inference_key = "Inference / analysis"
+        info = {inference_key: [
+            {"version": util.get_version()},
+            {"date": datetime.today().strftime('%Y-%m-%d')},
+            {"start_time": formatted_time},
+            {"elapsed": elapsed_time},
+            {"min_score": cfg.infer.min_score},
+            {"overlap": self.overlap},
+            {"merge_labels": self.merge_labels},
+            {"date_str": self.date_str},
+            {"latitude": self.latitude},
+            {"longitude": self.longitude},
+            {"region": self.region},
+            {"filelist": self.filelist},
+            {"embed": self.embed},
+            {"do_unfiltered": cfg.infer.do_unfiltered},
+            {"do_lpf": cfg.infer.do_lpf},
+            {"do_hpf": cfg.infer.do_hpf},
+            {"do_bpf": cfg.infer.do_bpf},
+            {"power": cfg.audio.power},
+            {"segment_len": cfg.audio.segment_len},
+            {"spec_height": cfg.audio.spec_height},
+            {"spec_width": cfg.audio.spec_width},
+            {"sampling_rate": cfg.audio.sampling_rate},
+            {"win_length": cfg.audio.win_length},
+            {"min_audio_freq": cfg.audio.min_audio_freq},
+            {"max_audio_freq": cfg.audio.max_audio_freq},
+        ]}
+
+        # if a filter was used, log the filter parameters
+        if cfg.infer.do_lpf: # low-pass filter
+            info[inference_key].extend(
+                [
+                    {"lpf_start_freq": cfg.infer.lpf_start_freq},
+                    {"lpf_end_freq": cfg.infer.lpf_end_freq},
+                    {"lpf_damp": cfg.infer.lpf_damp},
+                ]
+            )
+        if cfg.infer.do_hpf: # high-pass filter
+            info[inference_key].extend(
+                [
+                    {"hpf_start_freq": cfg.infer.hpf_start_freq},
+                    {"hpf_end_freq": cfg.infer.hpf_end_freq},
+                    {"hpf_damp": cfg.infer.hpf_damp},
+                ]
+            )
+        if cfg.infer.do_bpf: # band-pass filter
+            info[inference_key].extend(
+                [
+                    {"bpf_start_freq": cfg.infer.bpf_start_freq},
+                    {"bpf_end_freq": cfg.infer.bpf_end_freq},
+                    {"bpf_damp": cfg.infer.bpf_damp},
+                ]
+            )
+
+        # log info per model
+        for i, model_path in enumerate(self.model_paths):
+            model_info = [{"path": self.model_paths[i]}] + self.models[i].summary()
+            info[f"Model {i + 1}"] = model_info
+
+        info_str = yaml.dump(info)
+        info_str = "# Summary of HawkEars inference run in YAML format\n" + info_str
+        with open(os.path.join(self.output_path, "HawkEars_summary.txt"), 'w') as out_file:
+            out_file.write(info_str)
+
     def run(self, file_list):
+        self.start_time = time.time()
         torch.cuda.empty_cache()
-        model_paths = glob.glob(os.path.join(cfg.misc.main_ckpt_folder, "*.ckpt"))
-        if len(model_paths) == 0:
+        self.model_paths = sorted(glob.glob(os.path.join(cfg.misc.main_ckpt_folder, "*.ckpt")))
+        if len(self.model_paths) == 0:
             logging.error(f"Error: no checkpoints found in {cfg.misc.main_ckpt_folder}")
             quit()
 
         self.models = []
-        for model_path in model_paths:
+        for model_path in self.model_paths:
             model = main_model.MainModel.load_from_checkpoint(model_path, map_location=torch.device(self.device))
             model.eval() # set inference mode
             self.models.append(model)
@@ -609,6 +679,10 @@ class Analyzer:
 
         for file_path in file_list:
             self._analyze_file(file_path)
+
+        # thread 1 writes a text file summarizing parameters etc.
+        if self.thread_num == 1:
+            self._write_summary()
 
 if __name__ == '__main__':
     # command-line arguments
