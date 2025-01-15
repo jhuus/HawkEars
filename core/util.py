@@ -185,3 +185,14 @@ def labels_to_list(input_path, unmerge=True):
                     label_list.append(SimpleNamespace(file_prefix=file_prefix, species=species, start=current, end=current + cfg.audio.segment_len, score=score))
 
     return label_list, unmerged
+
+# given a list of strings, replace all "special" quotes with "plain" quotes
+def replace_special_quotes(input_list):
+    special_quotes = "\"‘’“”"
+    plain_quote = "'"
+    translation_table = str.maketrans(special_quotes, plain_quote * len(special_quotes))
+    output_list = []
+    for item in input_list:
+        output_list.append(item.translate(translation_table))
+
+    return output_list

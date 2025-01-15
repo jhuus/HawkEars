@@ -260,6 +260,10 @@ class Analyzer:
         class_codes = self.models[0].train_class_codes
         ignore_list = util.get_file_lines(cfg.misc.ignore_file)
 
+        # replace any "special" quotes in the ignore list with "plain" quotes
+        ignore_list = util.replace_special_quotes(ignore_list)
+
+        # create the ClassInfo objects
         class_infos = []
         for i, class_name in enumerate(class_names):
             class_infos.append(ClassInfo(class_name, class_codes[i], class_name in ignore_list))
