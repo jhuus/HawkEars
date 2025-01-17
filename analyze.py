@@ -5,6 +5,7 @@
 import argparse
 from datetime import datetime
 import glob
+import importlib.util
 import logging
 import multiprocessing as mp
 import os
@@ -53,7 +54,7 @@ class Label:
 
 class Analyzer:
     def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region,
-                 filelist, debug_mode, merge, overlap, device, thread_num=1, embed=False):
+                 filelist, debug_mode, merge, overlap, device, embed=False, num_threads=1, thread_num=1):
         self.input_path = input_path.strip()
         self.output_path = output_path.strip()
         self.start_seconds = self._get_seconds_from_time_string(start_time)
@@ -65,6 +66,7 @@ class Analyzer:
         self.filelist = filelist
         self.debug_mode = debug_mode
         self.overlap = overlap
+        self.num_threads = num_threads
         self.thread_num = thread_num
         self.embed = embed
         self.device = device
@@ -256,11 +258,23 @@ class Analyzer:
 
     # get class names and codes from the model, which gets them from the checkpoint
     def _get_class_infos(self):
-        class_names = self.models[0].train_class_names
-        class_codes = self.models[0].train_class_codes
+        if self.use_openvino:
+            # we have to trust that classes.txt matches what the model was trained on
+            class_names = util.get_class_list(cfg.misc.classes_file)
+            classes_dict = util.get_class_dict(cfg.misc.classes_file)
+            class_codes = []
+            for name in class_names:
+                class_codes.append(classes_dict[name])
+        else:
+            # we can use the class info from the trained model
+            class_names = self.models[0].train_class_names
+            class_codes = self.models[0].train_class_codes
+
         ignore_list = util.get_file_lines(cfg.misc.ignore_file)
 
-        # replace any "special" quotes in the ignore list with "plain" quotes
+        # replace any "special" quotes in the class names with "plain" quotes,
+        # to ensure the quotes in ignore list match the quotes in class list
+        class_names = util.replace_special_quotes(class_names)
         ignore_list = util.replace_special_quotes(ignore_list)
 
         # create the ClassInfo objects
@@ -272,21 +286,43 @@ class Analyzer:
 
     # return the average prediction of all models in the ensemble
     def _call_models(self, specs):
-        # get predictions for each model
         predictions = []
-        for model in self.models:
-            model.to(self.device)
-            predictions.append(model.get_predictions(specs, self.device, use_softmax=False))
+        if self.use_openvino:
+            block_size = cfg.infer.openvino_block_size
+            num_blocks = (specs.shape[0] + block_size - 1) // block_size
+
+            for model in self.models:
+                output_layer = model.output(0)
+                model_predictions = []
+
+                for i in range(num_blocks):
+                    # slice the input into blocks of size block_size
+                    start_idx = i * block_size
+                    end_idx = min((i + 1) * block_size, specs.shape[0])
+                    block = specs[start_idx:end_idx]
+
+                    # pad the block with zeros if it's smaller than block_size
+                    if block.shape[0] < block_size:
+                        pad_shape = (block_size - block.shape[0], *block.shape[1:])
+                        padding = np.zeros(pad_shape, dtype=block.dtype)
+                        block = np.concatenate((block, padding), axis=0)
+
+                    # run inference on the block
+                    result = model(block)[output_layer]
+                    result = torch.sigmoid(torch.tensor(result)).cpu().numpy()
+
+                    # trim the padded predictions to match the original block size
+                    model_predictions.append(result[:end_idx - start_idx])
+
+                # combine predictions for the model
+                predictions.append(np.concatenate(model_predictions, axis=0))
+        else:
+            for model in self.models:
+                model.to(self.device)
+                predictions.append(model.get_predictions(specs, self.device, use_softmax=False))
 
         # calculate and return the average across models
-        avg_pred = None
-        for pred in predictions:
-            if avg_pred is None:
-                avg_pred = pred
-            else:
-                avg_pred += pred
-
-        avg_pred /= len(predictions)
+        avg_pred = np.mean(predictions, axis=0)
         return avg_pred ** cfg.infer.score_exponent
 
     # get predictions using a low-pass, high-pass or band-pass filter,
@@ -607,6 +643,9 @@ class Analyzer:
             {"longitude": self.longitude},
             {"region": self.region},
             {"filelist": self.filelist},
+            {"device": self.device},
+            {"num_threads": self.num_threads},
+            {"openvino": self.use_openvino},
             {"embed": self.embed},
             {"do_unfiltered": cfg.infer.do_unfiltered},
             {"do_lpf": cfg.infer.do_lpf},
@@ -650,7 +689,10 @@ class Analyzer:
 
         # log info per model
         for i, model_path in enumerate(self.model_paths):
-            model_info = [{"path": self.model_paths[i]}] + self.models[i].summary()
+            model_info = [{"path": self.model_paths[i]}]
+            if not self.use_openvino:
+                model_info += self.models[i].summary()
+
             info[f"Model {i + 1}"] = model_info
 
         info_str = yaml.dump(info)
@@ -658,23 +700,47 @@ class Analyzer:
         with open(os.path.join(self.output_path, "HawkEars_summary.txt"), 'w') as out_file:
             out_file.write(info_str)
 
-    def run(self, file_list):
-        self.start_time = time.time()
-        torch.cuda.empty_cache()
-        self.model_paths = sorted(glob.glob(os.path.join(cfg.misc.main_ckpt_folder, "*.ckpt")))
-        if len(self.model_paths) == 0:
-            logging.error(f"Error: no checkpoints found in {cfg.misc.main_ckpt_folder}")
-            quit()
+    # get models in ONNX format if using OpenVINO, or ckpt format otherwise
+    def _get_models(self):
+        if self.use_openvino:
+            self.model_paths = sorted(glob.glob(os.path.join(cfg.misc.main_ckpt_folder, "*.onnx")))
+            if len(self.model_paths) == 0:
+                logging.error(f"Error: no ONNX checkpoints found in {cfg.misc.main_ckpt_folder}")
+                quit()
 
-        self.models = []
-        for model_path in self.model_paths:
-            model = main_model.MainModel.load_from_checkpoint(model_path, map_location=torch.device(self.device))
-            model.eval() # set inference mode
-            self.models.append(model)
+            import openvino as ov
+            core = ov.Core()
+
+            self.models = []
+            for model_path in self.model_paths:
+                model_onnx = core.read_model(model=model_path)
+                model_openvino = core.compile_model(model=model_onnx, device_name='CPU')
+                self.models.append(model_openvino)
+        else:
+            self.model_paths = sorted(glob.glob(os.path.join(cfg.misc.main_ckpt_folder, "*.ckpt")))
+            if len(self.model_paths) == 0:
+                logging.error(f"Error: no checkpoints found in {cfg.misc.main_ckpt_folder}")
+                quit()
+
+            self.models = []
+            for model_path in self.model_paths:
+                model = main_model.MainModel.load_from_checkpoint(model_path, map_location=torch.device(self.device))
+                model.eval() # set inference mode
+                self.models.append(model)
 
         if self.embed:
             self.embed_model = main_model.MainModel.load_from_checkpoint(cfg.misc.search_ckpt_path, map_location=torch.device(self.device))
             self.embed_model.eval()
+
+    def run(self, file_list):
+        self.start_time = time.time()
+        if self.device == 'cpu' and importlib.util.find_spec("openvino") is not None:
+            self.use_openvino = True
+        else:
+            self.use_openvino = False
+            torch.cuda.empty_cache()
+
+        self._get_models()
 
         self.audio = audio.Audio(device=self.device)
         self.class_infos = self._get_class_infos()
@@ -743,11 +809,18 @@ if __name__ == '__main__':
 
     if torch.cuda.is_available():
         device = 'cuda'
-        logging.info(f"Using GPU")
+        logging.info(f"Using CUDA")
+    elif torch.backends.mps.is_available():
+        device = 'mps'
+        logging.info(f"Using MPS")
     else:
-        # TODO: use openvino to improve performance when no GPU is available
         device = 'cpu'
-        logging.info(f"Using CPU")
+        if importlib.util.find_spec("openvino") is None:
+            logging.info(f"Using CPU")
+            logging.info(f"*** Install OpenVINO for better performance ***")
+        else:
+            # OpenVINO accelerates inference when using a CPU
+            logging.info(f"Using CPU with OpenVINO")
 
     cfg.infer.do_unfiltered = args.unfilt
     cfg.infer.do_lpf = args.lpf
@@ -769,7 +842,7 @@ if __name__ == '__main__':
     if num_threads == 1:
         # keep it simple in case multithreading code has undesirable side-effects (e.g. disabling echo to terminal)
         analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region,
-                            args.filelist, args.debug, args.merge, args.overlap, device, 1, args.embed)
+                            args.filelist, args.debug, args.merge, args.overlap, device, args.embed, num_threads, 1)
         analyzer.run(file_list)
     else:
         # split input files into one group per thread
@@ -782,7 +855,7 @@ if __name__ == '__main__':
         for i in range(num_threads):
             if len(file_lists[i]) > 0:
                 analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region,
-                                    args.filelist, args.debug, args.merge, args.overlap, device, i + 1, args.embed)
+                                    args.filelist, args.debug, args.merge, args.overlap, device, args.embed, num_threads, i + 1)
                 if os.name == "posix":
                     process = mp.Process(target=analyzer.run, args=(file_lists[i], ))
                 else:
