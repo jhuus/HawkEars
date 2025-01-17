@@ -88,6 +88,7 @@ class Inference:
     file_date_regex = "\\S+_(\\d+)_.*" # regex to extract date from file name (e.g. HNCAM015_20210529_161122.mp3)
     file_date_regex_group = 1    # use group at offset 1
     block_size = 100             # do this many spectrograms at a time to avoid running out of GPU memory
+    openvino_block_size = 100    # block size when OpenVINO is used (do not change after creating onnx files)
     occurrence_db = "occurrence" # name of species occurrence database
     all_embeddings = True        # if true, generate embeddings for all spectrograms, otherwise only the labelled ones
 
