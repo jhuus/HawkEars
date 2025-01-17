@@ -71,6 +71,12 @@ Some bird species are difficult to identify by sound alone. This includes mimics
 ## Creating Your Own Classifier Using HawkEars
 [Here is a detailed description](creating_your_own_classifier.md) of how to create your own classifier using HawkEars.
 
+## Troubleshooting
+If analyze.py terminates unexpectedly, it probably ran out of system resources, such as video RAM. To reduce resource usage, add the "--threads 1" parameter. If it still crashes, try reducing the block_size parameter in core/base_config.py.
+
+## User Feedback
+If you have any problems during installation or usage, please post an issue here. We would also appreciate any enhancement requests or examples of false positives or false negatives, which can also be posted as issues.
+
 ## Implementation Notes
 ### Neural Networks
 HawkEars is implemented using PyTorch, with a primary model ensemble and a separate low-band model (data/low_band.ckpt) to detect Ruffed Grouse drumming. The primary ensemble consists of a group of *.ckpt files stored in data/ckpt. During analysis, predictions are generated using all models in the primary ensemble, and then a simple average of those predictions is used. If you need inference to run faster, and are willing to accept lower accuracy, simply rename one of them to change the suffix. Note that the file name corresponds to the model type specified during training.
@@ -84,8 +90,3 @@ Configuration parameters, including training hyperparameters, are specified with
 ### TensorFlow Version
 HawkEars was initially developed using TensorFlow. That code is still available [here](https://github.com/jhuus/HawkEars-TensorFlow). The TensorFlow version is no longer maintained though.
 
-### User Feedback
-If you have any problems during installation or usage, please post an issue here. We would also appreciate any enhancement requests or examples of false positives or false negatives, which can also be posted as issues.
-
-### Troubleshooting
-If analyze.py terminates unexpectedly, it probably ran out of system resources, such as video RAM. To reduce resource usage, add the "--threads 1" parameter. If it still crashes, try reducing the block_size parameter in core/base_config.py.
