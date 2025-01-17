@@ -24,7 +24,7 @@ To install HawkEars on Linux or Windows:
 pip install -r requirements.txt
 ```
 
-5. If you have a [CUDA-compatible NVIDIA GPU](https://developer.nvidia.com/cuda-gpus), such as a Geforce RTX, you can gain a major performance improvement by installing [CUDA](https://docs.nvidia.com/cuda/).
+5. If you have a [CUDA-compatible NVIDIA GPU](https://developer.nvidia.com/cuda-gpus), such as a Geforce RTX, you can gain a major performance improvement by installing [CUDA](https://docs.nvidia.com/cuda/). If you have an Apple Metal processor, such as an M1 or M2, no CUDA installation is needed. If you have an Intel or AMD processor without a GPU, you can improve inference performance significantly by installing Intel OpenVINO ("pip install openvino"). It will be detected automatically and used by the analyze.py script.
 
 6. If you plan to train your own models, you will need to install SQLite. On Windows, follow [these instructions](https://www.sqlitetutorial.net/download-install-sqlite/). On Linux, type:
 
