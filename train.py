@@ -19,9 +19,12 @@ class Trainer:
         torch.set_float32_matmul_precision('medium')
         if not cfg.train.seed is None:
             pl.seed_everything(cfg.train.seed, workers=True)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(cfg.train.seed)
 
         if cfg.train.deterministic:
             cfg.train.num_workers = 1
+            torch.backends.cudnn.deterministic = True
 
     def run(self):
         # load all the data once for performance, then split as needed in each fold
@@ -31,11 +34,11 @@ class Trainer:
 
         for k in range(cfg.train.num_folds):
             trainer = pl.Trainer(
+                devices=1,
                 accelerator='auto',
                 callbacks=[ModelCheckpoint(save_top_k=cfg.train.save_last_n, mode='max', monitor='epoch_num'),
                            TQDMProgressBar(refresh_rate=10)],
                 deterministic=cfg.train.deterministic,
-                devices=1 if torch.cuda.is_available() else None,
                 max_epochs=cfg.train.num_epochs,
                 precision='16-mixed' if cfg.train.mixed_precision else 32,
                 logger=TensorBoardLogger(save_dir='logs', name=f'fold-{k}', default_hp_metric=False),
