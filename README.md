@@ -86,3 +86,6 @@ HawkEars was initially developed using TensorFlow. That code is still available 
 
 ### User Feedback
 If you have any problems during installation or usage, please post an issue here. We would also appreciate any enhancement requests or examples of false positives or false negatives, which can also be posted as issues.
+
+### Troubleshooting
+If analyze.py terminates unexpectedly, it probably ran out of system resources, such as video RAM. To reduce resource usage, add the "--threads 1" parameter. If it still crashes, try reducing the block_size parameter in core/base_config.py.
