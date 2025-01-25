@@ -36,4 +36,4 @@ if found:
     database.delete_spectrogram('RecordingID', r.id)
     database.delete_recording('ID', r.id)
 else:
-    print(f"recording {recording_name} not found for {species_name}")
+    print(f"Recording {recording_name} not found for {species_name}")
