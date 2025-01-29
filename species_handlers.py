@@ -138,8 +138,8 @@ class Species_Handlers:
                     class_occurrence = class_info.max_occurrence
                     soundalike_occurrence = soundalike_info.max_occurrence
                 else:
-                    class_occurrence = class_info.occurrence[self.week_num]
-                    soundalike_occurrence = soundalike_info.occurrence[self.week_num]
+                    class_occurrence = class_info.occurrence[self.week_num - 1]
+                    soundalike_occurrence = soundalike_info.occurrence[self.week_num - 1]
 
                 if soundalike_occurrence >= config.min_common and class_occurrence <= config.max_rare:
                     # soundalike species (e.g. WISN) is common and class species (e.g. BOOW) is rare,
