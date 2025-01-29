@@ -193,7 +193,7 @@ class Audio:
             self.have_signal = False
             self.signal = None
             self.path = None
-            logging.error(f'Caught exception in audio load: {e}')
+            logging.error(f'Caught exception in audio load of {path}: {e}')
 
         logging.debug('Done loading audio file')
         return self.signal, cfg.audio.sampling_rate
