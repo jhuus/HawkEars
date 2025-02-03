@@ -109,7 +109,7 @@ class Main:
         self.bins = []
         for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
             predictions_in_bin = (self.predictions >= bin_lower) & (self.predictions < bin_upper)
-            mean_prediction = self.predictions[predictions_in_bin].mean().item()
+            mean_prediction = self.predictions[predictions_in_bin].mean().item() ** cfg.infer.calibration_exponent
             labels_in_bin = self.labels[predictions_in_bin]
             num_labels = len(labels_in_bin)
             min_value = bin_lower.item()
@@ -190,7 +190,7 @@ class Main:
 if __name__ == '__main__':
     # command-line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-n', '--num_bins', type=int, default=15, help='Number of bins. Default = 15.')
+    parser.add_argument('-n', '--num_bins', type=int, default=10, help='Number of bins. Default = 15.')
     parser.add_argument('-o', '--output', type=str, default="calibration", help='Output directory name. Default = "calibration".')
     parser.add_argument('-p', '--pickle', type=str, default=None, help='Path to pickle file (required).')
     parser.add_argument('-t', '--title', type=str, default=None, help='Title for the calibration curve plot.')
