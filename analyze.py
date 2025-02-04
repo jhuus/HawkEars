@@ -11,6 +11,7 @@ import multiprocessing as mp
 import os
 from pathlib import Path
 import pickle
+import random
 import re
 import threading
 import time
@@ -323,7 +324,7 @@ class Analyzer:
 
         # calculate and return the average across models
         avg_pred = np.mean(predictions, axis=0)
-        return avg_pred ** cfg.infer.score_exponent
+        return avg_pred
 
     # get predictions using a low-pass, high-pass or band-pass filter,
     # and then set each score to the max of the filtered and unfiltered score
@@ -821,6 +822,13 @@ if __name__ == '__main__':
         else:
             # OpenVINO accelerates inference when using a CPU
             logging.info(f"Using CPU with OpenVINO")
+
+    if cfg.infer.seed is not None:
+        # reduce non-determinism
+        torch.manual_seed(cfg.infer.seed)
+        torch.cuda.manual_seed_all(cfg.infer.seed)
+        random.seed(cfg.infer.seed)
+        np.random.seed(cfg.infer.seed)
 
     cfg.infer.do_unfiltered = args.unfilt
     cfg.infer.do_lpf = args.lpf

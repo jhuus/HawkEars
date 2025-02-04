@@ -80,7 +80,8 @@ class Inference:
     num_threads = 3              # multiple threads improves performance but uses more GPU memory
     spec_overlap_seconds = 1.5   # number of seconds overlap for adjacent 3-second spectrograms
     min_score = 0.75             # only generate labels when score is at least this
-    score_exponent = .6          # increase scores so they're more like probabilities
+    scaling_coefficient = 1.1    # Platt scaling coefficient, to align predictions with probabilities
+    scaling_intercept = 1.4      # Platt scaling intercept, to align predictions with probabilities
     audio_exponent = .85         # power parameter for mel spectrograms during inference
     use_banding_codes = True     # use banding codes instead of species names in labels
     top_n = 20                   # number of top matches to log in debug mode
@@ -91,6 +92,7 @@ class Inference:
     openvino_block_size = 100    # block size when OpenVINO is used (do not change after creating onnx files)
     occurrence_db = "occurrence" # name of species occurrence database
     all_embeddings = True        # if true, generate embeddings for all spectrograms, otherwise only the labelled ones
+    seed = 99                    # reduce non-determinism during inference
 
     # These parameters control a second pass during inference.
     # If lower_min_if_confirmed is true, count the number of seconds for a species in a recording,

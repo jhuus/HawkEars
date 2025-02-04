@@ -382,10 +382,14 @@ class MainModel(LightningModule):
             with torch.no_grad():
                 torch_specs = torch.Tensor(specs[start_idx:end_idx]).to(device)
                 block_predictions = self.base_model(torch_specs)
+
                 if use_softmax:
                     block_predictions = F.softmax(block_predictions, dim=1).cpu().numpy()
                 else:
-                    block_predictions = torch.sigmoid(block_predictions).cpu().numpy()
+                    # apply calibrated sigmoid function using Platt scaling
+                    w = cfg.infer.scaling_coefficient
+                    b = cfg.infer.scaling_intercept
+                    block_predictions = 1 / (1 + np.exp(-(w * block_predictions.cpu().numpy() + b)))
 
                 if predictions is None:
                     predictions = block_predictions
