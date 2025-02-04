@@ -58,8 +58,8 @@ class DataModule(pl.LightningDataModule):
             self.test_loader = DataLoader(self.test_set, batch_size=cfg.train.batch_size, num_workers=cfg.train.num_workers, shuffle=False)
 
     # generate one-hot labels from a spectrogram dataframe;
-    # if multi_label, some entries might have multiple labels
-    def _one_hot(self, spec_df, test=False, multi_label=False):
+    # the class_index can be an int or a list, where the latter is for the multi-label case
+    def _one_hot(self, spec_df, test=False):
         num_specs = len(spec_df)
         label = np.zeros((num_specs, self.num_train_classes), dtype=np.int32)
 
@@ -70,53 +70,17 @@ class DataModule(pl.LightningDataModule):
             for i, name in enumerate(self.test_class_names):
                 class_indexes[i] = train_classes.index(name)
 
-        if not multi_label:
-            # easy case: one label per entry
-            for i in range(num_specs):
-                class_index = spec_df.loc[i, 'class_index']
+        for i in range(num_specs):
+            class_index = spec_df.loc[i, 'class_index']
+            if type(class_index) is list:
+                # multiple classes for this spectrogram
+                for index in class_index:
+                    class_index = class_indexes[index]
+                    label[i][class_index] = 1
+            else:
+                # just one class for this spectrogram
                 class_index = class_indexes[class_index]
                 label[i][class_index] = 1
-
-            return spec_df, label
-
-        # some entries may have multiple labels;
-        # start by creating a dict from "rec_id-offset" to [spec_indexes];
-        # entries with more than one index are multi-label specs
-        spec_names = {}
-        for i in range(num_specs):
-            spec_index = spec_df.loc[i, 'spec_index']
-            spec_name = f"{spec_df.loc[i, 'rec_name']}-{spec_df.loc[i, 'offset']:.1f}"
-            if spec_name not in spec_names:
-                spec_names[spec_name] = []
-
-            spec_names[spec_name].append(spec_index) # list of spec_indexes that overlap at spec_name
-
-        # generate a new dataframe with one-hot labels
-        num_specs = len(spec_names.keys())
-        spec_index = np.arange(num_specs)
-        new_spec = [0 for i in range(num_specs)]
-        new_rec_name = ['' for i in range(num_specs)]
-        new_offset = [0 for i in range(num_specs)]
-        label = np.zeros((num_specs, self.num_train_classes), dtype=np.int32)
-
-        for i, spec_name in enumerate(sorted(spec_names.keys())):
-            # get the common fields from the first spec
-            spec_idx = spec_names[spec_name][0]
-            new_spec[i] = spec_df.loc[spec_idx, 'spec']
-            new_rec_name[i] = spec_df.loc[spec_idx, 'rec_name']
-            new_offset[i] = spec_df.loc[spec_idx, 'offset']
-
-            # create the one-hot label
-            for spec_idx in spec_names[spec_name]:
-                class_idx = spec_df.loc[spec_idx, 'class_index']
-                class_idx = class_indexes[class_idx]
-                label[i][class_idx] = 1
-
-        spec_df = pd.DataFrame(columns=['spec', 'rec_name', 'offset', 'spec_index'])
-        spec_df['spec'] = new_spec
-        spec_df['rec_name'] = new_rec_name
-        spec_df['offset'] = new_offset
-        spec_df['spec_index'] = spec_index
 
         return spec_df, label
 
@@ -133,6 +97,10 @@ class DataModule(pl.LightningDataModule):
                 # assign all specs to training and none to validation
                 train_indexes = np.arange(self.num_train_specs, dtype=np.int32)
                 val_indexes = np.zeros((0,), dtype=np.int32)
+            elif cfg.train.val_portion == 1.0:
+                # assign all specs to validation and none to training
+                train_indexes = np.zeros((0,), dtype=np.int32)
+                val_indexes = np.arange(self.num_train_specs, dtype=np.int32)
             else:
                 # split each class into train/val based on val_portion
                 train_indexes = np.zeros((0,), dtype=np.int32)
@@ -148,8 +116,9 @@ class DataModule(pl.LightningDataModule):
                     total += num_class_specs
 
         # datasets get complete dataframe and list of relevant indexes
-        self.train_set = dataset.CustomDataset(self.train_spec_df, self.train_label, self.train_class_df, train_indexes, training=True)
-        self.train_loader = DataLoader(self.train_set, batch_size=cfg.train.batch_size, num_workers=cfg.train.num_workers, shuffle=True)
+        if len(train_indexes) > 0:
+            self.train_set = dataset.CustomDataset(self.train_spec_df, self.train_label, self.train_class_df, train_indexes, training=True)
+            self.train_loader = DataLoader(self.train_set, batch_size=cfg.train.batch_size, num_workers=cfg.train.num_workers, shuffle=True)
 
         self.val_set = dataset.CustomDataset(self.train_spec_df, self.train_label, self.train_class_df, val_indexes, training=False)
         self.val_loader = DataLoader(self.val_set, batch_size=cfg.train.batch_size, num_workers=cfg.train.num_workers, shuffle=False)
