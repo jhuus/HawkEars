@@ -121,7 +121,7 @@ Once that is done, you can use the extract_by_image.py script to insert spectrog
 The training code reads from a “pickle” file, rather than reading the database directly. This improves training performance, and makes it easy to use a data subset, or merge data from different databases. To create a pickle file from your training database:
 
 1. Create a classes file.
-2. Run pickle_spec.py.
+2. Run pickle_db.py.
 
 The classes file is a text file (e.g. HawkEars/data/classes.txt), in which each non-comment line has the format “name,code” for a class. You can also include comment lines, which begin with a # character. For example:
 ```
@@ -132,7 +132,7 @@ Northern Leopard Frog,FROG-LEOP
 American Robin,AMRO
 Hermit Thrush,HETH
 ```
-The main arguments for pickle_spec.py are as follows:
+The main arguments for pickle_db.py are as follows:
 
 | Argument | Default | Description |
 |-------------|-------------|-------------|
