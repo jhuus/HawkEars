@@ -23,8 +23,10 @@ class Trainer:
                 torch.cuda.manual_seed_all(cfg.train.seed)
 
         if cfg.train.deterministic:
-            cfg.train.num_workers = 1
+            cfg.train.num_workers = 0
+            torch.use_deterministic_algorithms(True)
             torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
 
     def run(self):
         # load all the data once for performance, then split as needed in each fold
