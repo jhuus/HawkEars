@@ -109,7 +109,7 @@ class Main:
         self.bins = []
         for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
             predictions_in_bin = (self.predictions >= bin_lower) & (self.predictions < bin_upper)
-            mean_prediction = self.predictions[predictions_in_bin].mean().item() ** cfg.infer.calibration_exponent
+            mean_prediction = self.predictions[predictions_in_bin].mean().item()
             labels_in_bin = self.labels[predictions_in_bin]
             num_labels = len(labels_in_bin)
             min_value = bin_lower.item()
@@ -120,8 +120,8 @@ class Main:
             else:
                 proportion_correct = 0
 
-            self.bins.append(SimpleNamespace(min_value=min_value, max_value=max_value, mean_prediction=mean_prediction, num_labels=num_labels,
-                                             num_correct=num_correct, proportion_correct=proportion_correct))
+            self.bins.append(SimpleNamespace(min_value=min_value, max_value=max_value, mean_prediction=mean_prediction,
+                                             num_labels=num_labels, num_correct=num_correct, proportion_correct=proportion_correct))
 
     # generate the output
     def _output_results(self):
@@ -136,9 +136,9 @@ class Main:
 
         plt.figure(figsize=(5, 5))
         plt.plot(mean_prediction, proportion_correct, marker='o', label="Model Calibration")
-        plt.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Perfect Calibration")  # Diagonal line
+        plt.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Perfect Calibration")  # diagonal line
 
-        plt.xlabel("Mean Prediction")
+        plt.xlabel("Prediction")
         plt.ylabel("Proportion Correct")
         plt.title(self.plot_title)
         plt.legend()
@@ -148,12 +148,14 @@ class Main:
         # output a details CSV
         bin_num, min_value, max_value = [], [], []
         num_labels, num_correct = [], []
+        mean_prediction = []
         for i, bin in enumerate(self.bins):
             bin_num.append(i + 1)
             min_value.append(bin.min_value)
             max_value.append(bin.max_value)
             num_labels.append(bin.num_labels)
             num_correct.append(bin.num_correct)
+            mean_prediction.append(bin.mean_prediction)
 
         df = pd.DataFrame({
             "bin_num": bin_num,
@@ -190,7 +192,7 @@ class Main:
 if __name__ == '__main__':
     # command-line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-n', '--num_bins', type=int, default=10, help='Number of bins. Default = 15.')
+    parser.add_argument('-n', '--num_bins', type=int, default=10, help='Number of bins. Default = 10.')
     parser.add_argument('-o', '--output', type=str, default="calibration", help='Output directory name. Default = "calibration".')
     parser.add_argument('-p', '--pickle', type=str, default=None, help='Path to pickle file (required).')
     parser.add_argument('-t', '--title', type=str, default=None, help='Title for the calibration curve plot.')
