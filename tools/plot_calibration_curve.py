@@ -116,12 +116,12 @@ class Main:
             max_value = bin_upper.item()
             num_correct = labels_in_bin.sum().item()
             if num_labels > 0:
-                proportion_correct = num_correct / num_labels
+                precision = num_correct / num_labels
             else:
-                proportion_correct = 0
+                precision = 0
 
             self.bins.append(SimpleNamespace(min_value=min_value, max_value=max_value, mean_prediction=mean_prediction,
-                                             num_labels=num_labels, num_correct=num_correct, proportion_correct=proportion_correct))
+                                             num_labels=num_labels, num_correct=num_correct, precision=precision))
 
     # generate the output
     def _output_results(self):
@@ -129,17 +129,17 @@ class Main:
             os.mkdir(self.output_path)
 
         # output a calibration curve
-        mean_prediction, proportion_correct = [], []
+        mean_prediction, precision = [], []
         for bin in self.bins:
             mean_prediction.append(bin.mean_prediction)
-            proportion_correct.append(bin.proportion_correct)
+            precision.append(bin.precision)
 
         plt.figure(figsize=(5, 5))
-        plt.plot(mean_prediction, proportion_correct, marker='o', label="Model Calibration")
+        plt.plot(mean_prediction, precision, marker='o', label="Model Calibration")
         plt.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Perfect Calibration")  # diagonal line
 
         plt.xlabel("Prediction")
-        plt.ylabel("Proportion Correct")
+        plt.ylabel("Precision")
         plt.title(self.plot_title)
         plt.legend()
         plt.grid(True)
@@ -164,14 +164,14 @@ class Main:
             "mean_value": mean_prediction,
             "num_labels": num_labels,
             "num_correct": num_correct,
-            "proportion_correct": proportion_correct,
+            "precision": precision,
         })
         df.to_csv(Path(self.output_path) / "bins.csv", index=False, float_format="%.3f")
 
         # calculate and output the unweighted calibration error
         error = 0
         for i in range(self.num_bins):
-            error += abs(proportion_correct[i] - mean_prediction[i])
+            error += abs(precision[i] - mean_prediction[i])
 
         error /= self.num_bins # average error for all bins
 
