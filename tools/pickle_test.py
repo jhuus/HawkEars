@@ -21,14 +21,7 @@ sys.path.insert(0, parentdir)
 from core import audio
 from core import cfg
 from core import util
-
-# given the start and end times (offsets) for an annotation, return a list of corresponding segment
-# start times, aligned on 3-second boundaries (0, 3, 6, ...)
-def get_segments(start_time, end_time):
-    start_segment = int(start_time // cfg.audio.segment_len)
-    end_segment = int(end_time // cfg.audio.segment_len)
-
-    return [i * cfg.audio.segment_len for i in range(start_segment, end_segment + 1)]
+from testing import base_tester
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s.%(msecs)03d %(message)s', datefmt='%H:%M:%S')
 
@@ -42,14 +35,22 @@ parser.add_argument('-o', '--out', type=str, default=f"{output_path}", help=f'Ou
 args = parser.parse_args()
 annotations_path = args.annotations
 
-# get list of class names and list of class codes and ensure order is retained
-class_names = util.get_class_list(f"../data/{args.classes}.txt")
-classes_dict = util.get_class_dict(f"../data/{args.classes}.txt")
-class_codes = []
-for name in class_names:
-    class_codes.append(classes_dict[name])
+# get names of classes to ignore
+ignore_classes = set()
+lines = util.get_file_lines(str(Path("..") / cfg.misc.ignore_file))
+for name in lines:
+    ignore_classes.add(name)
 
-# mapc class codes to their indexes for quick retrieval
+# get list of class names and list of class codes and ensure order is retained
+class_names_all = util.get_class_list(f"../data/{args.classes}.txt")
+classes_dict = util.get_class_dict(f"../data/{args.classes}.txt")
+class_codes, class_names = [], []
+for name in class_names_all:
+    if name not in ignore_classes:
+        class_names.append(name)
+        class_codes.append(classes_dict[name])
+
+# map class codes to their indexes for quick retrieval
 class_code_index = {}
 for i, code in enumerate(class_codes):
     class_code_index[code] = i
@@ -60,6 +61,7 @@ for i, code in enumerate(class_codes):
 # i.e. starting at offsets 0, 3, 6, etc;
 # that should be revisited though, since it may create some bad segments,
 # e.g. if an annotated chip call is right on a 3-second boundary
+bt = base_tester.BaseTester()
 info = {}
 df = pd.read_csv(annotations_path, dtype={'recording': str})
 for i, row in df.iterrows():
@@ -75,9 +77,10 @@ for i, row in df.iterrows():
     index = class_code_index[code]
     start_time = row['start_time']
     end_time = row['end_time']
-    segments = get_segments(start_time, end_time)
+    segments = bt.get_segments(start_time, end_time)
 
     for segment in segments:
+        segment *= cfg.audio.segment_len # convert to seconds
         if segment not in info[recording]:
             info[recording][segment] = set()
 
