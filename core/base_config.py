@@ -150,6 +150,9 @@ class Miscellaneous:
         ("\\d+", "Macaulay Library"),
         (".*", "Other")]
 
+    # map for cases where old species codes might be used in annotations (used in testing/test_per_*.py)
+    map_codes = {'AMGO': 'AGOL', 'NOGO': 'AGOS', 'GRAJ': 'CAJA'}
+
 @dataclass
 class BaseConfig:
     audio = Audio()

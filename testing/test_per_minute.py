@@ -55,9 +55,6 @@ class PerMinuteTester(BaseTester):
             logging.error(f"Error: directory {self.label_dir} not found.")
             quit()
 
-        # map for cases where old species codes might be used in annotations
-        self.map_codes = {'AMGO': 'AGOL', 'NOGO': 'AGOS', 'GRAJ': 'CAJA'}
-
     # read CSV files giving ground truth data, and save as self.annotations[recording][minute] = [species]
     # for each recording/minute.
     def get_annotations(self):
@@ -87,8 +84,8 @@ class PerMinuteTester(BaseTester):
 
             for species in input_species_list:
                 if species not in trained_species_dict:
-                    if species in self.map_codes:
-                        species = self.map_codes[species]
+                    if not cfg.misc.map_codes is None and species in cfg.misc.map_codes:
+                        species = cfg.misc.map_codes[species]
                     elif len(species) > 0:
                         # the unknown_species dict is just so we only report each unknown species once
                         if species not in unknown_species:

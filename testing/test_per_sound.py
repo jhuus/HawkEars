@@ -60,9 +60,6 @@ class PerSoundTester(BaseTester):
                 logging.error(f"Error: directory {self.label_dirs[-1]} not found.")
                 quit()
 
-        # map for cases where old species codes might be used in annotations
-        self.map_codes = {'AMGO': 'AGOL', 'NOGO': 'AGOS', 'GRAJ': 'CAJA'}
-
     # create a dict with the duration in seconds of every recording
     def get_recording_info(self):
         self.recording_duration = {}
@@ -88,8 +85,8 @@ class PerSoundTester(BaseTester):
             df = pd.read_csv(annotation_path, dtype={'recording': str})
             for i, row in df.iterrows():
                 species = row['species']
-                if species in self.map_codes:
-                    species = self.map_codes[species]
+                if not cfg.misc.map_codes is None and species in cfg.misc.map_codes:
+                    species = cfg.misc.map_codes[species]
 
                 if self.report_species is not None and species != self.report_species:
                     continue # when self.report_species is specified, ignore all others
