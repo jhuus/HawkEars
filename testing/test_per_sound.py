@@ -448,7 +448,7 @@ class PerSoundTester(BaseTester):
         # initialize y_true and y_pred and save them as CSV files
         logging.info('Initializing')
         self.init_y_true()
-        self.init_y_pred(self.label_dirs, self.report_species, segment_len=3, segments_per_recording=self.segments_per_recording)
+        self.init_y_pred(self.label_dirs, segment_len=3, segments_per_recording=self.segments_per_recording)
         if self.labels_overlap:
             logging.error("Error: overlapping labels found.")
             quit()
