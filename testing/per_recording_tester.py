@@ -308,7 +308,7 @@ if __name__ == '__main__':
     parser.add_argument('-i', type=str, default='HawkEars', help='Name of directory containing Audacity labels (not the full path, just the name).')
     parser.add_argument('-o', type=str, default='test_results1', help='Name of output directory.')
     parser.add_argument('-p', type=float, default=cfg.infer.min_score, help=f'Provide detailed reports for this threshold (default = {cfg.infer.min_score})')
-    parser.add_argument('-r', type=str, default=None, help='Root directory for recordings (annotations may specify sub-directories)).')
+    parser.add_argument('-r', '--recordings', type=str, default=None, help='Recordings directory. Default is directory containing annotations file.')
     parser.add_argument('-t', type=float, default=.95, help=f'Output TP seconds for this precision (default = .95)')
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s.%(msecs)03d %(message)s', datefmt='%H:%M:%S')
@@ -321,8 +321,15 @@ if __name__ == '__main__':
     recording_dir = args.r
     tp_secs_at_precision = args.t
 
-    if annotation_path is None or recording_dir is None:
-        logging.error(f"Error: both the annotation path (-a) and root recording directory (-r) parameters are required.")
+    if annotation_path is None:
+        logging.error(f"Error: the annotation path (-a) is required.")
         quit()
+
+    if not os.path.isfile(annotation_path):
+        logging.error(f"Error: {annotation_path} is not a file.")
+        quit()
+
+    if recording_dir is None:
+        recording_dir = Path(annotation_path).parents[0]
 
     PerRecordingTester(annotation_path, recording_dir, label_dir, output_dir, threshold, tp_secs_at_precision).run()

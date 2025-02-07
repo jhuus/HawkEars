@@ -5,6 +5,7 @@ from functools import cmp_to_key
 import glob
 import inspect
 import logging
+import math
 import os
 from pathlib import Path
 import re
@@ -72,13 +73,13 @@ class BaseTester:
     # Unknown species are ignored and missing species are included as all zeros.
     # Make no assumptions about label duration.
     # Save seconds per segment or recording in self.y_pred_seconds so we can calculate per-second precision and recall.
-    def init_y_pred(self, label_paths, per_recording=False, segment_len=3, segments_per_recording=None):
+    def init_y_pred(self, label_paths, per_recording=False, segment_len=cfg.audio.segment_len, overlap=0, segments_per_recording=None, use_max_score=True):
         self.per_recording = per_recording
         if not per_recording:
             self.segment_len = segment_len
             self.segments_per_recording = segments_per_recording
 
-        self._get_labels(label_paths, segment_len)
+        self._get_labels(label_paths, segment_len, overlap=overlap)
 
         if self.per_recording:
             self._init_y_pred_per_recording()
@@ -131,33 +132,39 @@ class BaseTester:
                 logging.error(f"y_pred_annotated_df value = {self.y_pred_annotated_df.iloc[i].iloc[0]}")
                 quit()
 
-    # Determine which n-second segments an annotation or label should be assigned to, and return the list.
-    # Include a tag in a segment if at least min_seconds seconds or the majority of the tag is in that segment.
-    # With segment_len=3 and min_seconds=.3, if a tag goes from 2.8 to 5.2, include it in the 3-6 second segment
-    # only, but if it goes from 2.8 to 3.1 include it in the 0-3 second segment only. If it goes from 2-4, include
-    # it in both segments.
-    def get_segments(self, start_time, end_time, segment_len=3, min_seconds=0.3):
-        start_segment = int(start_time // segment_len)
-        end_segment = int(end_time // segment_len)
+    # Determine which offsets an annotation or label should be assigned to, and return the list.
+    # The returned offsets are aligned on boundaries of segment_len - overlap. So by default,
+    # they are aligned on 3-second boundaries. If segment_len=3 and overlap=1.5, they are aligned
+    # on 1.5 second boundaries (0, 1.5, 3.0, ...). The start_time and end_time might not be aligned
+    # on the corresponding boundaries. Ensure that the first and last segments contain at least
+    # min_seconds of the labelled sound.
+    @staticmethod
+    def get_offsets(start_time, end_time, segment_len=cfg.audio.segment_len, overlap=0, min_seconds=0.3):
+        step = segment_len - overlap
+        if step <= 0:
+            raise ValueError("segment_len must be greater than overlap to ensure positive step size")
 
-        if start_segment == end_segment:
-            return [start_segment]
+        # find the first aligned offset no more than (segment_len - min_seconds) before start_time,
+        # to ensure the first segment contains at least min_seconds of the labelled sound
+        first_offset = max(0, math.ceil((start_time - (segment_len - min_seconds)) / step) * step)
 
-        duration = end_time - start_time
-        seconds_in_start_segment = (start_segment + 1) * segment_len - start_time
-        seconds_in_end_segment = end_time - end_segment * segment_len
+        # generate the list of offsets
+        offsets = []
+        current_offset = first_offset
+        while end_time - current_offset >= min_seconds:
+            offsets.append(current_offset)
+            current_offset += step
 
-        segments = []
-        if seconds_in_start_segment >= min(duration / 2, min_seconds):
-            segments.append(start_segment)
+        return offsets
 
-        if end_segment > start_segment + 1:
-            segments.extend([i for i in range(start_segment + 1, end_segment)])
-
-        if seconds_in_end_segment >= min(duration / 2, min_seconds):
-            segments.append(end_segment)
-
-        return segments
+    # convert offsets to segment indexes
+    def get_segments(self, start_time, end_time, segment_len=cfg.audio.segment_len, overlap=0, min_seconds=0.3):
+        offsets = self.get_offsets(start_time, end_time, segment_len, overlap, min_seconds)
+        if len(offsets) > 0:
+            first_segment = int(offsets[0] // (segment_len - overlap))
+            return [i for i in range(first_segment, first_segment + len(offsets), 1)]
+        else:
+            return []
 
     # Return a dict with APS stats, including micro/macro/none averaging.
     # Macro and none are only defined for species with annotations, but micro is defined for all.
@@ -453,7 +460,7 @@ class BaseTester:
     # Read all labels files in the given directories,
     # setting self.labels[recording] = [labels in that file].
     # If report_species is not None, include only that species.
-    def _get_labels(self, label_paths, segment_len, report_species=None):
+    def _get_labels(self, label_paths, segment_len, overlap=0, report_species=None):
         self.prediction_scores = [] # subclass may want to report on score stats, e.g. median prediction
         self.labels = {}
         for label_path in label_paths:
@@ -509,7 +516,7 @@ class BaseTester:
 
                         # let subclass know if labels overlap or are merged
                         label = Label(recording, label_species, start, end, score)
-                        label.segments = self.get_segments(label.start, label.end, segment_len)
+                        label.segments = self.get_segments(label.start, label.end, segment_len, overlap=overlap)
                         if label.start % cfg.audio.segment_len != 0:
                             self.labels_overlap = True
 
@@ -659,6 +666,7 @@ class BaseTester:
                         continue
 
                     if label.species in segment_dict[recording][segment]:
+                        # use the max score of any label that overlaps with this segment
                         segment_dict[recording][segment][label.species] = max(label.score, segment_dict[recording][segment][label.species])
                     else:
                         segment_dict[recording][segment][label.species] = label.score

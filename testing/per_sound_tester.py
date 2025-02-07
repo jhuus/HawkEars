@@ -506,7 +506,7 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--annotations', type=str, default=None, help='Path to CSV file containing annotations (ground truth).')
     parser.add_argument('-i', '--input', type=str, default='HawkEars', help='Name of directory containing Audacity labels (not the full path, just the name).')
     parser.add_argument('-o', '--output', type=str, default='test_results1', help='Name of output directory.')
-    parser.add_argument('-r', '--recordings', type=str, default=None, help='Recordings directory.')
+    parser.add_argument('-r', '--recordings', type=str, default=None, help='Recordings directory. Default is directory containing annotations file.')
     parser.add_argument('-s', '--species', type=str, default=None, help='If specified, include only this species (default = None).')
     parser.add_argument('--slen', type=float, default=cfg.audio.segment_len, help=f'Segment length. Default = {cfg.audio.segment_len}.')
     parser.add_argument('-t', '--threshold', type=float, default=cfg.infer.min_score, help=f'Provide detailed reports for this threshold (default = {cfg.infer.min_score})')
@@ -522,8 +522,15 @@ if __name__ == '__main__':
     threshold = args.threshold
     cfg.audio.segment_len = args.slen
 
-    if annotation_path is None or recording_dir is None:
-        logging.error(f"Error: both the annotation path (-a) and recording directory (-r) parameters are required.")
+    if annotation_path is None:
+        logging.error(f"Error: the annotation path (-a) is required.")
         quit()
+
+    if not os.path.isfile(annotation_path):
+        logging.error(f"Error: {annotation_path} is not a file.")
+        quit()
+
+    if recording_dir is None:
+        recording_dir = Path(annotation_path).parents[0]
 
     PerSoundTester([annotation_path], [recording_dir], label_dir, output_dir, threshold, report_species).run()
