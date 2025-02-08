@@ -390,7 +390,6 @@ class MainModel(LightningModule):
                     w = cfg.infer.scaling_coefficient
                     b = cfg.infer.scaling_intercept
                     block_predictions = 1 / (1 + np.exp(-(w * block_predictions.cpu().numpy() + b)))
-                    block_predictions = block_predictions ** cfg.infer.scaling_exponent
 
                 if predictions is None:
                     predictions = block_predictions
