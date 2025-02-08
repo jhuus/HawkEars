@@ -652,6 +652,8 @@ class Analyzer:
             {"do_lpf": cfg.infer.do_lpf},
             {"do_hpf": cfg.infer.do_hpf},
             {"do_bpf": cfg.infer.do_bpf},
+            {"scaling_coefficient": cfg.infer.scaling_coefficient},
+            {"scaling_intercept": cfg.infer.scaling_intercept},
             {"power": cfg.audio.power},
             {"segment_len": cfg.audio.segment_len},
             {"spec_height": cfg.audio.spec_height},
