@@ -79,10 +79,9 @@ class Training:
 class Inference:
     num_threads = 3              # multiple threads improves performance but uses more GPU memory
     spec_overlap_seconds = 1.5   # number of seconds overlap for adjacent 3-second spectrograms
-    min_score = 0.75             # only generate labels when score is at least this
+    min_score = 0.80             # only generate labels when score is at least this
     scaling_coefficient = 1.3    # Platt scaling coefficient, to align predictions with probabilities
     scaling_intercept = 2.2      # Platt scaling intercept, to align predictions with probabilities
-    scaling_exponent = 1.0       # after sigmoid, apply this exponent (alternative calibration method if <> 1)
     audio_exponent = .85         # power parameter for mel spectrograms during inference
     use_banding_codes = True     # use banding codes instead of species names in labels
     top_n = 20                   # number of top matches to log in debug mode
