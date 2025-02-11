@@ -439,7 +439,7 @@ class BaseTester:
         return min((segment + 1) * self.segment_len, label.end) - max(segment * self.segment_len, label.start)
 
     def _select_label_regex(self, line, label_file):
-        pattern = re.compile("(\\S+)\\t(\\S+)\\t(\\S+);(\\S+)")
+        pattern = re.compile("(\\S+)\\t(\\S+)\\t([\\S ]+);(\\S+)")
         if pattern.match(line):
             self.label_regex = pattern # HawkEars labels
             self.is_birdnet = False
