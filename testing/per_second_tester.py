@@ -320,12 +320,18 @@ class PerSecondTester(BaseTester):
     def calc_stats(self):
         # create the precision/recall table
         self.pr_table = []
+        precisions, recalls = [], []
         for threshold in np.arange(.01, 1.01, .01):
             precision, recall, _, _, _ = self.calc_precision_recall(self.y_true, self.y_pred, threshold)
+            precisions.append(precision)
+            recalls.append(recall)
             f1_score = f_score(precision, recall, beta=1)
             f5_score = f_score(precision, recall, beta=.5)
             f25_score = f_score(precision, recall, beta=.25)
             self.pr_table.append([threshold, precision, recall, f1_score, f5_score, f25_score])
+
+        # create the precision/recall curve
+        self.interp_precision, self.interp_recall = self.interpolate(precisions, recalls)
 
         # calculate overall stats for the specified threshold
         self.precision, self.recall, self.tp_secs, self.fp_secs, self.fn_secs = self.calc_precision_recall(self.y_true, self.y_pred, self.threshold)
@@ -362,6 +368,13 @@ class PerSecondTester(BaseTester):
         # output precision/recall table
         df = pd.DataFrame(self.pr_table, columns=['threshold', 'precision', 'recall', 'f1_score', 'f.5_score', 'f.25_score'])
         output_path = os.path.join(self.output_dir, "precision_recall_table.csv")
+        df.to_csv(output_path, index=False, float_format='%.3f')
+
+        # output precision/recall curve
+        df = pd.DataFrame()
+        df['precision'] = self.interp_precision
+        df['recall'] = self.interp_recall
+        output_path = os.path.join(self.output_dir, "precision_recall_curve.csv")
         df.to_csv(output_path, index=False, float_format='%.3f')
 
         # output recording table
