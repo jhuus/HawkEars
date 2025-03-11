@@ -11,8 +11,8 @@
 # The species column contains a comma-separated list of 4-letter codes for the species found in the corresponding
 # recording. If your annotations are in a different format, simply convert to this format to use this script.
 #
-# HawkEars should be run with "--merge 0 --min_score .05" (or similar very small value).
-# For BirdNET, specify "--rtype audacity --min_conf .05" (or similar very small value).
+# HawkEars should be run with "--merge 0 --min_score .0".
+# For BirdNET, specify "--rtype audacity --min_conf .05".
 # Disabling label merging ensures segment-specific scores are retained, and a low threshold makes more
 # information available for calculating statistics and curves.
 
@@ -308,7 +308,7 @@ if __name__ == '__main__':
     parser.add_argument('-i', type=str, default='HawkEars', help='Name of directory containing Audacity labels (not the full path, just the name).')
     parser.add_argument('-o', type=str, default='test_results1', help='Name of output directory.')
     parser.add_argument('-p', type=float, default=cfg.infer.min_score, help=f'Provide detailed reports for this threshold (default = {cfg.infer.min_score})')
-    parser.add_argument('-r', '--recordings', type=str, default=None, help='Recordings directory. Default is directory containing annotations file.')
+    parser.add_argument('-r', type=str, default=None, help='Recordings directory. Default is directory containing annotations file.')
     parser.add_argument('-t', type=float, default=.95, help=f'Output TP seconds for this precision (default = .95)')
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s.%(msecs)03d %(message)s', datefmt='%H:%M:%S')

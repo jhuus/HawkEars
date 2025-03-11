@@ -9,8 +9,8 @@
 # for the species found in the corresponding minute.
 # If your annotations are in a different format, simply convert to this format to use this script.
 #
-# HawkEars should be run with "--merge 0 --min_score .05" (or similar very small value).
-# For BirdNET, specify "--rtype audacity --min_conf .05" (or similar very small value).
+# HawkEars should be run with "--merge 0 --min_score 0".
+# For BirdNET, specify "--rtype audacity --min_conf 0".
 # Disabling label merging ensures segment-specific scores are retained, and a low threshold makes more
 # information available for calculating statistics and curves.
 
@@ -102,7 +102,7 @@ class PerMinuteTester(BaseTester):
         self.trained_species = sorted(trained_species_dict.keys())
         self.set_species_indexes()
 
-    # create a dataframe representing the ground truth data, with recordings segmented into 3-second segments
+    # create a dataframe representing the ground truth data, with recordings segmented into 1-minute segments
     def init_y_true(self):
         # convert self.annotations to 2D array with a row per segment and a column per species;
         # set cells to 1 if species is present and 0 if not present
@@ -130,17 +130,70 @@ class PerMinuteTester(BaseTester):
             if column not in self.annotated_species_dict:
                 self.y_true_annotated_df = self.y_true_annotated_df.drop(column, axis=1)
 
+    # calculate precision/recall stats
+    def _calc_pr_table(self):
+        # use the looping method so we get per_second precision
+        thresholds = []
+        recall_annotated, precision_annotated_minutes, precision_annotated_seconds = [], [], []
+        recall_trained, precision_trained_minutes = [], []
+        for threshold in np.arange(.01, 1.01, .01):
+            info = self.get_precision_recall(threshold)
+            thresholds.append(threshold)
+            recall_annotated.append(info['recall_annotated'])
+            precision_annotated_minutes.append(info['precision_annotated'])
+            precision_annotated_seconds.append(info['precision_secs'])
+            recall_trained.append(info['recall_trained'])
+            precision_trained_minutes.append(info['precision_trained'])
+
+        self.pr_table_dict = {}
+        self.pr_table_dict['annotated_thresholds'] = thresholds
+        self.pr_table_dict['annotated_precisions_minutes'] = precision_annotated_minutes
+        self.pr_table_dict['annotated_precisions_seconds'] = precision_annotated_seconds
+        self.pr_table_dict['annotated_recalls'] = recall_annotated
+
+        self.pr_table_dict['trained_thresholds'] = thresholds
+        self.pr_table_dict['trained_precisions'] = precision_trained_minutes
+        self.pr_table_dict['trained_recalls'] = recall_trained
+
+        # use this method for more granular results without per_second precision
+        precision, recall, thresholds = metrics.precision_recall_curve(self.y_true_annotated.ravel(), self.y_pred_annotated.ravel())
+        self.pr_table_dict['annotated_thresholds_fine'] = thresholds
+        self.pr_table_dict['annotated_precisions_fine'] = precision
+        self.pr_table_dict['annotated_recalls_fine'] = recall
+
+        precision, recall, thresholds = metrics.precision_recall_curve(self.y_true_trained.ravel(), self.y_pred_trained.ravel())
+        self.pr_table_dict['trained_thresholds_fine'] = thresholds
+        self.pr_table_dict['trained_precisions_fine'] = precision
+        self.pr_table_dict['trained_recalls_fine'] = recall
+
+    # calculate area under PR curve from precision = .9 to 1.0, so we can assess performance
+    # at the high-precision end of the curve
+    def _calc_pr_auc(self, precision, recall):
+        # interpolate first to ensure monotonically increasing
+        interp_precision, interp_recall = self.interpolate(precision, recall)
+        if len(interp_precision) == 0:
+            return 0
+
+        i = np.searchsorted(interp_precision, .9) # if not found, auc will be 0
+        return metrics.auc(interp_precision[i:], interp_recall[i:])
+
     # output precision/recall per threshold
-    def _output_pr_per_threshold(self, threshold, precision, recall, name):
+    def _output_pr_per_threshold(self, threshold, precision, recall, name, precision_secs=None):
         df = pd.DataFrame()
         df['threshold'] = pd.Series(threshold)
-        df['precision'] = pd.Series(precision)
-        df['recall'] = pd.Series(recall)
+        df['recall (minutes)'] = pd.Series(recall)
+        df['precision (minutes)'] = pd.Series(precision)
+        if precision_secs is not None:
+            df['precision (seconds)'] = pd.Series(precision_secs)
+
         df.to_csv(os.path.join(self.output_dir, f'{name}.csv'), index=False, float_format='%.3f')
 
         plt.clf()
-        plt.plot(precision, label='Precision')
         plt.plot(recall, label='Recall')
+        plt.plot(precision, label='Precision (Minutes)')
+        if precision_secs is not None:
+            plt.plot(precision_secs, label='Precision (Seconds)')
+
         x_tick_locations, x_tick_labels = [], []
         for i in range(11):
             x_tick_locations.append(int(i * (len(threshold) / 10)))
@@ -225,20 +278,13 @@ class PerMinuteTester(BaseTester):
         plt.savefig(os.path.join(self.output_dir, f'roc_inverted_curve_{suffix}.png'))
         plt.close()
 
-    # calculate area under PR curve from precision = .9 to 1.0, so we can assess performance
-    # at the high-precision end of the curve
-    def _calc_pr_auc(self, precision, recall):
-        # interpolate first to ensure monotonically increasing
-        interp_precision, interp_recall = self.interpolate(precision, recall)
-        i = np.searchsorted(interp_precision, .9) # if not found, auc will be 0
-        return metrics.auc(interp_precision[i:], interp_recall[i:])
-
     def _produce_reports(self):
         # calculate and output precision/recall per threshold
         threshold_annotated = self.pr_table_dict['annotated_thresholds']
-        precision_annotated = self.pr_table_dict['annotated_precisions']
+        precision_annotated = self.pr_table_dict['annotated_precisions_minutes']
+        precision_annotated_secs = self.pr_table_dict['annotated_precisions_seconds']
         recall_annotated = self.pr_table_dict['annotated_recalls']
-        self._output_pr_per_threshold(threshold_annotated, precision_annotated, recall_annotated, 'pr_per_threshold_annotated')
+        self._output_pr_per_threshold(threshold_annotated, precision_annotated, recall_annotated, 'pr_per_threshold_annotated', precision_annotated_secs)
 
         threshold_trained = self.pr_table_dict['trained_thresholds']
         precision_trained = self.pr_table_dict['trained_precisions']
@@ -257,12 +303,16 @@ class PerMinuteTester(BaseTester):
         roc_thresholds = self.roc_dict['roc_thresholds_annotated']
         roc_tpr = self.roc_dict['roc_tpr_annotated']
         roc_fpr = self.roc_dict['roc_fpr_annotated']
-        self._output_roc_curves(roc_thresholds, roc_tpr, roc_fpr, precision_annotated, recall_annotated, 'annotated')
+        precision_annotated_fine = self.pr_table_dict['annotated_precisions_fine']
+        recall_annotated_fine = self.pr_table_dict['annotated_recalls_fine']
+        self._output_roc_curves(roc_thresholds, roc_tpr, roc_fpr, precision_annotated_fine, recall_annotated_fine, 'annotated')
 
         roc_thresholds = self.roc_dict['roc_thresholds_trained']
         roc_tpr = self.roc_dict['roc_tpr_trained']
         roc_fpr = self.roc_dict['roc_fpr_trained']
-        self._output_roc_curves(roc_thresholds, roc_tpr, roc_fpr, precision_trained, recall_trained, 'trained')
+        precision_trained_fine = self.pr_table_dict['trained_precisions_fine']
+        recall_trained_fine = self.pr_table_dict['trained_recalls_fine']
+        self._output_roc_curves(roc_thresholds, roc_tpr, roc_fpr, precision_trained_fine, recall_trained_fine, 'trained')
 
         # output a CSV with number of predictions in ranges [0, .1), [.1, .2), ..., [.9, 1.0]
         scores = np.sort(self.prediction_scores)
@@ -316,52 +366,42 @@ class PerMinuteTester(BaseTester):
         with open(rpt_path, 'w') as file:
             file.write(f"recording,segment,TP count,FP count,FN count,TP species,FP species,FN species\n")
             for recording in self.details_dict['rec_info']:
-                total_tp_count = 0
-                total_fp_count = 0
-                total_fn_count = 0
-
                 for i, segment in enumerate(self.segments_per_recording[recording]):
-                    tp_seconds = self.details_dict['rec_info'][recording][i]['tp_seconds']
-                    tp_count = tp_seconds / cfg.audio.segment_len
-                    total_tp_count += tp_count
-
-                    fp_seconds = self.details_dict['rec_info'][recording][i]['fp_seconds']
-                    fp_count = fp_seconds / cfg.audio.segment_len
-                    total_fp_count += fp_count
-
-                    fn_seconds = self.details_dict['rec_info'][recording][i]['fn_seconds']
-                    fn_count = fn_seconds / cfg.audio.segment_len
-                    total_fn_count += fn_count
-
+                    tp_count = 0
                     if recording in self.details_dict['true_positives']:
                         tp_details = self.details_dict['true_positives'][recording][i]
                         tp_list = []
                         for tp in tp_details:
                             if tp[0] not in tp_list:
                                 tp_list.append(tp[0])
+                                tp_count += 1
                         tp_str = self.list_to_string(tp_list)
                     else:
                         tp_str = ''
 
+                    fp_count = 0
                     if recording in self.details_dict['false_positives']:
                         fp_details = self.details_dict['false_positives'][recording][i]
                         fp_list = []
                         for fp in fp_details:
                             if fp[0] not in fp_list:
                                 fp_list.append(fp[0])
+                                fp_count += 1
                         fp_str = self.list_to_string(fp_list)
                     else:
                         fp_str = ''
 
+                    fn_count = 0
                     if recording in self.details_dict['false_negatives']:
                         fn_list = self.details_dict['false_negatives'][recording][i]
+                        fn_count = len(fn_list)
                         fn_str = self.list_to_string(fn_list)
                     else:
                         fn_str = ''
 
                     file.write(f"{recording},{segment + 1},{tp_count},{fp_count},{fn_count},{tp_str},{fp_str},{fn_str}\n")
 
-                recording_summary.append([recording, total_tp_count, total_fp_count, total_fn_count])
+                recording_summary.append([recording, tp_count, fp_count, fn_count])
 
         # write recording summary (row per recording)
         rpt_path = os.path.join(self.output_dir, f'recording_summary_trained.csv')
@@ -371,7 +411,7 @@ class PerMinuteTester(BaseTester):
         # write details per annotated species
         rpt_path = os.path.join(self.output_dir, f'species_annotated.csv')
         with open(rpt_path, 'w') as file:
-            file.write(f"species,MAP,ROC AUC,precision,recall,annotated segments,TP segments,FP segments\n")
+            file.write(f"species,MAP,ROC AUC,precision,recall,annotated segments,TP seconds,FP seconds\n")
             species_precision = self.details_dict['species_precision']
             species_recall = self.details_dict['species_recall']
             species_valid = self.details_dict['species_valid']
@@ -383,8 +423,8 @@ class PerMinuteTester(BaseTester):
                 annotations = self.y_true_annotated_df[species].sum()
                 precision = species_precision[i]
                 recall = species_recall[i]
-                valid = species_valid[i] / cfg.audio.segment_len # convert from seconds to segments
-                invalid = species_invalid[i] / cfg.audio.segment_len # convert from seconds to segments
+                valid = species_valid[i] # TP seconds
+                invalid = species_invalid[i] # FP seconds
 
                 if species in species_map:
                     map_score = species_map[species]
@@ -440,16 +480,7 @@ class PerMinuteTester(BaseTester):
         self.details_dict = self.get_precision_recall(threshold=self.threshold, details=True)
 
         logging.info('Calculating PR table')
-        self.pr_table_dict = {}
-        precision, recall, thresholds = metrics.precision_recall_curve(self.y_true_annotated.ravel(), self.y_pred_annotated.ravel())
-        self.pr_table_dict['annotated_thresholds'] = thresholds
-        self.pr_table_dict['annotated_precisions'] = precision
-        self.pr_table_dict['annotated_recalls'] = recall
-
-        precision, recall, thresholds = metrics.precision_recall_curve(self.y_true_trained.ravel(), self.y_pred_trained.ravel())
-        self.pr_table_dict['trained_thresholds'] = thresholds
-        self.pr_table_dict['trained_precisions'] = precision
-        self.pr_table_dict['trained_recalls'] = recall
+        self._calc_pr_table()
 
         logging.info(f'Creating reports in {self.output_dir}')
         self._produce_reports()

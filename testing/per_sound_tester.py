@@ -5,10 +5,9 @@
 # fractional seconds, e.g. 12.5 represents 12.5 seconds from the start of the recording.
 # If your annotations are in a different format, simply convert to this format to use this script.
 #
-# HawkEars should be run with "--overlap 0 --merge 0 --min_score .05" (or similar very small value).
-# For BirdNET, specify "--overlap 0 --rtype audacity --min_conf .05" (or similar very small value).
-# Overlap of 0 is required due to the way this script assigns predictions to 3-second segments.
-# (TODO: use smaller segments when overlap is detected, e.g. 1.5-second segments if 1.5 second overlap).
+# HawkEars should be run with "--merge 0 --min_score 0".
+# For BirdNET, specify "--rtype audacity --min_conf 0".
+# Specifying "--overlap 0" is optional in both cases, but overlap must be either 0 or 1.5.
 # Disabling label merging ensures segment-specific scores are retained, and a low threshold makes more
 # information available for calculating statistics and curves.
 
@@ -45,13 +44,14 @@ class Annotation:
 # but we support a list of each so other scripts can call this one to combine tests.
 # If multiple directories are used, we assume no two recording names are the same.
 class PerSoundTester(BaseTester):
-    def __init__(self, annotation_paths, recording_dirs, label_dir, output_dir, threshold, report_species):
+    def __init__(self, annotation_paths, recording_dirs, label_dir, output_dir, threshold, report_species, overlap):
         super().__init__()
         self.annotation_paths = annotation_paths
         self.recording_dirs = recording_dirs
         self.output_dir = output_dir
         self.threshold = threshold
         self.report_species = report_species
+        self.overlap = overlap
 
         self.label_dirs = []
         for recording_dir in self.recording_dirs:
@@ -116,21 +116,22 @@ class PerSoundTester(BaseTester):
         # where each segment is 3 seconds (cfg.audio.segment_len) long
         self.segments_per_recording = {}
         segment_dict = {}
-        for recording in self.recording_duration:
+        for recording in self.annotations:
             # calculate num_segments exactly as it's done in analyze.py so they match
-            offsets = np.arange(0, self.recording_duration[recording] - cfg.audio.segment_len + 1.0, cfg.audio.segment_len).tolist()
+            increment = cfg.audio.segment_len - self.overlap
+            offsets = np.arange(0, self.recording_duration[recording] - cfg.audio.segment_len + 1.0, increment).tolist()
+
             num_segments = len(offsets)
             self.segments_per_recording[recording] = [i for i in range(num_segments)]
             segment_dict[recording]= {}
             for segment in range(num_segments):
                 segment_dict[recording][segment] = {}
 
-            if recording in self.annotations: # some recordings may have no annotations
-                for annotation in self.annotations[recording]:
-                    segments = self.get_segments(annotation.start_time, annotation.end_time, segment_len=cfg.audio.segment_len)
-                    for segment in segments:
-                        if segment in segment_dict[recording]:
-                            segment_dict[recording][segment][annotation.species] = 1
+            for annotation in self.annotations[recording]:
+                segments = self.get_segments(annotation.start_time, annotation.end_time, segment_len=cfg.audio.segment_len, overlap=self.overlap)
+                for segment in segments:
+                    if segment in segment_dict[recording]:
+                        segment_dict[recording][segment][annotation.species] = 1
 
         # convert to 2D array with a row per segment and a column per species;
         # set cells to 1 if species is present and 0 if not present
@@ -258,6 +259,9 @@ class PerSoundTester(BaseTester):
     def _calc_pr_auc(self, precision, recall):
         # interpolate first to ensure monotonically increasing
         interp_precision, interp_recall = self.interpolate(precision, recall)
+        if len(interp_precision) == 0:
+            return 0
+
         i = np.searchsorted(interp_precision, .9) # if not found, auc will be 0
         return metrics.auc(interp_precision[i:], interp_recall[i:])
 
@@ -268,18 +272,21 @@ class PerSoundTester(BaseTester):
         recall_annotated = self.pr_table_dict['annotated_recalls']
         self._output_pr_per_threshold(threshold_annotated, precision_annotated, recall_annotated, 'pr_per_threshold_annotated')
 
-        threshold_trained = self.pr_table_dict['trained_thresholds']
-        precision_trained = self.pr_table_dict['trained_precisions']
-        recall_trained = self.pr_table_dict['trained_recalls']
-        self._output_pr_per_threshold(threshold_trained, precision_trained, recall_trained, 'pr_per_threshold_trained')
+        if self.report_species is None: # skip output for trained species if just reporting on one species
+            threshold_trained = self.pr_table_dict['trained_thresholds']
+            precision_trained = self.pr_table_dict['trained_precisions']
+            recall_trained = self.pr_table_dict['trained_recalls']
+            self._output_pr_per_threshold(threshold_trained, precision_trained, recall_trained, 'pr_per_threshold_trained')
 
         # calculate and output recall per precision
         self._output_pr_curve(precision_annotated, recall_annotated, 'pr_curve_annotated')
-        self._output_pr_curve(precision_trained, recall_trained, 'pr_curve_trained')
+        if self.report_species is None:
+            self._output_pr_curve(precision_trained, recall_trained, 'pr_curve_trained')
 
         # calculate area under PR curve from precision = .9 to 1.0
         pr_auc_annotated = self._calc_pr_auc(precision_annotated, recall_annotated)
-        pr_auc_trained = self._calc_pr_auc(precision_trained, recall_trained)
+        if self.report_species is None:
+            pr_auc_trained = self._calc_pr_auc(precision_trained, recall_trained)
 
         # output the ROC curves
         roc_thresholds = self.roc_dict['roc_thresholds_annotated']
@@ -287,33 +294,37 @@ class PerSoundTester(BaseTester):
         roc_fpr = self.roc_dict['roc_fpr_annotated']
         self._output_roc_curves(roc_thresholds, roc_tpr, roc_fpr, precision_annotated, recall_annotated, 'annotated')
 
-        roc_thresholds = self.roc_dict['roc_thresholds_trained']
-        roc_tpr = self.roc_dict['roc_tpr_trained']
-        roc_fpr = self.roc_dict['roc_fpr_trained']
-        self._output_roc_curves(roc_thresholds, roc_tpr, roc_fpr, precision_trained, recall_trained, 'trained')
+        if self.report_species is None:
+            roc_thresholds = self.roc_dict['roc_thresholds_trained']
+            roc_tpr = self.roc_dict['roc_tpr_trained']
+            roc_fpr = self.roc_dict['roc_fpr_trained']
+            self._output_roc_curves(roc_thresholds, roc_tpr, roc_fpr, precision_trained, recall_trained, 'trained')
 
-        # output a CSV with number of predictions in ranges [0, .1), [.1, .2), ..., [.9, 1.0]
-        scores = np.sort(self.prediction_scores)
-        prev_idx = 0
-        count = []
-        for x in np.arange(.1, .91, .1):
-            idx = np.searchsorted(scores, x)
-            count.append(idx - prev_idx)
-            prev_idx = idx
+            # output a CSV with number of predictions in ranges [0, .1), [.1, .2), ..., [.9, 1.0]
+            scores = np.sort(self.prediction_scores)
+            prev_idx = 0
+            count = []
+            for x in np.arange(.1, .91, .1):
+                idx = np.searchsorted(scores, x)
+                count.append(idx - prev_idx)
+                prev_idx = idx
 
-        count.append(len(scores) - prev_idx) # add the count for [.9, 1.0]
-        min_value = np.arange(0, .91, .1)
-        max_value = np.arange(.1, 1.01, .1)
-        df = pd.DataFrame()
-        df['min'] = pd.Series(min_value)
-        df['max'] = pd.Series(max_value)
-        df['count'] = count
-        df.to_csv(os.path.join(self.output_dir, 'prediction_range_counts.csv'), index=False, float_format='%.1f')
+            count.append(len(scores) - prev_idx) # add the count for [.9, 1.0]
+            min_value = np.arange(0, .91, .1)
+            max_value = np.arange(.1, 1.01, .1)
+            df = pd.DataFrame()
+            df['min'] = pd.Series(min_value)
+            df['max'] = pd.Series(max_value)
+            df['count'] = count
+            df.to_csv(os.path.join(self.output_dir, 'prediction_range_counts.csv'), index=False, float_format='%.1f')
 
         # output a summary report
         rpt = []
+        if self.report_species is None:
+            rpt.append(f"For annotated species only:\n")
+        else:
+            rpt.append(f"For species {self.report_species} only:\n")
 
-        rpt.append(f"For annotated species only:\n")
         rpt.append(f"   Macro-averaged MAP score = {self.map_dict['macro_map']:.4f}\n")
         rpt.append(f"   Micro-averaged MAP score = {self.map_dict['micro_map_annotated']:.4f}\n")
         rpt.append(f"   Macro-averaged ROC AUC score = {self.roc_dict['macro_roc']:.4f}\n")
@@ -323,16 +334,17 @@ class PerSoundTester(BaseTester):
         rpt.append(f"      Precision = {100 * self.details_dict['precision_annotated']:.2f}%\n")
         rpt.append(f"      Recall = {100 * self.details_dict['recall_annotated']:.2f}%\n")
 
-        rpt.append("\n")
-        rpt.append(f"For all trained species:\n")
-        rpt.append(f"   Micro-averaged MAP score = {self.map_dict['micro_map_trained']:.4f}\n")
-        rpt.append(f"   Micro-averaged ROC AUC score = {self.roc_dict['micro_roc_trained']:.4f}\n")
-        rpt.append(f"   PR AUC for precision from .9 to 1.0 = {pr_auc_trained:.5f}\n")
-        rpt.append(f"   For threshold = {self.threshold}:\n")
-        rpt.append(f"      Precision = {100 * self.details_dict['precision_trained']:.2f}%\n")
-        rpt.append(f"      Recall = {100 * self.details_dict['recall_trained']:.2f}%\n")
-        rpt.append("")
-        rpt.append(f"Average of macro-MAP-annotated and micro-MAP-trained = {self.combined_map_score:.4f}\n")
+        if self.report_species is None:
+            rpt.append("\n")
+            rpt.append(f"For all trained species:\n")
+            rpt.append(f"   Micro-averaged MAP score = {self.map_dict['micro_map_trained']:.4f}\n")
+            rpt.append(f"   Micro-averaged ROC AUC score = {self.roc_dict['micro_roc_trained']:.4f}\n")
+            rpt.append(f"   PR AUC for precision from .9 to 1.0 = {pr_auc_trained:.5f}\n")
+            rpt.append(f"   For threshold = {self.threshold}:\n")
+            rpt.append(f"      Precision = {100 * self.details_dict['precision_trained']:.2f}%\n")
+            rpt.append(f"      Recall = {100 * self.details_dict['recall_trained']:.2f}%\n")
+            rpt.append("")
+            rpt.append(f"Average of macro-MAP-annotated and micro-MAP-trained = {self.combined_map_score:.4f}\n")
 
         print()
         with open(os.path.join(self.output_dir, "summary_report.txt"), 'w') as summary:
@@ -342,7 +354,7 @@ class PerSoundTester(BaseTester):
 
         # write recording details (row per segment)
         recording_summary = []
-        rpt_path = os.path.join(self.output_dir, f'recording_details_trained.csv')
+        rpt_path = os.path.join(self.output_dir, f'recording_details.csv')
         with open(rpt_path, 'w') as file:
             file.write(f"recording,segment,TP count,FP count,FN count,TP species,FP species,FN species\n")
             for recording in self.details_dict['rec_info']:
@@ -394,7 +406,7 @@ class PerSoundTester(BaseTester):
                 recording_summary.append([recording, total_tp_count, total_fp_count, total_fn_count])
 
         # write recording summary (row per recording)
-        rpt_path = os.path.join(self.output_dir, f'recording_summary_trained.csv')
+        rpt_path = os.path.join(self.output_dir, f'recording_summary.csv')
         df = pd.DataFrame(recording_summary, columns=['recording', 'TP count', 'FP count', 'FN count'])
         df. to_csv(rpt_path, index=False)
 
@@ -409,12 +421,13 @@ class PerSoundTester(BaseTester):
             species_map = self.map_dict['species_map']
             species_roc = self.roc_dict['species_roc']
 
+            segment_len = cfg.audio.segment_len - self.overlap
             for i, species in enumerate(self.annotated_species):
                 annotations = self.y_true_annotated_df[species].sum()
                 precision = species_precision[i]
                 recall = species_recall[i]
-                valid = species_valid[i] / cfg.audio.segment_len # convert from seconds to segments
-                invalid = species_invalid[i] / cfg.audio.segment_len # convert from seconds to segments
+                valid = species_valid[i] / segment_len # convert from seconds to segments
+                invalid = species_invalid[i] / segment_len # convert from seconds to segments
 
                 if species in species_map:
                     map_score = species_map[species]
@@ -428,15 +441,16 @@ class PerSoundTester(BaseTester):
 
                 file.write(f"{species},{map_score:.3f},{roc_score:.3f},{precision:.3f},{recall:.3f},{annotations},{valid},{invalid}\n")
 
-        # calculate and output details per non-annotated species
-        species_dict = self.get_non_annotated_species_details()
-        rows = []
-        for species in species_dict:
-            count1, count2, count3 = species_dict[species]
-            rows.append([species, count1, count2, count3])
+        if self.report_species is None:
+            # calculate and output details per non-annotated species
+            species_dict = self.get_non_annotated_species_details()
+            rows = []
+            for species in species_dict:
+                count1, count2, count3 = species_dict[species]
+                rows.append([species, count1, count2, count3])
 
-        df = pd.DataFrame(rows, columns=['species', 'predictions >= .25', 'predictions >= .5', 'predictions >= .75'])
-        df.to_csv(os.path.join(self.output_dir, 'species_non_annotated.csv'), index=False)
+            df = pd.DataFrame(rows, columns=['species', 'predictions >= .25', 'predictions >= .5', 'predictions >= .75'])
+            df.to_csv(os.path.join(self.output_dir, 'species_non_annotated.csv'), index=False)
 
     def run(self):
         if not os.path.exists(self.output_dir):
@@ -448,9 +462,10 @@ class PerSoundTester(BaseTester):
         # initialize y_true and y_pred and save them as CSV files
         logging.info('Initializing')
         self.init_y_true()
-        self.init_y_pred(self.label_dirs, segment_len=3, segments_per_recording=self.segments_per_recording)
-        if self.labels_overlap:
-            logging.error("Error: overlapping labels found.")
+        self.init_y_pred(self.label_dirs, segment_len=3, segments_per_recording=self.segments_per_recording, overlap=self.overlap, use_max_score=False)
+
+        if self.labels_overlap and self.overlap == 0:
+            logging.error("Error: overlapping labels found but no overlap specified.")
             quit()
 
         if self.labels_merged:
@@ -506,6 +521,7 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--annotations', type=str, default=None, help='Path to CSV file containing annotations (ground truth).')
     parser.add_argument('-i', '--input', type=str, default='HawkEars', help='Name of directory containing Audacity labels (not the full path, just the name).')
     parser.add_argument('-o', '--output', type=str, default='test_results1', help='Name of output directory.')
+    parser.add_argument('-v', '--overlap', type=float, default=0, help='Overlap per spectrogram.')
     parser.add_argument('-r', '--recordings', type=str, default=None, help='Recordings directory. Default is directory containing annotations file.')
     parser.add_argument('-s', '--species', type=str, default=None, help='If specified, include only this species (default = None).')
     parser.add_argument('--slen', type=float, default=cfg.audio.segment_len, help=f'Segment length. Default = {cfg.audio.segment_len}.')
@@ -520,6 +536,7 @@ if __name__ == '__main__':
     recording_dir = args.recordings
     report_species = args.species
     threshold = args.threshold
+    overlap = args.overlap
     cfg.audio.segment_len = args.slen
 
     if annotation_path is None:
@@ -533,4 +550,4 @@ if __name__ == '__main__':
     if recording_dir is None:
         recording_dir = Path(annotation_path).parents[0]
 
-    PerSoundTester([annotation_path], [recording_dir], label_dir, output_dir, threshold, report_species).run()
+    PerSoundTester([annotation_path], [recording_dir], label_dir, output_dir, threshold, report_species, overlap).run()
