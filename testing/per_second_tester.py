@@ -39,6 +39,7 @@ import glob
 import inspect
 import librosa
 import logging
+import math
 import os
 from pathlib import Path
 import numpy as np
@@ -77,16 +78,17 @@ class Annotation:
         return f"species={self.species}, start={self.start}, end={self.end}"
 
 class PerSecondTester(BaseTester):
-    def __init__(self, annotation_path, recording_dir, label_dir, output_dir, threshold, report_species, overlap, max_secs):
+    def __init__(self, annotation_path, recording_dir, label_dir, output_dir, threshold, report_species, max_secs):
         super().__init__()
         self.annotation_path = annotation_path
         self.recording_dir = recording_dir
         self.output_dir = output_dir
         self.threshold = threshold
         self.report_species = report_species
-        self.overlap = overlap
         self.max_secs = max_secs
         self.labels_merged = False
+        self.segment_len = None
+        self.overlap = None
 
         self.label_dir = os.path.join(recording_dir, label_dir)
         if not os.path.exists(self.label_dir):
@@ -244,6 +246,12 @@ class PerSecondTester(BaseTester):
                     if self.report_species is not None and label_species != self.report_species:
                         continue
 
+                    if self.segment_len is None:
+                        self.segment_len = end - start
+                    elif not math.isclose(end - start, self.segment_len):
+                        logging.error(f"Error: detected different label durations ({self.segment_len} and {end - start})")
+                        quit()
+
                     label = Label(recording, label_species, start, end, score)
                     label.matched = False
                     if label.start % cfg.audio.segment_len != 0:
@@ -253,6 +261,9 @@ class PerSecondTester(BaseTester):
                         self.labels_merged = True
 
                     self.labels_per_recording[recording].append(label)
+                    if self.overlap is None and len(self.labels_per_recording[recording]) == 2:
+                        self.overlap = self.labels_per_recording[recording][0].end - self.labels_per_recording[recording][1].start
+                        assert(self.overlap > 0 or math.isclose(self.overlap, 0))
 
         # ensure labels-per-recording sorted by start
         for recording in self.labels_per_recording:
@@ -263,7 +274,6 @@ class PerSecondTester(BaseTester):
     # columns contain the highest score in any label for that species that overlaps the
     # annotation
     def init_y_pred(self):
-        self.get_labels()
         self.y_pred_df = self.y_true_df.copy()
         self.y_pred_df.iloc[:, 1:] = 0
 
@@ -391,6 +401,8 @@ class PerSecondTester(BaseTester):
 
         # initialize y_true and y_pred and save them as CSV files
         logging.info('Initializing')
+        self.get_labels() # read labels first to determine segment_len and overlap
+        logging.info(f"Detected segment length={self.segment_len:.2f} and label overlap={self.overlap:.2f}")
         self.init_y_true()
         self.init_y_pred()
 
@@ -410,7 +422,6 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--input', type=str, default='HawkEars', help='Name of directory containing Audacity labels (not the full path, just the name).')
     parser.add_argument('-m', '--max_secs', type=float, default=None, help='If specified, ignore any labels or annotations after this many seconds.')
     parser.add_argument('-o', '--output', type=str, default='test_results1', help='Name of output directory.')
-    parser.add_argument('-v', '--overlap', type=float, default=0, help='Overlap per spectrogram.')
     parser.add_argument('-r', '--recordings', type=str, default=None, help='Recordings directory. Default is directory containing annotations file.')
     parser.add_argument('-s', '--species', type=str, default=None, help='If specified, include only this species (default = None).')
     parser.add_argument('-t', '--threshold', type=float, default=cfg.infer.min_score, help=f'Provide detailed reports for this threshold (default = {cfg.infer.min_score})')
@@ -424,7 +435,6 @@ if __name__ == '__main__':
     recording_dir = args.recordings
     report_species = args.species
     threshold = args.threshold
-    overlap = args.overlap
     max_secs = args.max_secs
 
     if annotation_path is None:
@@ -438,4 +448,4 @@ if __name__ == '__main__':
     if recording_dir is None:
         recording_dir = Path(annotation_path).parents[0]
 
-    PerSecondTester(annotation_path, recording_dir, label_dir, output_dir, threshold, report_species, overlap, max_secs).run()
+    PerSecondTester(annotation_path, recording_dir, label_dir, output_dir, threshold, report_species, max_secs).run()
