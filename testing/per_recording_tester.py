@@ -46,6 +46,7 @@ class PerRecordingTester(BaseTester):
         self.threshold = threshold
         self.label_dir = label_dir
         self.tp_secs_at_precision = tp_secs_at_precision
+        self.per_recording = True
 
     # read CSV files giving ground truth data, and save as self.annotations[recording] = [species]
     # for each recording.
@@ -124,6 +125,31 @@ class PerRecordingTester(BaseTester):
             if column not in self.annotated_species_dict:
                 self.y_true_annotated_df = self.y_true_annotated_df.drop(column, axis=1)
 
+    # Create y_pred dataframe with per-recording granularity
+    def init_y_pred(self):
+        rows = []
+        for i, recording in enumerate(sorted(self.labels_per_recording.keys())):
+            row = [0 for species in self.trained_species]
+            for label in self.labels_per_recording[recording]:
+                if label.species not in self.trained_species_indexes:
+                    continue
+
+                # use max so we use the highest score for this species in this recording
+                row[self.trained_species_indexes[label.species]] = max(row[self.trained_species_indexes[label.species]], label.score)
+
+            rows.append([recording] + row)
+
+        self.y_pred_trained_df = pd.DataFrame(rows, columns=[''] + self.trained_species)
+
+        # create version for annotated species only
+        self.y_pred_annotated_df = self.y_pred_trained_df.copy()
+        for i, column in enumerate(self.y_pred_annotated_df.columns):
+            if i == 0:
+                continue # skip the index column
+
+            if column not in self.annotated_species_dict:
+                self.y_pred_annotated_df = self.y_pred_annotated_df.drop(column, axis=1)
+
     def _produce_reports(self):
         # calculate and output precision/recall per threshold
         threshold = self.pr_table_dict['thresholds']
@@ -180,13 +206,13 @@ class PerRecordingTester(BaseTester):
                 rec_info = self.details_dict['rec_info'][recording]
 
                 tp_seconds = rec_info['tp_seconds']
-                tp_count = tp_seconds / cfg.audio.segment_len
+                tp_count = tp_seconds / self.segment_len
 
                 fp_seconds = rec_info['fp_seconds']
-                fp_count = fp_seconds / cfg.audio.segment_len
+                fp_count = fp_seconds / self.segment_len
 
                 fn_seconds = rec_info['fn_seconds']
-                fn_count = fn_seconds / cfg.audio.segment_len
+                fn_count = fn_seconds / self.segment_len
 
                 if recording in self.details_dict['true_positives']:
                     tp_details = self.details_dict['true_positives'][recording]
@@ -262,8 +288,6 @@ class PerRecordingTester(BaseTester):
 
         # initialize y_true and y_pred and save them as CSV files
         logging.info('Initializing')
-        self.init_y_true()
-
         label_dirs = []
         for directory in self.recording_dirs:
             recording_dir = os.path.join(self.recording_dir, directory)
@@ -274,7 +298,10 @@ class PerRecordingTester(BaseTester):
 
             label_dirs.append(label_dir)
 
-        self.init_y_pred(label_dirs, per_recording=True)
+        self.get_labels(label_dirs) # read labels first to determine segment_len and overlap
+        self.init_y_true()
+        self.init_y_pred()
+        self.convert_to_numpy()
 
         if self.labels_merged:
             logging.error("Error: merged labels found.")

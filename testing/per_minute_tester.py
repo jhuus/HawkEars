@@ -456,8 +456,10 @@ class PerMinuteTester(BaseTester):
 
         # initialize y_true and y_pred and save them as CSV files
         logging.info('Initializing')
+        self.get_labels([self.label_dir], segment_len=60, overlap=0, report_species=self.report_species)
         self.init_y_true()
-        self.init_y_pred([self.label_dir], segment_len=60, segments_per_recording=self.segments_per_recording)
+        self.init_y_pred(segments_per_recording=self.segments_per_recording)
+        self.convert_to_numpy()
 
         if self.labels_merged:
             logging.error("Error: merged labels found.")

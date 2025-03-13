@@ -44,14 +44,13 @@ class Annotation:
 # but we support a list of each so other scripts can call this one to combine tests.
 # If multiple directories are used, we assume no two recording names are the same.
 class PerSoundTester(BaseTester):
-    def __init__(self, annotation_paths, recording_dirs, label_dir, output_dir, threshold, report_species, overlap):
+    def __init__(self, annotation_paths, recording_dirs, label_dir, output_dir, threshold, report_species):
         super().__init__()
         self.annotation_paths = annotation_paths
         self.recording_dirs = recording_dirs
         self.output_dir = output_dir
         self.threshold = threshold
         self.report_species = report_species
-        self.overlap = overlap
 
         self.label_dirs = []
         for recording_dir in self.recording_dirs:
@@ -68,6 +67,40 @@ class PerSoundTester(BaseTester):
             for recording in recordings:
                 duration = librosa.get_duration(path=recording)
                 self.recording_duration[Path(recording).stem] = duration
+
+    # Determine which offsets an annotation or label should be assigned to, and return the list.
+    # The returned offsets are aligned on boundaries of segment_len - overlap. So by default,
+    # they are aligned on 3-second boundaries. If segment_len=3 and overlap=1.5, they are aligned
+    # on 1.5 second boundaries (0, 1.5, 3.0, ...). The start_time and end_time might not be aligned
+    # on the corresponding boundaries. Ensure that the first and last segments contain at least
+    # min_seconds of the labelled sound.
+    @staticmethod
+    def get_offsets(start_time, end_time, segment_len=cfg.audio.segment_len, overlap=0, min_seconds=0.3):
+        step = segment_len - overlap
+        if step <= 0:
+            raise ValueError("segment_len must be greater than overlap to ensure positive step size")
+
+        # find the first aligned offset no more than (segment_len - min_seconds) before start_time,
+        # to ensure the first segment contains at least min_seconds of the labelled sound
+        first_offset = max(0, math.ceil((start_time - (segment_len - min_seconds)) / step) * step)
+
+        # generate the list of offsets
+        offsets = []
+        current_offset = first_offset
+        while end_time - current_offset >= min_seconds:
+            offsets.append(current_offset)
+            current_offset += step
+
+        return offsets
+
+    # convert offsets to segment indexes
+    def get_segments(self, start_time, end_time, min_seconds=0.3):
+        offsets = self.get_offsets(start_time, end_time, self.segment_len, self.overlap, min_seconds)
+        if len(offsets) > 0:
+            first_segment = int(offsets[0] // (self.segment_len - self.overlap))
+            return [i for i in range(first_segment, first_segment + len(offsets), 1)]
+        else:
+            return []
 
     # read CSV files giving ground truth data, and save as a list of Annotation objects
     # in self.annotations[recording] for each recording.
@@ -128,7 +161,7 @@ class PerSoundTester(BaseTester):
                 segment_dict[recording][segment] = {}
 
             for annotation in self.annotations[recording]:
-                segments = self.get_segments(annotation.start_time, annotation.end_time, segment_len=cfg.audio.segment_len, overlap=self.overlap)
+                segments = self.get_segments(annotation.start_time, annotation.end_time)
                 for segment in segments:
                     if segment in segment_dict[recording]:
                         segment_dict[recording][segment][annotation.species] = 1
@@ -461,12 +494,10 @@ class PerSoundTester(BaseTester):
 
         # initialize y_true and y_pred and save them as CSV files
         logging.info('Initializing')
+        self.get_labels(self.label_dirs)
         self.init_y_true()
-        self.init_y_pred(self.label_dirs, segment_len=3, segments_per_recording=self.segments_per_recording, overlap=self.overlap, use_max_score=False)
-
-        if self.labels_overlap and self.overlap == 0:
-            logging.error("Error: overlapping labels found but no overlap specified.")
-            quit()
+        self.init_y_pred(segments_per_recording=self.segments_per_recording, use_max_score=False)
+        self.convert_to_numpy()
 
         if self.labels_merged:
             logging.error("Error: merged labels found.")
@@ -521,10 +552,8 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--annotations', type=str, default=None, help='Path to CSV file containing annotations (ground truth).')
     parser.add_argument('-i', '--input', type=str, default='HawkEars', help='Name of directory containing Audacity labels (not the full path, just the name).')
     parser.add_argument('-o', '--output', type=str, default='test_results1', help='Name of output directory.')
-    parser.add_argument('-v', '--overlap', type=float, default=0, help='Overlap per spectrogram.')
     parser.add_argument('-r', '--recordings', type=str, default=None, help='Recordings directory. Default is directory containing annotations file.')
     parser.add_argument('-s', '--species', type=str, default=None, help='If specified, include only this species (default = None).')
-    parser.add_argument('--slen', type=float, default=cfg.audio.segment_len, help=f'Segment length. Default = {cfg.audio.segment_len}.')
     parser.add_argument('-t', '--threshold', type=float, default=cfg.infer.min_score, help=f'Provide detailed reports for this threshold (default = {cfg.infer.min_score})')
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s.%(msecs)03d %(message)s', datefmt='%H:%M:%S')
@@ -536,8 +565,6 @@ if __name__ == '__main__':
     recording_dir = args.recordings
     report_species = args.species
     threshold = args.threshold
-    overlap = args.overlap
-    cfg.audio.segment_len = args.slen
 
     if annotation_path is None:
         logging.error(f"Error: the annotation path (-a) is required.")
@@ -550,4 +577,4 @@ if __name__ == '__main__':
     if recording_dir is None:
         recording_dir = Path(annotation_path).parents[0]
 
-    PerSoundTester([annotation_path], [recording_dir], label_dir, output_dir, threshold, report_species, overlap).run()
+    PerSoundTester([annotation_path], [recording_dir], label_dir, output_dir, threshold, report_species).run()

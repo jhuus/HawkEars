@@ -78,14 +78,13 @@ class Annotation:
         return f"species={self.species}, start={self.start}, end={self.end}"
 
 class PerSecondTester(BaseTester):
-    def __init__(self, annotation_path, recording_dir, label_dir, output_dir, threshold, report_species, max_secs):
+    def __init__(self, annotation_path, recording_dir, label_dir, output_dir, threshold, report_species):
         super().__init__()
         self.annotation_path = annotation_path
         self.recording_dir = recording_dir
         self.output_dir = output_dir
         self.threshold = threshold
         self.report_species = report_species
-        self.max_secs = max_secs
         self.labels_merged = False
         self.segment_len = None
         self.overlap = None
@@ -134,9 +133,6 @@ class PerSecondTester(BaseTester):
                     unknown_species[species] = 1 # so we don't report it again
 
                 continue # exclude from saved annotations
-
-            if self.max_secs is not None and row['start_time'] > self.max_secs:
-                continue
 
             annotation = Annotation(row['start_time'], row['end_time'], species)
             recording = row['recording']
@@ -189,86 +185,6 @@ class PerSecondTester(BaseTester):
         # create the dataframe
         self.y_true_df = pd.DataFrame(rows, columns=[''] + self.annotated_species)
         self.y_true = self.y_true_df.to_numpy()[:,1:].astype(np.float32)
-
-    def get_labels(self):
-        self.labels_per_recording = {}
-        label_files = sorted(list(glob.glob(os.path.join((self.label_dir), "*.txt"))))
-        for label_file in label_files:
-            if label_file.endswith('_HawkEars.txt'):
-                recording = Path(label_file).name[0:-len('_HawkEars.txt')]
-            elif label_file.endswith('.BirdNET.results.txt'):
-                recording = Path(label_file).name[0:-len('.BirdNET.results.txt')]
-            elif label_file.endswith('_Perch.txt'):
-                recording = Path(label_file).name[0:-len('_Perch.txt')]
-            else:
-                continue # ignore this one
-
-            self.labels_per_recording[recording] = []
-            with open(label_file, 'r') as file:
-                lines = file.readlines()
-                for line in lines:
-                    if self.label_regex is None:
-                        self.select_label_regex(line, label_file)
-
-                    if self.is_birdnet:
-                        match = self.label_regex.match(line)
-                        if len(match.groups()) != 4:
-                            logging.error(f"Invalid label format in {label_file}:")
-                            logging.error(line)
-                            quit()
-
-                        start, end = float(match.groups()[0]), float(match.groups()[1])
-                        if self.max_secs is not None and start > self.max_secs:
-                            continue
-
-                        label_species, score = match.groups()[2], float(match.groups()[3])
-
-                        if label_species in self.banding_codes:
-                            label_species = self.banding_codes[label_species]
-                        else:
-                            continue # skip labels for unknown species
-                    else:
-                        # this is about 1/3 faster than regex for parsing HawkEars labels
-                        tokens = line.split('\t')
-                        if len(tokens) == 3:
-                            start = float(tokens[0])
-                            end = float(tokens[1])
-                            tokens2 = tokens[2].split(';')
-                            label_species = tokens2[0]
-                            score = float(tokens2[1])
-
-                            if label_species in self.map_codes:
-                                label_species = self.map_codes[label_species]
-
-                    if label_species not in self.annotated_species_indexes:
-                        continue # this script ignores unannotated species
-
-                    if self.report_species is not None and label_species != self.report_species:
-                        continue
-
-                    if self.segment_len is None:
-                        self.segment_len = end - start
-                    elif not math.isclose(end - start, self.segment_len):
-                        logging.error(f"Error: detected different label durations ({self.segment_len} and {end - start})")
-                        quit()
-
-                    label = Label(recording, label_species, start, end, score)
-                    label.matched = False
-                    if label.start % cfg.audio.segment_len != 0:
-                        self.labels_overlap = True
-
-                    if label.end - label.start > cfg.audio.segment_len + .00001:
-                        self.labels_merged = True
-
-                    self.labels_per_recording[recording].append(label)
-                    if self.overlap is None and len(self.labels_per_recording[recording]) == 2:
-                        self.overlap = self.labels_per_recording[recording][0].end - self.labels_per_recording[recording][1].start
-                        assert(self.overlap > 0 or math.isclose(self.overlap, 0))
-
-        # ensure labels-per-recording sorted by start
-        for recording in self.labels_per_recording:
-            self.labels_per_recording[recording] = \
-                sorted(self.labels_per_recording[recording], key=lambda item: item.start)
 
     # create a dataframe representing the recognizer labels, with a row per annotation;
     # columns contain the highest score in any label for that species that overlaps the
@@ -401,8 +317,7 @@ class PerSecondTester(BaseTester):
 
         # initialize y_true and y_pred and save them as CSV files
         logging.info('Initializing')
-        self.get_labels() # read labels first to determine segment_len and overlap
-        logging.info(f"Detected segment length={self.segment_len:.2f} and label overlap={self.overlap:.2f}")
+        self.get_labels([self.label_dir], ignore_unannotated=True, trim_overlap=False)
         self.init_y_true()
         self.init_y_pred()
 
@@ -420,7 +335,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--annotations', type=str, default=None, help='Path to CSV file containing annotations (ground truth).')
     parser.add_argument('-i', '--input', type=str, default='HawkEars', help='Name of directory containing Audacity labels (not the full path, just the name).')
-    parser.add_argument('-m', '--max_secs', type=float, default=None, help='If specified, ignore any labels or annotations after this many seconds.')
     parser.add_argument('-o', '--output', type=str, default='test_results1', help='Name of output directory.')
     parser.add_argument('-r', '--recordings', type=str, default=None, help='Recordings directory. Default is directory containing annotations file.')
     parser.add_argument('-s', '--species', type=str, default=None, help='If specified, include only this species (default = None).')
@@ -435,7 +349,6 @@ if __name__ == '__main__':
     recording_dir = args.recordings
     report_species = args.species
     threshold = args.threshold
-    max_secs = args.max_secs
 
     if annotation_path is None:
         logging.error(f"Error: the annotation path (-a) is required.")
@@ -448,4 +361,4 @@ if __name__ == '__main__':
     if recording_dir is None:
         recording_dir = Path(annotation_path).parents[0]
 
-    PerSecondTester(annotation_path, recording_dir, label_dir, output_dir, threshold, report_species, max_secs).run()
+    PerSecondTester(annotation_path, recording_dir, label_dir, output_dir, threshold, report_species).run()

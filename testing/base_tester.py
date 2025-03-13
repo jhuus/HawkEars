@@ -30,6 +30,7 @@ class Label:
         self.start = start
         self.end = end
         self.score = score
+        self.matched = False
 
     def __str__(self):
         return f"recording={self.recording}, species={self.species}, start={self.start:.1f}, end={self.end:.1f}, score={self.score:.3f}"
@@ -52,10 +53,11 @@ class BaseTester:
         self.annotated_species = []
         self.trained_species = []
         self.recordings = None
-        self.labels_overlap = False
         self.labels_merged = False
         self.label_regex = None
-        self.overlap = 0
+        self.segment_len = None
+        self.overlap = None
+        self.per_recording = False
 
     def get_species_codes(self):
         df = pd.read_csv("../data/species_codes.csv")
@@ -65,29 +67,48 @@ class BaseTester:
 
         return species_codes
 
-    # Given a list of label paths, read HawkEars or BirdNET label files and convert
-    # to y_pred dataframe. If report_species is not None, include only that species.
-    # Granularity is per recording or per segment, where a segment is a
-    # fixed length block of segment_len seconds. This is controlled by segments_per_recording,
-    # a dict that has a list of segments per recording. This allows the caller to include only
-    # some segments per file. For example, we might want to process only the first minute of each file.
-    # Unknown species are ignored and missing species are included as all zeros.
-    # Make no assumptions about label duration.
-    # Save seconds per segment or recording in self.y_pred_seconds so we can calculate per-second precision and recall.
-    def init_y_pred(self, label_paths, per_recording=False, segment_len=cfg.audio.segment_len, overlap=0, segments_per_recording=None, use_max_score=True):
-        self.per_recording = per_recording
-        if not per_recording:
-            self.segment_len = segment_len
-            self.segments_per_recording = segments_per_recording
+    # create a dataframe representing the recognizer output, with the same rows and columns as y_true,
+    # and predictions (scores) in the corresponding cells
+    def init_y_pred(self, segments_per_recording=None, use_max_score=True):
+        self.segments_per_recording = segments_per_recording
 
-        self.get_labels(label_paths, segment_len, overlap=overlap)
+        # set segment_dict[recording][segment][species] = score (if there is a matching label)
+        segment_dict = {}
+        for recording in self.labels_per_recording:
+            segment_dict[recording]= {}
+            if recording in self.segments_per_recording:
+                for segment in self.segments_per_recording[recording]:
+                    segment_dict[recording][segment] = {}
 
-        if self.per_recording:
-            self._init_y_pred_per_recording()
-        else:
-            self._init_y_pred_per_segment(use_max_score)
+            for label in self.labels_per_recording[recording]:
+                if label.segment in segment_dict[recording]:
+                    if use_max_score and label.species in segment_dict[recording][label.segment]:
+                        segment_dict[recording][label.segment][label.species] = max(label.score, segment_dict[recording][label.segment][label.species])
+                    else:
+                        segment_dict[recording][label.segment][label.species] = label.score
 
-        self._convert_to_numpy()
+        # do trained species (superset of annotated species)
+        rows = []
+        for recording in sorted(self.labels_per_recording.keys()):
+            for segment in sorted(segment_dict[recording].keys()):
+                row = [f"{recording}-{segment}"]
+                row.extend([0 for species in self.trained_species])
+                for i, species in enumerate(self.trained_species):
+                    if species in segment_dict[recording][segment]:
+                        row[self.trained_species_indexes[species] + 1] = segment_dict[recording][segment][species]
+
+                rows.append(row)
+
+        self.y_pred_trained_df = pd.DataFrame(rows, columns=[''] + self.trained_species)
+
+        # create version for annotated species only
+        self.y_pred_annotated_df = self.y_pred_trained_df.copy()
+        for i, column in enumerate(self.y_pred_annotated_df.columns):
+            if i == 0:
+                continue # skip the index column
+
+            if column not in self.annotated_species_dict:
+                self.y_pred_annotated_df = self.y_pred_annotated_df.drop(column, axis=1)
 
     # Check if y_true_annotated_df and y_pred_annotated_df match (some basic comparisons but not all possible mismatches).
     def check_if_arrays_match(self):
@@ -132,40 +153,6 @@ class BaseTester:
                 logging.error(f"y_true_annotated_df value = {self.y_true_annotated_df.iloc[i].iloc[0]}")
                 logging.error(f"y_pred_annotated_df value = {self.y_pred_annotated_df.iloc[i].iloc[0]}")
                 quit()
-
-    # Determine which offsets an annotation or label should be assigned to, and return the list.
-    # The returned offsets are aligned on boundaries of segment_len - overlap. So by default,
-    # they are aligned on 3-second boundaries. If segment_len=3 and overlap=1.5, they are aligned
-    # on 1.5 second boundaries (0, 1.5, 3.0, ...). The start_time and end_time might not be aligned
-    # on the corresponding boundaries. Ensure that the first and last segments contain at least
-    # min_seconds of the labelled sound.
-    @staticmethod
-    def get_offsets(start_time, end_time, segment_len=cfg.audio.segment_len, overlap=0, min_seconds=0.3):
-        step = segment_len - overlap
-        if step <= 0:
-            raise ValueError("segment_len must be greater than overlap to ensure positive step size")
-
-        # find the first aligned offset no more than (segment_len - min_seconds) before start_time,
-        # to ensure the first segment contains at least min_seconds of the labelled sound
-        first_offset = max(0, math.ceil((start_time - (segment_len - min_seconds)) / step) * step)
-
-        # generate the list of offsets
-        offsets = []
-        current_offset = first_offset
-        while end_time - current_offset >= min_seconds:
-            offsets.append(current_offset)
-            current_offset += step
-
-        return offsets
-
-    # convert offsets to segment indexes
-    def get_segments(self, start_time, end_time, segment_len=cfg.audio.segment_len, overlap=0, min_seconds=0.3):
-        offsets = self.get_offsets(start_time, end_time, segment_len, overlap, min_seconds)
-        if len(offsets) > 0:
-            first_segment = int(offsets[0] // (segment_len - overlap))
-            return [i for i in range(first_segment, first_segment + len(offsets), 1)]
-        else:
-            return []
 
     # Return a dict with APS stats, including micro/macro/none averaging.
     # Macro and none are only defined for species with annotations, but micro is defined for all.
@@ -462,11 +449,11 @@ class BaseTester:
     # Read all labels files in the given directories,
     # setting self.labels[recording] = [labels in that file].
     # If report_species is not None, include only that species.
-    def get_labels(self, label_paths, segment_len, overlap=0, report_species=None, trim_overlap=True):
+    def get_labels(self, label_dirs, segment_len=None, overlap=None, report_species=None, ignore_unannotated=False, trim_overlap=True):
         self.prediction_scores = [] # subclass may want to report on score stats, e.g. median prediction
-        self.labels = {}
-        for label_path in label_paths:
-            label_files = sorted(list(glob.glob(os.path.join((label_path), "*.txt"))))
+        self.labels_per_recording = {}
+        for label_dir in label_dirs:
+            label_files = sorted(list(glob.glob(os.path.join((label_dir), "*.txt"))))
             for label_file in label_files:
                 if label_file.endswith('_HawkEars.txt'):
                     recording = Path(label_file).name[0:-len('_HawkEars.txt')]
@@ -477,7 +464,7 @@ class BaseTester:
                 else:
                     continue # ignore this one
 
-                self.labels[recording] = []
+                self.labels_per_recording[recording] = []
                 with open(label_file, 'r') as file:
                     lines = file.readlines()
                     for line in lines:
@@ -511,12 +498,20 @@ class BaseTester:
                                 if label_species in self.map_codes:
                                     label_species = self.map_codes[label_species]
 
+                        if ignore_unannotated and label_species not in self.annotated_species_indexes:
+                            continue
+
                         if report_species is not None and label_species != report_species:
                             continue
 
+                        if self.segment_len is None:
+                            self.segment_len = end - start
+                        elif not math.isclose(end - start, self.segment_len):
+                            logging.error(f"Error: detected different label durations ({self.segment_len} and {end - start})")
+                            quit()
+
                         self.prediction_scores.append(score)
 
-                        # let subclass know if labels overlap or are merged
                         label = Label(recording, label_species, start, end, score)
                         if label.start % cfg.audio.segment_len != 0:
                             self.labels_overlap = True
@@ -524,12 +519,21 @@ class BaseTester:
                         if label.end - label.start > cfg.audio.segment_len + .00001:
                             self.labels_merged = True
 
-                        label.segment = label.start // (segment_len - overlap)
-                        if not self.per_recording:
-                            if recording in self.segments_per_recording and label.segment in self.segments_per_recording[recording]:
-                                self.labels[recording].append(label)
-                        else:
-                            self.labels[recording].append(label)
+                        self.labels_per_recording[recording].append(label)
+                        if self.overlap is None and len(self.labels_per_recording[recording]) == 2:
+                            self.overlap = self.labels_per_recording[recording][0].end - self.labels_per_recording[recording][1].start
+                            assert(self.overlap > 0 or math.isclose(self.overlap, 0))
+
+        logging.info(f"Detected segment length={self.segment_len:.2f} and label overlap={self.overlap:.2f}")
+
+        # assign segments to labels
+        segment_len = self.segment_len if segment_len is None else segment_len
+        overlap = self.overlap if overlap is None else overlap
+
+        if segment_len is not None and overlap is not None:
+            for recording in self.labels_per_recording:
+                for label in self.labels_per_recording[recording]:
+                    label.segment = label.start // (segment_len - overlap)
 
         if trim_overlap:
             # eliminate the overlap between labels to avoid over-counting
@@ -556,7 +560,7 @@ class BaseTester:
         return ret_str
 
     # Convert y_true and y_pred from pandas to numpy
-    def _convert_to_numpy(self):
+    def convert_to_numpy(self):
         if self.y_true_annotated is not None and self.y_pred_annotated is not None:
             return # done already
 
@@ -578,9 +582,9 @@ class BaseTester:
         # create y_secs array containing seconds predicted >= threshold per species/file-id
         y_secs = np.zeros((self.y_true_annotated.shape[0], self.y_true_annotated.shape[1]))
         row_num = 0
-        for recording in sorted(self.labels.keys()):
+        for recording in sorted(self.labels_per_recording.keys()):
             if self.per_recording:
-                for label in self.labels[recording]:
+                for label in self.labels_per_recording[recording]:
                     if label.species not in self.annotated_species_indexes:
                         continue
 
@@ -594,7 +598,7 @@ class BaseTester:
                     continue
 
                 for segment in self.segments_per_recording[recording]:
-                    for label in self.labels[recording]:
+                    for label in self.labels_per_recording[recording]:
                         if label.species in self.annotated_species_indexes and segment == label.segment and label.score >= threshold:
                             # calculate duration of this label in this segment
                             duration = self._label_segment_duration(label, segment)
@@ -630,71 +634,6 @@ class BaseTester:
 
         return precision, tp_secs, fp_secs, species_valid, species_invalid
 
-    # Create y_pred dataframe with per-recording granularity
-    def _init_y_pred_per_recording(self):
-        rows = []
-        for i, recording in enumerate(sorted(self.labels.keys())):
-            row = [0 for species in self.trained_species]
-            for label in self.labels[recording]:
-                if label.species not in self.trained_species_indexes:
-                    continue
-
-                # use max so we use the highest score for this species in this recording
-                row[self.trained_species_indexes[label.species]] = max(row[self.trained_species_indexes[label.species]], label.score)
-
-            rows.append([recording] + row)
-
-        self.y_pred_trained_df = pd.DataFrame(rows, columns=[''] + self.trained_species)
-
-        # create version for annotated species only
-        self.y_pred_annotated_df = self.y_pred_trained_df.copy()
-        for i, column in enumerate(self.y_pred_annotated_df.columns):
-            if i == 0:
-                continue # skip the index column
-
-            if column not in self.annotated_species_dict:
-                self.y_pred_annotated_df = self.y_pred_annotated_df.drop(column, axis=1)
-
-    # Create y_pred dataframe with granularity of self.segment_len seconds
-    def _init_y_pred_per_segment(self, use_max_score):
-        # set segment_dict[recording][segment][species] = score (if there is a matching label)
-        segment_dict = {}
-        for recording in self.labels:
-            segment_dict[recording]= {}
-            if recording in self.segments_per_recording:
-                for segment in self.segments_per_recording[recording]:
-                    segment_dict[recording][segment] = {}
-
-            for label in self.labels[recording]:
-                if label.segment in segment_dict[recording]:
-                    if use_max_score and label.species in segment_dict[recording][label.segment]:
-                        segment_dict[recording][label.segment][label.species] = max(label.score, segment_dict[recording][label.segment][label.species])
-                    else:
-                        segment_dict[recording][label.segment][label.species] = label.score
-
-        # do trained species (superset of annotated species)
-        rows = []
-        for recording in sorted(self.labels.keys()):
-            for segment in sorted(segment_dict[recording].keys()):
-                row = [f"{recording}-{segment}"]
-                row.extend([0 for species in self.trained_species])
-                for i, species in enumerate(self.trained_species):
-                    if species in segment_dict[recording][segment]:
-                        row[self.trained_species_indexes[species] + 1] = segment_dict[recording][segment][species]
-
-                rows.append(row)
-
-        self.y_pred_trained_df = pd.DataFrame(rows, columns=[''] + self.trained_species)
-
-        # create version for annotated species only
-        self.y_pred_annotated_df = self.y_pred_trained_df.copy()
-        for i, column in enumerate(self.y_pred_annotated_df.columns):
-            if i == 0:
-                continue # skip the index column
-
-            if column not in self.annotated_species_dict:
-                self.y_pred_annotated_df = self.y_pred_annotated_df.drop(column, axis=1)
-
     # Return details about true/false positives/negatives for the given threshold.
     def _get_threshold_details(self, threshold):
         if self.recordings is None:
@@ -717,7 +656,7 @@ class BaseTester:
                 for i, species in enumerate(self.trained_species):
                     detected_species[species] = False
 
-                for label in self.labels[recording]:
+                for label in self.labels_per_recording[recording]:
                     if label.score >= threshold:
                         detected_species[label.species] = True
                         if self.y_true_trained[row_index, self.trained_species_indexes[label.species]] == 0:
@@ -775,7 +714,7 @@ class BaseTester:
                 for i, species in enumerate(self.trained_species):
                     detected_species[species] = False
 
-                for label in self.labels[recording]:
+                for label in self.labels_per_recording[recording]:
                     if use_segment != label.segment:
                         continue
 
@@ -814,11 +753,11 @@ class BaseTester:
 
         compare_key = cmp_to_key(compare_labels)
 
-        for recording in self.labels:
-            self.labels[recording].sort(key=compare_key)
-            for i in range(len(self.labels[recording]) - 1):
-                label = self.labels[recording][i]
-                if label.species == self.labels[recording][i + 1].species:
-                    if label.end > self.labels[recording][i + 1].start:
+        for recording in self.labels_per_recording:
+            self.labels_per_recording[recording].sort(key=compare_key)
+            for i in range(len(self.labels_per_recording[recording]) - 1):
+                label = self.labels_per_recording[recording][i]
+                if label.species == self.labels_per_recording[recording][i + 1].species:
+                    if label.end > self.labels_per_recording[recording][i + 1].start:
                         # current overlaps next, so change end time of current, i.e. trim it
-                        label.end = self.labels[recording][i + 1].start
+                        label.end = self.labels_per_recording[recording][i + 1].start
