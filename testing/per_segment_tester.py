@@ -287,17 +287,6 @@ class PerSoundTester(BaseTester):
         plt.savefig(os.path.join(self.output_dir, f'roc_inverted_curve_{suffix}.png'))
         plt.close()
 
-    # calculate area under PR curve from precision = .9 to 1.0, so we can assess performance
-    # at the high-precision end of the curve
-    def _calc_pr_auc(self, precision, recall):
-        # interpolate first to ensure monotonically increasing
-        interp_precision, interp_recall = self.interpolate(precision, recall)
-        if len(interp_precision) == 0:
-            return 0
-
-        i = np.searchsorted(interp_precision, .9) # if not found, auc will be 0
-        return metrics.auc(interp_precision[i:], interp_recall[i:])
-
     def _produce_reports(self):
         # calculate and output precision/recall per threshold
         threshold_annotated = self.pr_table_dict['annotated_thresholds']
@@ -315,11 +304,6 @@ class PerSoundTester(BaseTester):
         self._output_pr_curve(precision_annotated, recall_annotated, 'pr_curve_annotated')
         if self.report_species is None:
             self._output_pr_curve(precision_trained, recall_trained, 'pr_curve_trained')
-
-        # calculate area under PR curve from precision = .9 to 1.0
-        pr_auc_annotated = self._calc_pr_auc(precision_annotated, recall_annotated)
-        if self.report_species is None:
-            pr_auc_trained = self._calc_pr_auc(precision_trained, recall_trained)
 
         # output the ROC curves
         roc_thresholds = self.roc_dict['roc_thresholds_annotated']
@@ -362,7 +346,6 @@ class PerSoundTester(BaseTester):
         rpt.append(f"   Micro-averaged MAP score = {self.map_dict['micro_map_annotated']:.4f}\n")
         rpt.append(f"   Macro-averaged ROC AUC score = {self.roc_dict['macro_roc']:.4f}\n")
         rpt.append(f"   Micro-averaged ROC AUC score = {self.roc_dict['micro_roc_annotated']:.4f}\n")
-        rpt.append(f"   PR AUC for precision from .9 to 1.0 = {pr_auc_annotated:.5f}\n")
         rpt.append(f"   For threshold = {self.threshold}:\n")
         rpt.append(f"      Precision = {100 * self.details_dict['precision_annotated']:.2f}%\n")
         rpt.append(f"      Recall = {100 * self.details_dict['recall_annotated']:.2f}%\n")
@@ -372,7 +355,6 @@ class PerSoundTester(BaseTester):
             rpt.append(f"For all trained species:\n")
             rpt.append(f"   Micro-averaged MAP score = {self.map_dict['micro_map_trained']:.4f}\n")
             rpt.append(f"   Micro-averaged ROC AUC score = {self.roc_dict['micro_roc_trained']:.4f}\n")
-            rpt.append(f"   PR AUC for precision from .9 to 1.0 = {pr_auc_trained:.5f}\n")
             rpt.append(f"   For threshold = {self.threshold}:\n")
             rpt.append(f"      Precision = {100 * self.details_dict['precision_trained']:.2f}%\n")
             rpt.append(f"      Recall = {100 * self.details_dict['recall_trained']:.2f}%\n")
@@ -498,10 +480,6 @@ class PerSoundTester(BaseTester):
         self.init_y_true()
         self.init_y_pred(segments_per_recording=self.segments_per_recording, use_max_score=False)
         self.convert_to_numpy()
-
-        if self.labels_merged:
-            logging.error("Error: merged labels found.")
-            quit()
 
         self.y_true_annotated_df.to_csv(os.path.join(self.output_dir, 'y_true_annotated.csv'), index=False)
         self.y_pred_annotated_df.to_csv(os.path.join(self.output_dir, 'y_pred_annotated.csv'), index=False)

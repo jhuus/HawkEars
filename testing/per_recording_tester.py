@@ -303,10 +303,6 @@ class PerRecordingTester(BaseTester):
         self.init_y_pred()
         self.convert_to_numpy()
 
-        if self.labels_merged:
-            logging.error("Error: merged labels found.")
-            quit()
-
         self.y_true_annotated_df.to_csv(os.path.join(self.output_dir, 'y_true_annotated.csv'), index=False)
         self.y_pred_annotated_df.to_csv(os.path.join(self.output_dir, 'y_pred_annotated.csv'), index=False)
         self.y_true_trained_df.to_csv(os.path.join(self.output_dir, 'y_true_trained.csv'), index=False)

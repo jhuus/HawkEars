@@ -85,7 +85,6 @@ class PerSecondTester(BaseTester):
         self.output_dir = output_dir
         self.threshold = threshold
         self.report_species = report_species
-        self.labels_merged = False
         self.segment_len = None
         self.overlap = None
 
@@ -320,10 +319,6 @@ class PerSecondTester(BaseTester):
         self.get_labels([self.label_dir], ignore_unannotated=True, trim_overlap=False)
         self.init_y_true()
         self.init_y_pred()
-
-        if self.labels_merged:
-            logging.error("Error: merged labels found.")
-            quit()
 
         self.y_true_df.to_csv(os.path.join(self.output_dir, 'y_true.csv'), index=False)
         self.y_pred_df.to_csv(os.path.join(self.output_dir, 'y_pred.csv'), index=False)

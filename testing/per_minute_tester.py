@@ -42,13 +42,14 @@ class Annotation:
         self.species = species
 
 class PerMinuteTester(BaseTester):
-    def __init__(self, annotation_path, recording_dir, label_dir, output_dir, threshold, report_species):
+    def __init__(self, annotation_path, recording_dir, label_dir, output_dir, threshold, report_species, gen_pr_table):
         super().__init__()
         self.annotation_path = annotation_path
         self.recording_dir = recording_dir
         self.output_dir = output_dir
         self.threshold = threshold
         self.report_species = report_species
+        self.gen_pr_table = gen_pr_table
 
         self.label_dir = os.path.join(recording_dir, label_dir)
         if not os.path.exists(self.label_dir):
@@ -144,7 +145,9 @@ class PerMinuteTester(BaseTester):
             precision_annotated_seconds.append(info['precision_secs'])
             recall_trained.append(info['recall_trained'])
             precision_trained_minutes.append(info['precision_trained'])
+            print(f"\rPercent complete: {int(threshold * 100)}%", end='', flush=True)
 
+        print()
         self.pr_table_dict = {}
         self.pr_table_dict['annotated_thresholds'] = thresholds
         self.pr_table_dict['annotated_precisions_minutes'] = precision_annotated_minutes
@@ -165,17 +168,6 @@ class PerMinuteTester(BaseTester):
         self.pr_table_dict['trained_thresholds_fine'] = thresholds
         self.pr_table_dict['trained_precisions_fine'] = precision
         self.pr_table_dict['trained_recalls_fine'] = recall
-
-    # calculate area under PR curve from precision = .9 to 1.0, so we can assess performance
-    # at the high-precision end of the curve
-    def _calc_pr_auc(self, precision, recall):
-        # interpolate first to ensure monotonically increasing
-        interp_precision, interp_recall = self.interpolate(precision, recall)
-        if len(interp_precision) == 0:
-            return 0
-
-        i = np.searchsorted(interp_precision, .9) # if not found, auc will be 0
-        return metrics.auc(interp_precision[i:], interp_recall[i:])
 
     # output precision/recall per threshold
     def _output_pr_per_threshold(self, threshold, precision, recall, name, precision_secs=None):
@@ -279,40 +271,37 @@ class PerMinuteTester(BaseTester):
         plt.close()
 
     def _produce_reports(self):
-        # calculate and output precision/recall per threshold
-        threshold_annotated = self.pr_table_dict['annotated_thresholds']
-        precision_annotated = self.pr_table_dict['annotated_precisions_minutes']
-        precision_annotated_secs = self.pr_table_dict['annotated_precisions_seconds']
-        recall_annotated = self.pr_table_dict['annotated_recalls']
-        self._output_pr_per_threshold(threshold_annotated, precision_annotated, recall_annotated, 'pr_per_threshold_annotated', precision_annotated_secs)
+        if self.gen_pr_table:
+            # calculate and output precision/recall per threshold
+            threshold_annotated = self.pr_table_dict['annotated_thresholds']
+            precision_annotated = self.pr_table_dict['annotated_precisions_minutes']
+            precision_annotated_secs = self.pr_table_dict['annotated_precisions_seconds']
+            recall_annotated = self.pr_table_dict['annotated_recalls']
+            self._output_pr_per_threshold(threshold_annotated, precision_annotated, recall_annotated, 'pr_per_threshold_annotated', precision_annotated_secs)
 
-        threshold_trained = self.pr_table_dict['trained_thresholds']
-        precision_trained = self.pr_table_dict['trained_precisions']
-        recall_trained = self.pr_table_dict['trained_recalls']
-        self._output_pr_per_threshold(threshold_trained, precision_trained, recall_trained, 'pr_per_threshold_trained')
+            threshold_trained = self.pr_table_dict['trained_thresholds']
+            precision_trained = self.pr_table_dict['trained_precisions']
+            recall_trained = self.pr_table_dict['trained_recalls']
+            self._output_pr_per_threshold(threshold_trained, precision_trained, recall_trained, 'pr_per_threshold_trained')
 
-        # calculate and output recall per precision
-        self._output_pr_curve(precision_annotated, recall_annotated, 'pr_curve_annotated')
-        self._output_pr_curve(precision_trained, recall_trained, 'pr_curve_trained')
+            # calculate and output recall per precision
+            self._output_pr_curve(precision_annotated, recall_annotated, 'pr_curve_annotated')
+            self._output_pr_curve(precision_trained, recall_trained, 'pr_curve_trained')
 
-        # calculate area under PR curve from precision = .9 to 1.0
-        pr_auc_annotated = self._calc_pr_auc(precision_annotated, recall_annotated)
-        pr_auc_trained = self._calc_pr_auc(precision_trained, recall_trained)
+            # output the ROC curves
+            roc_thresholds = self.roc_dict['roc_thresholds_annotated']
+            roc_tpr = self.roc_dict['roc_tpr_annotated']
+            roc_fpr = self.roc_dict['roc_fpr_annotated']
+            precision_annotated_fine = self.pr_table_dict['annotated_precisions_fine']
+            recall_annotated_fine = self.pr_table_dict['annotated_recalls_fine']
+            self._output_roc_curves(roc_thresholds, roc_tpr, roc_fpr, precision_annotated_fine, recall_annotated_fine, 'annotated')
 
-        # output the ROC curves
-        roc_thresholds = self.roc_dict['roc_thresholds_annotated']
-        roc_tpr = self.roc_dict['roc_tpr_annotated']
-        roc_fpr = self.roc_dict['roc_fpr_annotated']
-        precision_annotated_fine = self.pr_table_dict['annotated_precisions_fine']
-        recall_annotated_fine = self.pr_table_dict['annotated_recalls_fine']
-        self._output_roc_curves(roc_thresholds, roc_tpr, roc_fpr, precision_annotated_fine, recall_annotated_fine, 'annotated')
-
-        roc_thresholds = self.roc_dict['roc_thresholds_trained']
-        roc_tpr = self.roc_dict['roc_tpr_trained']
-        roc_fpr = self.roc_dict['roc_fpr_trained']
-        precision_trained_fine = self.pr_table_dict['trained_precisions_fine']
-        recall_trained_fine = self.pr_table_dict['trained_recalls_fine']
-        self._output_roc_curves(roc_thresholds, roc_tpr, roc_fpr, precision_trained_fine, recall_trained_fine, 'trained')
+            roc_thresholds = self.roc_dict['roc_thresholds_trained']
+            roc_tpr = self.roc_dict['roc_tpr_trained']
+            roc_fpr = self.roc_dict['roc_fpr_trained']
+            precision_trained_fine = self.pr_table_dict['trained_precisions_fine']
+            recall_trained_fine = self.pr_table_dict['trained_recalls_fine']
+            self._output_roc_curves(roc_thresholds, roc_tpr, roc_fpr, precision_trained_fine, recall_trained_fine, 'trained')
 
         # output a CSV with number of predictions in ranges [0, .1), [.1, .2), ..., [.9, 1.0]
         scores = np.sort(self.prediction_scores)
@@ -340,7 +329,6 @@ class PerMinuteTester(BaseTester):
         rpt.append(f"   Micro-averaged MAP score = {self.map_dict['micro_map_annotated']:.4f}\n")
         rpt.append(f"   Macro-averaged ROC AUC score = {self.roc_dict['macro_roc']:.4f}\n")
         rpt.append(f"   Micro-averaged ROC AUC score = {self.roc_dict['micro_roc_annotated']:.4f}\n")
-        rpt.append(f"   PR AUC for precision from .9 to 1.0 = {pr_auc_annotated:.5f}\n")
         rpt.append(f"   For threshold = {self.threshold}:\n")
         rpt.append(f"      Precision (minutes) = {100 * self.details_dict['precision_annotated']:.2f}%\n")
         rpt.append(f"      Precision (seconds) = {100 * self.details_dict['precision_secs']:.2f}%\n")
@@ -350,7 +338,6 @@ class PerMinuteTester(BaseTester):
         rpt.append(f"For all trained species:\n")
         rpt.append(f"   Micro-averaged MAP score = {self.map_dict['micro_map_trained']:.4f}\n")
         rpt.append(f"   Micro-averaged ROC AUC score = {self.roc_dict['micro_roc_trained']:.4f}\n")
-        rpt.append(f"   PR AUC for precision from .9 to 1.0 = {pr_auc_trained:.5f}\n")
         rpt.append(f"   For threshold = {self.threshold}:\n")
         rpt.append(f"      Precision (minutes) = {100 * self.details_dict['precision_trained']:.2f}%\n")
         rpt.append(f"      Recall (minutes) = {100 * self.details_dict['recall_trained']:.2f}%\n")
@@ -461,10 +448,6 @@ class PerMinuteTester(BaseTester):
         self.init_y_pred(segments_per_recording=self.segments_per_recording)
         self.convert_to_numpy()
 
-        if self.labels_merged:
-            logging.error("Error: merged labels found.")
-            quit()
-
         self.y_true_annotated_df.to_csv(os.path.join(self.output_dir, 'y_true_annotated.csv'), index=False)
         self.y_pred_annotated_df.to_csv(os.path.join(self.output_dir, 'y_pred_annotated.csv'), index=False)
         self.y_true_trained_df.to_csv(os.path.join(self.output_dir, 'y_true_trained.csv'), index=False)
@@ -481,8 +464,9 @@ class PerMinuteTester(BaseTester):
         logging.info('Calculating PR stats')
         self.details_dict = self.get_precision_recall(threshold=self.threshold, details=True)
 
-        logging.info('Calculating PR table')
-        self._calc_pr_table()
+        if self.gen_pr_table:
+            logging.info('Calculating PR table')
+            self._calc_pr_table()
 
         logging.info(f'Creating reports in {self.output_dir}')
         self._produce_reports()
@@ -495,6 +479,7 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--recordings', type=str, default=None, help='Recordings directory. Default is directory containing annotations file.')
     parser.add_argument('-s', '--species', type=str, default=None, help='If specified, include only this species (default = None).')
     parser.add_argument('-t', '--threshold', type=float, default=cfg.infer.min_score, help=f'Provide detailed reports for this threshold (default = {cfg.infer.min_score})')
+    parser.add_argument('--pr', default=False, action='store_true', help='If this flag is specified, generate precision-recall and ROC details, which may take a few minutes.')
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s.%(msecs)03d %(message)s', datefmt='%H:%M:%S')
 
@@ -505,6 +490,7 @@ if __name__ == '__main__':
     recording_dir = args.recordings
     report_species = args.species
     threshold = args.threshold
+    gen_pr_table = args.pr
 
     if annotation_path is None:
         logging.error(f"Error: the annotation path (-a) is required.")
@@ -517,4 +503,4 @@ if __name__ == '__main__':
     if recording_dir is None:
         recording_dir = Path(annotation_path).parents[0]
 
-    PerMinuteTester(annotation_path, recording_dir, label_dir, output_dir, threshold, report_species).run()
+    PerMinuteTester(annotation_path, recording_dir, label_dir, output_dir, threshold, report_species, gen_pr_table).run()

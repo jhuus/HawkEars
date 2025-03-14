@@ -1,4 +1,6 @@
 # Base class for test reporting scripts.
+# TODO: include a CSV output option in HawkEars and read that instead of labels when available,
+# which would be much faster for large tests.
 
 from enum import Enum
 from functools import cmp_to_key
@@ -53,11 +55,28 @@ class BaseTester:
         self.annotated_species = []
         self.trained_species = []
         self.recordings = None
-        self.labels_merged = False
         self.label_regex = None
         self.segment_len = None
         self.overlap = None
         self.per_recording = False
+
+    # calculate the overlap from a list of labels
+    def _calculate_overlap(self, label_list):
+        if len(label_list) < 2:
+            return 0  # not enough data to determine overlap, but use 0
+
+        # sort the start values, then remove duplicates
+        sorted_start_values = sorted([label.start for label in label_list])
+        start_values = []
+        for start_value in sorted_start_values:
+            if len(start_values) == 0 or start_value > start_values[-1]:
+                start_values.append(start_value)
+
+        # determine overlap from the minimum gap between adjacent start values
+        diffs = [start_values[i+1] - start_values[i] for i in range(len(start_values) - 1)]
+        min_diff = min(diffs)
+        overlap = self.segment_len - min_diff
+        return overlap
 
     def get_species_codes(self):
         df = pd.read_csv("../data/species_codes.csv")
@@ -516,17 +535,20 @@ class BaseTester:
                         if label.start % cfg.audio.segment_len != 0:
                             self.labels_overlap = True
 
-                        if label.end - label.start > cfg.audio.segment_len + .00001:
-                            self.labels_merged = True
-
                         self.labels_per_recording[recording].append(label)
-                        if self.overlap is None and len(self.labels_per_recording[recording]) == 2:
-                            self.overlap = self.labels_per_recording[recording][0].end - self.labels_per_recording[recording][1].start
-                            assert(self.overlap > 0 or math.isclose(self.overlap, 0))
 
+        # sort labels, calculate overlap and assign segments to labels
+        longest_recording = None # use recording with most labels to calc overlap
+        max_labels = 0
+        for recording in self.labels_per_recording:
+            self.labels_per_recording[recording] = sorted(self.labels_per_recording[recording], key=lambda label: (label.species, label.start))
+            if len(self.labels_per_recording[recording]) > max_labels:
+                longest_recording = recording
+                max_labels = len(self.labels_per_recording[recording])
+
+        self.overlap = self._calculate_overlap(self.labels_per_recording[longest_recording])
         logging.info(f"Detected segment length={self.segment_len:.2f} and label overlap={self.overlap:.2f}")
 
-        # assign segments to labels
         segment_len = self.segment_len if segment_len is None else segment_len
         overlap = self.overlap if overlap is None else overlap
 
@@ -606,8 +628,6 @@ class BaseTester:
                             y_secs[row_num][column_num] += duration
 
                     row_num += 1
-
-        np.savetxt("y_secs.csv", y_secs, delimiter=',')
 
         # calculate TP/FP seconds and then precision;
         # handle differently for details=True/False for efficiency
