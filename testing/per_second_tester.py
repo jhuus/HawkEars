@@ -170,10 +170,10 @@ class PerSecondTester(BaseTester):
         # create the segment rows
         self.recording_row_start = {}
         self.recording_offsets = {}
-        increment = cfg.audio.segment_len - self.overlap
+        increment = self.segment_len - self.overlap
         for recording in self.recordings:
             self.recording_row_start[recording] = row_num
-            offsets = np.arange(0, self.recording_duration[recording] - cfg.audio.segment_len + 1.0, increment).tolist()
+            offsets = np.arange(0, self.recording_duration[recording] - self.segment_len + 1.0, increment).tolist()
             self.recording_offsets[recording] = offsets
             for offset in offsets:
                 row = [f"{recording}-{offset:.2f}"]
@@ -214,7 +214,7 @@ class PerSecondTester(BaseTester):
         for recording in self.recordings:
             for label in self.labels_per_recording[recording]:
                 if not label.matched:
-                    row_num = self.recording_row_start[recording] + int(label.start // (cfg.audio.segment_len - self.overlap))
+                    row_num = self.recording_row_start[recording] + int(label.start // (self.segment_len - self.overlap))
                     species_idx = self.annotated_species_indexes[label.species] + 1
                     self.y_pred_df.iloc[row_num, species_idx] = label.score
 
@@ -233,7 +233,7 @@ class PerSecondTester(BaseTester):
 
         # account for durations in TP, FP and FN calculations
         TP = np.sum(y_true[(y_pred_bin == 1) & (y_true > 0)])
-        FP = np.sum((y_pred_bin == 1) & (y_true == 0)) * cfg.audio.segment_len
+        FP = np.sum((y_pred_bin == 1) & (y_true == 0)) * self.segment_len
         FN = np.sum(y_true[(y_pred_bin == 0) & (y_true > 0)])
 
         # compute precision and recall, and avoid divide-by-zero

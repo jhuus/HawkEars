@@ -75,7 +75,7 @@ class PerSoundTester(BaseTester):
     # on the corresponding boundaries. Ensure that the first and last segments contain at least
     # min_seconds of the labelled sound.
     @staticmethod
-    def get_offsets(start_time, end_time, segment_len=cfg.audio.segment_len, overlap=0, min_seconds=0.3):
+    def get_offsets(start_time, end_time, segment_len, overlap, min_seconds=0.3):
         step = segment_len - overlap
         if step <= 0:
             raise ValueError("segment_len must be greater than overlap to ensure positive step size")
@@ -146,13 +146,13 @@ class PerSoundTester(BaseTester):
     # create a dataframe representing the ground truth data, with recordings segmented into 3-second segments
     def init_y_true(self):
         # set segment_dict[recording][segment] = {species in that segment},
-        # where each segment is 3 seconds (cfg.audio.segment_len) long
+        # where each segment is 3 seconds (self.segment_len) long
         self.segments_per_recording = {}
         segment_dict = {}
         for recording in self.annotations:
             # calculate num_segments exactly as it's done in analyze.py so they match
-            increment = cfg.audio.segment_len - self.overlap
-            offsets = np.arange(0, self.recording_duration[recording] - cfg.audio.segment_len + 1.0, increment).tolist()
+            increment = self.segment_len - self.overlap
+            offsets = np.arange(0, self.recording_duration[recording] - self.segment_len + 1.0, increment).tolist()
 
             num_segments = len(offsets)
             self.segments_per_recording[recording] = [i for i in range(num_segments)]
@@ -379,15 +379,15 @@ class PerSoundTester(BaseTester):
 
                 for segment in self.segments_per_recording[recording]:
                     tp_seconds = self.details_dict['rec_info'][recording][segment]['tp_seconds']
-                    tp_count = tp_seconds / cfg.audio.segment_len
+                    tp_count = tp_seconds / self.segment_len
                     total_tp_count += tp_count
 
                     fp_seconds = self.details_dict['rec_info'][recording][segment]['fp_seconds']
-                    fp_count = fp_seconds / cfg.audio.segment_len
+                    fp_count = fp_seconds / self.segment_len
                     total_fp_count += fp_count
 
                     fn_seconds = self.details_dict['rec_info'][recording][segment]['fn_seconds']
-                    fn_count = fn_seconds / cfg.audio.segment_len
+                    fn_count = fn_seconds / self.segment_len
                     total_fn_count += fn_count
 
                     if recording in self.details_dict['true_positives']:
@@ -436,7 +436,7 @@ class PerSoundTester(BaseTester):
             species_map = self.map_dict['species_map']
             species_roc = self.roc_dict['species_roc']
 
-            segment_len = cfg.audio.segment_len - self.overlap
+            segment_len = self.segment_len - self.overlap
             for i, species in enumerate(self.annotated_species):
                 annotations = self.y_true_annotated_df[species].sum()
                 precision = species_precision[i]
