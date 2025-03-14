@@ -532,7 +532,7 @@ class BaseTester:
                         self.prediction_scores.append(score)
 
                         label = Label(recording, label_species, start, end, score)
-                        if label.start % cfg.audio.segment_len != 0:
+                        if label.start % self.segment_len != 0:
                             self.labels_overlap = True
 
                         self.labels_per_recording[recording].append(label)
