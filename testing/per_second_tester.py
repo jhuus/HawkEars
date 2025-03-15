@@ -17,10 +17,9 @@
 # HawkEars should be run with "--merge 0 --min_score 0".
 # For BirdNET, specify "--rtype audacity --min_conf 0".
 #
-# If any label overlap was used, specify the corresponding value as the overlap argument here.
-#
 # As an example of how this differs from per_segment_tester, suppose we had a 9-second recording
 # with these annotations:
+#
 # 1. species=AGOL, start=2.5, end=3.5
 # 2. species=AGOL, start=6.5, end=8.5
 #

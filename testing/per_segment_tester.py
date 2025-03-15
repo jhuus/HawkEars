@@ -7,9 +7,9 @@
 #
 # HawkEars should be run with "--merge 0 --min_score 0".
 # For BirdNET, specify "--rtype audacity --min_conf 0".
+#
 # Specifying "--overlap 0" is optional in both cases, but overlap must be either 0 or 1.5.
-# Disabling label merging ensures segment-specific scores are retained, and a low threshold makes more
-# information available for calculating statistics and curves.
+# Disabling label merging ensures segment-specific scores are retained.
 
 import argparse
 import inspect
