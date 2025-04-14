@@ -67,7 +67,7 @@ for audio_path in audio_paths:
             quit()
 
         image_path = os.path.join(output_dir, Path(audio_path).stem + ".jpeg")
-        plot.plot_spec(specs[0] ** exponent, image_path, recording_seconds, show_dims=True)
+        plot.plot_spec(specs[0] ** exponent, image_path, show_dims=True)
     else:
         # plot individual segments
         increment = max(1.0, seconds - overlap)
@@ -75,4 +75,4 @@ for audio_path in audio_paths:
         specs = _audio.get_spectrograms(offsets, segment_len=seconds)
         for i, spec in enumerate(specs):
             image_path = os.path.join(output_dir, f"{Path(audio_path).stem}-{offsets[i]:.1f}.jpeg")
-            plot.plot_spec(spec ** exponent, image_path, seconds, show_dims=True)
+            plot.plot_spec(spec ** exponent, image_path, show_dims=True)
