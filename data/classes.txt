@@ -232,7 +232,7 @@ Orchard Oriole,OROR
 Osprey,OSPR
 Ovenbird,OVEN
 Pacific Wren,PAWR
-Pacific-slope Flycatcher,PSFL
+Western Flycatcher,WEFL
 Palm Warbler,PAWA
 Pectoral Sandpiper,PESA
 Peregrine Falcon,PEFA

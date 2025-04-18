@@ -149,8 +149,9 @@ class Miscellaneous:
         ("\\d+", "Macaulay Library"),
         (".*", "Other")]
 
-    # map for cases where old species codes might be used in annotations (used in testing/test_per_*.py)
-    map_codes = {'AMGO': 'AGOL', 'NOGO': 'AGOS', 'GRAJ': 'CAJA'}
+    # map old species names and codes to new names and codes
+    map_names = {"Northern Goshawk": "American Goshawk", "Gray Jay": "Canada Jay", "Pacific-slope Flycatcher": "Western Flycatcher"}
+    map_codes = {'AMGO': 'AGOL', 'NOGO': 'AGOS', 'GRAJ': 'CAJA', 'PSFL': 'WEFL'}
 
 @dataclass
 class BaseConfig:
