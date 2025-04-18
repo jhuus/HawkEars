@@ -1,4 +1,7 @@
 # Download files for a given species from Xeno-Canto.
+# This uses v3 of the Xeno-Canto API, which requires a key.
+# To get a key, register as a Xeno-Canto user and check your account page.
+# Then specify the key in the --key argument, or save it in HawkEars/tools/xeno_canto_key.txt.
 
 import argparse
 import inspect
@@ -48,12 +51,14 @@ def sort_key(recording):
         return 6
 
 class Main:
-    def __init__(self, species_name, output_path, max_downloads, seen_only, ignore_nonderiv):
+    def __init__(self, species_name, xc_key, output_path, max_downloads, ignore_license, scientific_name, seen_only):
         self.species_name = species_name
+        self.xc_key = xc_key
         self.output_path = output_path
         self.max_downloads = max_downloads
+        self.ignore_license = ignore_license
+        self.scientific_name = scientific_name
         self.seen_only = seen_only
-        self.ignore_nonderiv = ignore_nonderiv
 
     def _get_recordings_list(self):
         self.recordings = []
@@ -61,8 +66,12 @@ class Main:
         done = False
         while not done:
             page += 1
-            encoded = self.species_name.lower().replace(' ', '+')
-            url = f'https://www.xeno-canto.org/api/2/recordings?query={encoded}&page={page}'
+            if self.scientific_name:
+                name = f"sp:\"{self.species_name.lower()}\""
+            else:
+                name = f"en:\"={self.species_name.lower()}\""
+
+            url = f'https://www.xeno-canto.org/api/3/recordings?query={name}&page={page}&key={self.xc_key}'
             print(f'Requesting data from {url}')
             response = requests.get(url)
             if response.status_code == 200:
@@ -79,10 +88,10 @@ class Main:
 
         print(f'Response contains {len(recordings)} recordings.')
         for recording in recordings:
-            if self.ignore_nonderiv and 'by-nc-nd' in recording['lic']:
+            if not self.ignore_license and 'by-nc-nd' in recording['lic']:
                 continue
 
-            if self.seen_only and recording['bird-seen'] != 'yes':
+            if self.seen_only and recording['animal-seen'] != 'yes':
                 continue
 
             if f"XC{recording['id']}" not in self.exclude_list:
@@ -94,7 +103,7 @@ class Main:
             return False # not done
 
     def _download_recordings(self):
-        downloaded = 1
+        downloaded = 0
         for recording in self.recordings:
             outfile = os.path.join(self.output_path, f"XC{recording['id']}.mp3")
             if not os.path.exists(outfile):
@@ -109,6 +118,14 @@ class Main:
                         return
 
     def run(self):
+        if self.xc_key is None:
+            xc_key_file = "xeno_canto_key.txt"
+            if not os.path.exists(xc_key_file):
+                self._fatal_error(f"Error: Xeno-Canto key not found. To get a key, register as a Xeno-Canto user, then check your account page. Then specify key in key argument, \
+                                  or save in \"{xc_key_file}\".")
+
+            self.xc_key = util.get_file_lines(xc_key_file)[0]
+
         if not os.path.exists(self.output_path):
             try:
                 os.makedirs(self.output_path)
@@ -133,11 +150,13 @@ if __name__ == '__main__':
     # command-line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--dir', type=str, default='', help='Path to output directory.')
-    parser.add_argument('--license', type=int, default=1, help='If 1, ignore recordings with license BY-NC-ND. Default = 1.')
+    parser.add_argument('--key', type=str, default=None, help='Xeno-Canto key. Must be specified, or stored in \"xeno_canto_key.txt\". To get a key, register as a Xeno-Canto user, then check your account page.')
     parser.add_argument('--max', type=int, default=500, help='Maximum number of recordings to download. Default = 500.')
     parser.add_argument('--name', type=str, default=None, help='Species name.')
-    parser.add_argument('--seen', type=int, default=0, help='If 1, download only if bird-seen=yes. Default = 0.')
+    parser.add_argument('--nolic', default=False, action='store_true', help='Specify this flag to ignore the license. By default, exclude if license is BY-NC-ND.')
+    parser.add_argument('--sci', default=False, action='store_true', help='Specify this flag when using a scientific name rather than a common name.')
+    parser.add_argument('--seen', default=False, action='store_true', help='Specify this flag to download only if bird-seen=yes.')
 
     args = parser.parse_args()
 
-    Main(args.name, args.dir, args.max, args.seen == 1, args.license == 1).run()
+    Main(args.name, args.key, args.dir, args.max, args.nolic, args.sci, args.seen).run()
