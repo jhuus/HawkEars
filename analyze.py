@@ -1,8 +1,9 @@
 # Analyze an audio file, or all audio files in a directory.
-# For each audio file, extract spectrograms, analyze them and output an Audacity label file
-# with the class predictions.
+# For each audio file, extract spectrograms, analyze them and
+# output an Audacity label file and/or CSV file with the class predictions.
 
 import argparse
+import copy
 from datetime import datetime
 import glob
 import importlib.util
@@ -13,6 +14,7 @@ from pathlib import Path
 import pickle
 import random
 import re
+import sys
 import threading
 import time
 import yaml
@@ -30,12 +32,14 @@ from core import occurrence_db
 from core import util
 from model import main_model
 
+# Info per bird species or other class.
 class ClassInfo:
     def __init__(self, name, code, ignore):
         self.name = name
         self.code = code
         self.ignore = ignore
         self.max_occurrence = 0
+        self.occurrence = None
         self.is_bird = True
         self.reset()
 
@@ -46,35 +50,113 @@ class ClassInfo:
         self.scores = []     # predictions (one per segment)
         self.is_label = []   # True iff corresponding offset is a label
 
+    def __str__(self):
+        return f"name={self.name}, code={self.code}, is_bird={self.is_bird}, max_occurrence={self.max_occurrence:.4f}"
+
+# Info per audio recording.
+class FileInfo:
+    def __init__(self, file_path):
+        self.path = Path(file_path)
+        self.file_name = self.path.name
+        self.directory = self.path.parents[0]
+        self.county = None
+        self.week_num = None
+        self.label_list = None
+        self.thread_num = 0
+
+    def __str__(self):
+        county_id = None if self.county is None else self.county.id
+        return f"path={self.path}, {county_id=}, week_num={self.week_num}, thread_num={self.thread_num}"
+
+# Output label.
 class Label:
-    def __init__(self, class_name, score, start_time, end_time):
+    def __init__(self, class_name, class_code, score, start_time, end_time):
         self.class_name = class_name
+        self.class_code = class_code
         self.score = score
         self.start_time = start_time
         self.end_time = end_time
 
-class Analyzer:
-    def __init__(self, input_path, output_path, start_time, end_time, date_str, latitude, longitude, region,
-                 filelist, debug_mode, merge, overlap, device, embed=False, num_threads=1, thread_num=1):
+# Base class for code shared by Initializer and Analyzer;
+# SQLite results can't be shared between threads, so each one has to do its own queries
+class BaseClass:
+    def __init__(self):
+        self.occurrences = {}
+        self.init_occurrence_info()
+
+    # init self.occur_db, self.all_counties and self.occurrence_species
+    def init_occurrence_info(self):
+        self.occur_db = occurrence_db.Occurrence_DB(path=os.path.join("data", f"{cfg.infer.occurrence_db}.db"))
+        self.all_counties = self.occur_db.get_all_counties()
+        self.occurrence_species = set()
+        results = self.occur_db.get_all_species()
+        for r in results:
+            self.occurrence_species.add(r.name)
+
+    # cache species occurrence data for performance
+    def get_occurrences(self, county_id, class_name):
+        if county_id not in self.occurrences:
+            self.occurrences[county_id] = {}
+
+        if class_name in self.occurrences[county_id]:
+            return self.occurrences[county_id][class_name]
+        else:
+            results = self.occur_db.get_occurrences(county_id, class_name)
+            self.occurrences[county_id][class_name] = results
+            return results
+
+    # update the occurrence data per species, where occurrence is
+    # the probability of encountering a species in given county/week
+    def update_class_info_list(self, counties):
+        if not self.check_occurrence:
+            return
+
+        for class_info in self.class_info_list:
+            if not class_info.name in self.occurrence_species:
+                class_info.is_bird = False
+                continue
+
+            if not class_info.ignore:
+                # get sums of weekly occurrences for this species across specified counties
+                occurrence = [0 for i in range(48)] # eBird uses 4 weeks per month
+                for county in counties:
+                    results = self.get_occurrences(county.id, class_info.name)
+                    for i in range(len(results)):
+                        # for each week use the maximum of it and the adjacent weeks
+                        occurrence[i] = max(max(results[i].value, results[(i + 1) % 48].value), results[(i - 1) % 48].value)
+
+                if len(counties) > 1:
+                    # get the average across counties
+                    for week_num in range(48):
+                        occurrence[week_num] /= len(counties)
+
+                # update the info associated with this species
+                class_info.occurrence = [0 for i in range(48)]
+                class_info.max_occurrence = 0
+                for week_num in range(48):
+                    # if no date is specified we will use the maximum across all weeks
+                    class_info.max_occurrence = max(class_info.max_occurrence, occurrence[week_num])
+                    class_info.occurrence[week_num] = occurrence[week_num]
+
+# A single Initializer generates a FileInfo list to be split among the Analyzer threads.
+# It also creates a ClassInfo list and cache of info from the occurrence database
+# for all Analyzer threads to use, and initializes filters.
+# This ensures that initialization functions are performed once globally, not once per Analyzer thread.
+class Initializer(BaseClass):
+    def __init__(self, input_path, date_str, latitude, longitude, region, filelist, device, recurse=False, num_threads=1):
+        super().__init__()
         self.input_path = input_path.strip()
-        self.output_path = output_path.strip()
-        self.start_seconds = self._get_seconds_from_time_string(start_time)
-        self.end_seconds = self._get_seconds_from_time_string(end_time)
         self.date_str = date_str
         self.latitude = latitude
         self.longitude = longitude
         self.region = region
         self.filelist = filelist
-        self.debug_mode = debug_mode
-        self.overlap = overlap
-        self.num_threads = num_threads
-        self.thread_num = thread_num
-        self.embed = embed
         self.device = device
-        self.occurrences = {}
-        self.issued_skip_files_warning = False
-        self.have_rarities_directory = False
+        self.recurse = recurse # whether to check sub-directories of the input directory
+        self.num_threads = num_threads
+        self.use_counties = []
 
+    def _init_filters(self):
         if cfg.infer.do_lpf:
             self.low_pass_filter = filters.low_pass_filter(cfg.infer.lpf_start_freq, cfg.infer.lpf_end_freq, cfg.infer.lpf_damp)
 
@@ -84,39 +166,64 @@ class Analyzer:
         if cfg.infer.do_bpf:
             self.band_pass_filter = filters.band_pass_filter(cfg.infer.bpf_start_freq, cfg.infer.bpf_end_freq, cfg.infer.bpf_damp)
 
-        if cfg.infer.min_score == 0:
-            self.merge_labels = False # merging all labels >= min_score makes no sense in this case
-        else:
-            self.merge_labels = (merge == 1)
+    # get list of FileInfo objects
+    def _get_file_info_list(self, input_path):
+        if util.is_audio_file(input_path):
+            file_info = FileInfo(input_path)
+            return [file_info]
+        elif os.path.isdir(input_path):
+            file_list = []
+            audio_files = util.get_audio_files(input_path)
+            for audio_file in audio_files:
+                file_info = FileInfo(audio_file)
+                file_list.append(file_info)
 
-        if self.start_seconds is not None and self.end_seconds is not None and self.end_seconds < self.start_seconds + cfg.audio.segment_len:
-                logging.error(f"Error: end time must be >= start time + {cfg.audio.segment_len} seconds")
-                quit()
+            if self.recurse:
+                subdirs = next(os.walk(input_path))[1]
+                for dir_name in subdirs:
+                    file_list += self._get_file_info_list(os.path.join(input_path, dir_name))
 
-        if self.end_seconds is not None:
-            self.end_seconds -= cfg.audio.segment_len # convert from end of last segment to start of last segment for processing
-
-        # if no output path is specified, put the output labels in the input directory
-        if len(self.output_path) == 0:
-            if os.path.isdir(self.input_path):
-                self.output_path = self.input_path
-            else:
-                self.output_path = Path(self.input_path).parent
-        elif not os.path.exists(self.output_path):
-            os.makedirs(self.output_path)
-
-        # save labels here if they were excluded because of location/date processing
-        self.rarities_output_path = os.path.join(self.output_path, 'rarities')
-
-    @staticmethod
-    def _get_file_list(input_path):
-        if os.path.isdir(input_path):
-            return util.get_audio_files(input_path)
-        elif util.is_audio_file(input_path):
-            return [input_path]
+            return file_list
         else:
             logging.error(f"Error: {input_path} is not a directory or an audio file")
             quit()
+
+    # get list of ClassInfo objects
+    def _get_class_info_list(self):
+        # get the class names and codes from the trained model;
+        # even when using OpenVINO for inference, the ckpt files should be there for info;
+        model_paths = sorted(glob.glob(os.path.join(cfg.misc.main_ckpt_folder, "*.ckpt")))
+        if len(model_paths) == 0:
+            logging.error(f"Error: no checkpoints found in {cfg.misc.main_ckpt_folder}")
+            quit()
+
+        model = main_model.MainModel.load_from_checkpoint(model_paths[0], map_location=torch.device(self.device))
+        class_names = model.train_class_names
+        class_codes = model.train_class_codes
+
+        ignore_list = util.get_file_lines(cfg.misc.ignore_file)
+
+        # replace any "special" quotes in the class names with "plain" quotes
+        # in case there's a quote character mismatch, which happened once
+        class_names = util.replace_special_quotes(class_names)
+        ignore_list = util.replace_special_quotes(ignore_list)
+
+        # create the ClassInfo objects
+        class_infos = []
+        for i, class_name in enumerate(class_names):
+            if class_name in cfg.misc.map_names:
+                use_name = cfg.misc.map_names[class_name]
+            else:
+                use_name = class_name
+
+            if class_codes[i] in cfg.misc.map_codes:
+                use_code = cfg.misc.map_codes[class_codes[i]]
+            else:
+                use_code = class_codes[i]
+
+            class_infos.append(ClassInfo(use_name, use_code, use_name in ignore_list))
+
+        return class_infos
 
     # return week number in the range [1, 48] as used by eBird barcharts, i.e. 4 weeks per month
     @staticmethod
@@ -138,26 +245,24 @@ class Analyzer:
 
     # process latitude, longitude, region and date arguments;
     # a region is an alternative to lat/lon, and may specify an eBird county (e.g. CA-AB-FN)
-    # or province (e.g. CA-AB)
+    # or province (e.g. CA-AB);
+    # there are three main cases here:
+    # 1) self.check_occurrence = False (no location/date processing was requested)
+    # 2) self.filelist_dict is not None (filelist was specified)
+    # 3) self.use_counties is not None (a global location was specified)
     def _process_location_and_date(self):
+        self.check_occurrence = True
+        self.filelist_dict = None
+        self.week_num = None
+        self.get_date_from_file_name = False
+
         if self.filelist is None and self.region is None and (self.latitude is None or self.longitude is None):
+            # case 1: no location/date processing
             self.check_occurrence = False
-            self.week_num = None
             return
 
-        self.check_occurrence = True
-        self.get_date_from_file_name = False
-        self.occur_db = occurrence_db.Occurrence_DB(path=os.path.join("data", f"{cfg.infer.occurrence_db}.db"))
-        self.counties = self.occur_db.get_all_counties()
-        self.occurrence_species = {}
-        results = self.occur_db.get_all_species()
-        for r in results:
-            self.occurrence_species[r.name] = 1
-
-        # if a location file is specified, use that
-        self.week_num = None
-        self.location_date_dict = None
         if self.filelist is not None:
+            # case 2: a filelist was specified
             if os.path.exists(self.filelist):
                 dataframe = pd.read_csv(self.filelist)
                 expected_column_names = ['filename', 'latitude', 'longitude', 'recording_date']
@@ -170,16 +275,17 @@ class Analyzer:
                         logging.error(f"Error: file {self.filelist}, column {i} is {column_name} but {expected_column_names[i]} was expected.")
                         quit()
 
-                self.location_date_dict = {}
+                self.filelist_dict = {}
                 for i, row in dataframe.iterrows():
                     week_num = self._get_week_num_from_date_str(row['recording_date'])
-                    self.location_date_dict[row['filename']] = [row['latitude'], row['longitude'], week_num]
+                    self.filelist_dict[row['filename']] = [row['latitude'], row['longitude'], week_num]
 
                 return
             else:
                 logging.error(f"Error: file {self.filelist} not found.")
                 quit()
 
+        # case 3: global location/date parameters
         if self.date_str == 'file':
             self.get_date_from_file_name = True
         elif self.date_str is not None:
@@ -188,102 +294,138 @@ class Analyzer:
                 logging.error(f'Error: invalid date string: {self.date_str}')
                 quit()
 
-        counties = [] # list of relevant eBird counties
+        # process any region/latitude/longitude arguments, setting self.use_counties
+        # to the list of relevant eBird counties
+        self.use_counties = []
         if self.region is not None:
-            for c in self.counties:
+            for c in self.all_counties:
                 if c.code.startswith(self.region):
-                    counties.append(c)
+                    self.use_counties.append(c)
         else:
             # use latitude/longitude and just pick one eBird county
-            for c in self.counties:
+            for c in self.all_counties:
                 if self.latitude >= c.min_y and self.latitude <= c.max_y and self.longitude >= c.min_x and self.longitude <= c.max_x:
-                    counties.append(c)
+                    self.use_counties.append(c)
                     break
 
-        if len(counties) == 0:
+        if len(self.use_counties) == 0:
             if self.region is None:
                 logging.error(f'Error: no eBird county found matching given latitude and longitude')
             else:
                 logging.error(f'Error: no eBird county found matching given region')
             quit()
-        elif len(counties) == 1:
-            logging.info(f'Matching species in {counties[0].name} ({counties[0].code})')
+        elif len(self.use_counties) == 1:
+            logging.info(f'Matching species in {self.use_counties[0].name} ({self.use_counties[0].code})')
         else:
             logging.info(f'Matching species in region {self.region}')
 
-        self._update_class_occurrence_stats(counties)
+    # update the file_info_list with location/date info
+    def _update_file_info_list(self):
+        if not self.check_occurrence:
+            return
 
-    # cache species occurrence data for performance
-    def _get_occurrences(self, county_id, class_name):
-        if county_id not in self.occurrences:
-            self.occurrences[county_id] = {}
+        for file_info in self.file_info_list:
+            if self.filelist_dict is not None:
+                if file_info.file_name in self.filelist_dict:
+                    lat, lon, week_num = self.filelist_dict[file_info.file_name]
+                    file_info.week_num = week_num
+                    if lat is not None and lon is not None:
+                        for c in self.all_counties:
+                            if lat >= c.min_y and lat <= c.max_y and lon >= c.min_x and lon <= c.max_x:
+                                file_info.county = c
+                                break
 
-        if class_name in self.occurrences[county_id]:
-            return self.occurrences[county_id][class_name]
+            if self.get_date_from_file_name:
+                result = re.split(cfg.infer.file_date_regex, file_info.file_name)
+                if len(result) > cfg.infer.file_date_regex_group:
+                    date_str = result[cfg.infer.file_date_regex_group]
+                    file_info.week_num = self._get_week_num_from_date_str(date_str)
+                    if file_info.week_num is None:
+                        logging.error(f'Error: invalid date string: {self.date_str} extracted from {file_info.file_name}')
+
+    def run(self):
+        # collect all the basic info
+        self.file_info_list = self._get_file_info_list(self.input_path)
+        self.class_info_list = self._get_class_info_list()
+        self._process_location_and_date()
+        self._init_filters()
+
+        # update the FileInfo and ClassInfo objects with location/date info
+        self._update_file_info_list()
+        self.update_class_info_list(self.use_counties)
+
+        # assign a thread_num to each FileInfo object
+        for i in range(len(self.file_info_list)):
+            self.file_info_list[i].thread_num = (i % self.num_threads) + 1
+
+# Main inference class.
+class Analyzer(BaseClass):
+    def __init__(self, initializer, output_path, start_time, end_time, debug_mode, merge, overlap, device, output_type, embed=False, thread_num=1):
+        super().__init__()
+        self.init = initializer
+        self.output_path = output_path
+        self.start_seconds = self._get_seconds_from_time_string(start_time)
+        self.end_seconds = self._get_seconds_from_time_string(end_time)
+        self.debug_mode = debug_mode
+        self.overlap = overlap
+        self.device = device
+        self.output_type = output_type
+        self.embed = embed
+        self.thread_num = thread_num
+
+        if cfg.infer.min_score == 0:
+            self.merge_labels = False # merging all labels >= min_score makes no sense in this case
         else:
-            results = self.occur_db.get_occurrences(county_id, class_name)
-            self.occurrences[county_id][class_name] = results
-            return results
+            self.merge_labels = (merge == 1)
+
+        self.check_occurrence = self.init.check_occurrence
+        self.class_info_list = copy.deepcopy(init.class_info_list)
+        self.filelist = self.init.filelist
+        self.issued_skip_files_warning = False
+        self.have_rarities_directory = False
+        self.labels = []
+        self.rarities_labels = []
+
+        if self.start_seconds is not None and self.end_seconds is not None and self.end_seconds < self.start_seconds + cfg.audio.segment_len:
+                logging.error(f"Error: end time must be >= start time + {cfg.audio.segment_len} seconds")
+                quit()
+
+        if self.end_seconds is not None:
+            self.end_seconds -= cfg.audio.segment_len # convert from end of last segment to start of last segment for processing
+
+        # save labels here if they were excluded because of location/date processing
+        self.rarities_output_path = os.path.join(self.output_path, 'rarities')
 
     # update the occurrence data per species, where occurrence is
     # the probability of encountering a species in given county/week
-    def _update_class_occurrence_stats(self, counties):
-        class_infos = {}
-        for class_info in self.class_infos:
-            if not class_info.name in self.occurrence_species:
-                class_info.is_bird = False
+    def _update_class_info_list(self, counties):
+        if not self.check_occurrence:
+            return
+
+        for class_info in self.class_info_list:
+            if class_info.ignore or not class_info.is_bird:
                 continue
 
-            class_infos[class_info.name] = class_info # copy from list to dict for faster reference
-            if not class_info.ignore:
-                # get sums of weekly occurrences for this species across specified counties
-                occurrence = [0 for i in range(48)] # eBird uses 4 weeks per month
-                for county in counties:
-                    results = self._get_occurrences(county.id, class_info.name)
-                    for i in range(len(results)):
-                        # for each week use the maximum of it and the adjacent weeks
-                        occurrence[i] = max(max(results[i].value, results[(i + 1) % 48].value), results[(i - 1) % 48].value)
+            # get sums of weekly occurrences for this species across specified counties
+            occurrence = [0 for i in range(48)] # eBird uses 4 weeks per month
+            for county in counties:
+                results = self.get_occurrences(county.id, class_info.name)
+                for i in range(len(results)):
+                    # for each week use the maximum of it and the adjacent weeks
+                    occurrence[i] = max(max(results[i].value, results[(i + 1) % 48].value), results[(i - 1) % 48].value)
 
-                if len(counties) > 1:
-                    # get the average across counties
-                    for week_num in range(48):
-                        occurrence[week_num] /= len(counties)
-
-                # update the info associated with this species
-                class_info.occurrence = [0 for i in range(48)]
-                class_info.max_occurrence = 0
+            if len(counties) > 1:
+                # get the average across counties
                 for week_num in range(48):
-                    # if no date is specified we will use the maximum across all weeks
-                    class_info.max_occurrence = max(class_info.max_occurrence, occurrence[week_num])
-                    class_info.occurrence[week_num] = occurrence[week_num]
+                    occurrence[week_num] /= len(counties)
 
-    # get class names and codes from the model, which gets them from the checkpoint
-    def _get_class_infos(self):
-        if self.use_openvino:
-            # we have to trust that classes.txt matches what the model was trained on
-            class_names = util.get_class_list(cfg.misc.classes_file)
-            classes_dict = util.get_class_dict(cfg.misc.classes_file)
-            class_codes = []
-            for name in class_names:
-                class_codes.append(classes_dict[name])
-        else:
-            # we can use the class info from the trained model
-            class_names = self.models[0].train_class_names
-            class_codes = self.models[0].train_class_codes
-
-        ignore_list = util.get_file_lines(cfg.misc.ignore_file)
-
-        # replace any "special" quotes in the class names with "plain" quotes,
-        # to ensure the quotes in ignore list match the quotes in class list
-        class_names = util.replace_special_quotes(class_names)
-        ignore_list = util.replace_special_quotes(ignore_list)
-
-        # create the ClassInfo objects
-        class_infos = []
-        for i, class_name in enumerate(class_names):
-            class_infos.append(ClassInfo(class_name, class_codes[i], class_name in ignore_list))
-
-        return class_infos
+            # update the info associated with this species
+            class_info.occurrence = [0 for i in range(48)]
+            class_info.max_occurrence = 0
+            for week_num in range(48):
+                # if no date is specified we will use the maximum across all weeks
+                class_info.max_occurrence = max(class_info.max_occurrence, occurrence[week_num])
+                class_info.occurrence[week_num] = occurrence[week_num]
 
     # return the average prediction of all models in the ensemble
     def _call_models(self, specs):
@@ -336,13 +478,13 @@ class Analyzer:
 
         predictions = self._call_models(specs)
         for i in range(len(specs)):
-            for j in range(len(self.class_infos)):
-                if self.class_infos[j].ignore:
+            for j in range(len(self.class_info_list)):
+                if self.class_info_list[j].ignore:
                     continue
 
-                self.class_infos[j].scores[i] = max(self.class_infos[j].scores[i], predictions[i][j])
-                if (self.class_infos[j].scores[i] >= cfg.infer.min_score):
-                    self.class_infos[j].has_label = True
+                self.class_info_list[j].scores[i] = max(self.class_info_list[j].scores[i], predictions[i][j])
+                if (self.class_info_list[j].scores[i] >= cfg.infer.min_score):
+                    self.class_info_list[j].has_label = True
 
     def _get_predictions(self, signal, rate):
         # if needed, pad the signal with zeros to get the last spectrogram
@@ -370,25 +512,25 @@ class Analyzer:
 
         # populate class_infos with predictions using unfiltered spectrograms
         for i in range(len(self.offsets)):
-            for j in range(len(self.class_infos)):
+            for j in range(len(self.class_info_list)):
                 if cfg.infer.do_unfiltered:
-                    self.class_infos[j].scores.append(predictions[i][j])
+                    self.class_info_list[j].scores.append(predictions[i][j])
                 else:
-                    self.class_infos[j].scores.append(0)
+                    self.class_info_list[j].scores.append(0)
 
-                self.class_infos[j].is_label.append(False)
-                if (self.class_infos[j].scores[-1] >= cfg.infer.min_score):
-                    self.class_infos[j].has_label = True
+                self.class_info_list[j].is_label.append(False)
+                if (self.class_info_list[j].scores[-1] >= cfg.infer.min_score):
+                    self.class_info_list[j].has_label = True
 
         # optionally process low-pass, high-pass and band-pass filters
         if cfg.infer.do_lpf:
-            self._apply_filter(specs, self.low_pass_filter)
+            self._apply_filter(specs, self.init.low_pass_filter)
 
         if cfg.infer.do_hpf:
-            self._apply_filter(specs, self.high_pass_filter)
+            self._apply_filter(specs, self.init.high_pass_filter)
 
         if cfg.infer.do_bpf:
-            self._apply_filter(specs, self.band_pass_filter)
+            self._apply_filter(specs, self.init.band_pass_filter)
 
         # optionally generate embeddings
         if self.embed:
@@ -426,60 +568,52 @@ class Analyzer:
 
         return spec_array
 
-    def _analyze_file(self, file_path):
+    def _analyze_file(self, file_info):
+        week_num = None
         check_occurrence = self.check_occurrence
         if check_occurrence:
-            if self.location_date_dict is not None:
-                filename = Path(file_path).name
-                if filename in self.location_date_dict:
-                    latitude, longitude, self.week_num = self.location_date_dict[filename]
-                    if self.week_num is None:
-                        check_occurrence = False
+            if self.filelist is not None:
+                # a filelist was specified, i.e. separate location/date per recording
+                if file_info.file_name in self.init.filelist_dict:
+                    # this file was included in the filelist
+                    if file_info.county is None:
+                        check_occurrence = False # no location info for this file in the filelist
                     else:
-                        county = None
-                        for c in self.counties:
-                            if latitude >= c.min_y and latitude <= c.max_y and longitude >= c.min_x and longitude <= c.max_x:
-                                county = c
-                                break
-
-                        if county is None:
-                            check_occurrence = False
-                            logging.warning(f"Warning: no matching county found for latitude={latitude} and longitude={longitude}")
-                        else:
-                            self._update_class_occurrence_stats([county])
+                        week_num = file_info.week_num
+                        self.update_class_info_list([file_info.county])
                 else:
-                    # when a filelist is specified, only the recordings in that file are processed;
-                    # so you can specify a filelist with no locations or dates if you want to restrict the recording
-                    # list but not invoke location/date processing; you still need the standard CSV format
-                    # with the expected number of columns, but latitude/longitude/date can be empty
+                    # this file was excluded from the filelist
                     if not self.issued_skip_files_warning:
-                        logging.info(f"Thread {self.thread_num}: skipping some recordings that were not included in {self.filelist} (e.g. {filename})")
+                        logging.info(f"Thread {self.thread_num}: Skipping some recordings that were not included in {self.filelist} (e.g. {file_info.file_name})")
                         self.issued_skip_files_warning = True
 
                     return
-            elif self.get_date_from_file_name:
-                result = re.split(cfg.infer.file_date_regex, os.path.basename(file_path))
-                if len(result) > cfg.infer.file_date_regex_group:
-                    date_str = result[cfg.infer.file_date_regex_group]
-                    self.week_num = self._get_week_num_from_date_str(date_str)
-                    if self.week_num is None:
-                        logging.error(f'Error: invalid date string: {self.date_str} extracted from {file_path}')
-                        check_occurrence = False # ignore species occurrence data for this file
+            elif self.init.get_date_from_file_name:
+                week_num = file_info.week_num
+            else:
+                week_num = self.init.week_num
 
-        logging.info(f"Thread {self.thread_num}: Analyzing {file_path}")
+        logging.info(f"Thread {self.thread_num}: Analyzing {file_info.path}")
 
         # clear info from previous recording, and mark classes where occurrence of eBird reports is too low
-        for class_info in self.class_infos:
+        for class_info in self.class_info_list:
             class_info.reset()
             if check_occurrence and class_info.is_bird and not class_info.ignore:
                 class_info.check_occurrence = True
-                if self.week_num is None and not self.get_date_from_file_name:
+                if week_num is None:
                     if class_info.max_occurrence < cfg.infer.min_occurrence:
                         class_info.occurrence_too_low = True
-                elif class_info.occurrence[self.week_num - 1] < cfg.infer.min_occurrence:
+                elif class_info.occurrence[week_num - 1] < cfg.infer.min_occurrence:
                     class_info.occurrence_too_low = True
 
-        signal, rate = self.audio.load(file_path)
+        # disable debug logging in the audio object, because it generates too much librosa output;
+        # this would cause side-effects in other threads, so we set num_threads=1 in debug mode
+        if self.debug_mode:
+            logging.root.setLevel(logging.INFO)
+
+        signal, rate = self.audio.load(file_info.path)
+        if self.debug_mode:
+            logging.root.setLevel(logging.DEBUG)
 
         if not self.audio.have_signal:
             return
@@ -487,22 +621,17 @@ class Analyzer:
         self._get_predictions(signal, rate)
 
         # do pre-processing for individual species
-        self.species_handlers.reset(self.class_infos, self.offsets, self.raw_spectrograms, self.audio, self.check_occurrence, self.week_num)
-        for class_info in self.class_infos:
+        self.species_handlers.reset(self.class_info_list, self.offsets, self.raw_spectrograms, self.audio, check_occurrence, week_num)
+        for class_info in self.class_info_list:
             if  not class_info.ignore and class_info.code in self.species_handlers.handlers:
                 self.species_handlers.handlers[class_info.code](class_info)
 
         # generate labels for one class at a time
         labels = []
         rarities_labels = []
-        for class_info in self.class_infos:
+        for class_info in self.class_info_list:
             if class_info.ignore or not class_info.has_label:
                 continue
-
-            if cfg.infer.use_banding_codes:
-                name = class_info.code
-            else:
-                name = class_info.name
 
             # set is_label[i] = True for any offset that qualifies in a first pass
             scores = class_info.scores
@@ -542,7 +671,7 @@ class Analyzer:
                         prev_label.end_time = end_time
                         prev_label.score = max(scores[i], prev_label.score)
                     else:
-                        label = Label(name, scores[i], self.offsets[i], end_time)
+                        label = Label(class_info.name, class_info.code, scores[i], self.offsets[i], end_time)
 
                         if class_info.occurrence_too_low:
                             rarities_labels.append(label)
@@ -551,10 +680,20 @@ class Analyzer:
 
                         prev_label = label
 
-        self._save_labels(labels, file_path, False)
-        self._save_labels(rarities_labels, file_path, True)
+        if self.output_type in ["audacity", "both"]:
+            self._save_labels(labels, file_info.path, False)
+            self._save_labels(rarities_labels, file_info.path, True)
+
+        for label in labels:
+            label.filename = file_info.path.name
+            self.labels.append(label)
+
+        for label in rarities_labels:
+            label.filename = file_info.path.name
+            self.rarities_labels.append(label)
+
         if self.embed:
-            self._save_embeddings(file_path)
+            self._save_embeddings(file_info.path)
 
     def _save_labels(self, labels, file_path, rarities):
         if rarities:
@@ -573,7 +712,12 @@ class Analyzer:
         try:
             with open(output_path, 'w') as file:
                 for label in labels:
-                    file.write(f'{label.start_time:.2f}\t{label.end_time:.2f}\t{label.class_name};{label.score:.3f}\n')
+                    if cfg.infer.use_banding_codes:
+                        name = label.class_code
+                    else:
+                        name = label.class_name
+
+                    file.write(f'{label.start_time:.2f}\t{label.end_time:.2f}\t{name};{label.score:.3f}\n')
 
                     if self.embed and not rarities:
                         # save offsets with labels for use when saving embeddings
@@ -616,7 +760,7 @@ class Analyzer:
 
         for i in range(cfg.infer.top_n):
             j = np.argmax(predictions)
-            code = self.class_infos[j].code
+            code = self.class_info_list[j].code
             score = predictions[j]
             logging.info(f"{code}: {score}")
             predictions[j] = 0
@@ -630,7 +774,7 @@ class Analyzer:
         formatted_time = time.strftime("%H:%M:%S", time_struct)
         elapsed_time = util.format_elapsed_time(self.start_time, time.time())
 
-        inference_key = "Inference / analysis"
+        inference_key = "Configuration"
         info = {inference_key: [
             {"version": util.get_version()},
             {"date": datetime.today().strftime('%Y-%m-%d')},
@@ -638,14 +782,14 @@ class Analyzer:
             {"elapsed": elapsed_time},
             {"device": self.device},
             {"openvino": self.use_openvino},
-            {"num_threads": self.num_threads},
+            {"num_threads": self.init.num_threads},
             {"min_score": cfg.infer.min_score},
             {"overlap": self.overlap},
             {"merge_labels": self.merge_labels},
-            {"date_str": self.date_str},
-            {"latitude": self.latitude},
-            {"longitude": self.longitude},
-            {"region": self.region},
+            {"date_str": self.init.date_str},
+            {"latitude": self.init.latitude},
+            {"longitude": self.init.longitude},
+            {"region": self.init.region},
             {"filelist": self.filelist},
             {"embed": self.embed},
             {"do_unfiltered": cfg.infer.do_unfiltered},
@@ -698,7 +842,14 @@ class Analyzer:
 
             info[f"Model {i + 1}"] = model_info
 
-        info_str = yaml.dump(info)
+        # add class list
+        classes = []
+        for class_info in self.class_info_list:
+            classes.append({"name": class_info.name, "code": class_info.code})
+        info["Classes"] = classes
+
+        # write the file
+        info_str = yaml.dump(info, sort_keys=False)
         info_str = "# Summary of HawkEars inference run in YAML format\n" + info_str
         with open(os.path.join(self.output_path, "HawkEars_summary.txt"), 'w') as out_file:
             out_file.write(info_str)
@@ -735,27 +886,78 @@ class Analyzer:
             self.embed_model = main_model.MainModel.load_from_checkpoint(cfg.misc.search_ckpt_path, map_location=torch.device(self.device))
             self.embed_model.eval()
 
-    def run(self, file_list):
+    def run(self):
         self.start_time = time.time()
         if self.device == 'cpu' and importlib.util.find_spec("openvino") is not None:
             self.use_openvino = True
         else:
             self.use_openvino = False
-            torch.cuda.empty_cache()
 
         self._get_models()
-
         self.audio = audio.Audio(device=self.device)
-        self.class_infos = self._get_class_infos()
-        self._process_location_and_date()
         self.species_handlers = species_handlers.Species_Handlers(self.device)
 
-        for file_path in file_list:
-            self._analyze_file(file_path)
+        for file_info in self.init.file_info_list:
+            if file_info.thread_num == self.thread_num:
+                self._analyze_file(file_info)
 
         # thread 1 writes a text file summarizing parameters etc.
         if self.thread_num == 1:
             self._write_summary()
+
+# save the regular labels and the excluded rarities in two separate CSVs
+def save_csv(analyzers, output_path):
+    filenames = []
+    class_names = []
+    class_codes = []
+    scores = []
+    start_times = []
+    end_times = []
+
+    rarities_filenames = []
+    rarities_class_names = []
+    rarities_class_codes = []
+    rarities_scores = []
+    rarities_start_times = []
+    rarities_end_times = []
+
+    for analyzer in analyzers:
+        for label in analyzer.labels:
+            filenames.append(label.filename)
+            class_names.append(label.class_name)
+            class_codes.append(label.class_code)
+            scores.append(label.score)
+            start_times.append(label.start_time)
+            end_times.append(label.end_time)
+
+        for label in analyzer.rarities_labels:
+            rarities_filenames.append(label.filename)
+            rarities_class_names.append(label.class_name)
+            rarities_class_codes.append(label.class_code)
+            rarities_scores.append(label.score)
+            rarities_start_times.append(label.start_time)
+            rarities_end_times.append(label.end_time)
+
+    df = pd.DataFrame()
+    df['filename'] = filenames
+    df['start_time'] = start_times
+    df['end_time'] = end_times
+    df['class_name'] = class_names
+    df['class_code'] = class_codes
+    df['score'] = scores
+    df = df.sort_values(by=['filename', 'start_time', 'end_time', 'class_name'], ascending=[True, True, True, True])
+    df.to_csv(os.path.join(output_path, "HawkEars_labels.csv"), float_format="%.3f", index=False)
+
+    if len(rarities_filenames) > 0:
+        df = pd.DataFrame()
+        df['filename'] = rarities_filenames
+        df['start_time'] = rarities_start_times
+        df['end_time'] = rarities_end_times
+        df['class_name'] = rarities_class_names
+        df['class_code'] = rarities_class_codes
+        df['score'] = rarities_scores
+        df = df.sort_values(by=['filename', 'start_time', 'end_time', 'class_name'], ascending=[True, True, True, True])
+        df.to_csv(os.path.join(output_path, "HawkEars_rarities.csv"), float_format="%.3f", index=False)
 
 if __name__ == '__main__':
     # command-line arguments
@@ -769,6 +971,8 @@ if __name__ == '__main__':
     parser.add_argument('--overlap', type=float, default=cfg.infer.spec_overlap_seconds, help=f"Seconds of overlap for adjacent 3-second spectrograms. Default = {cfg.infer.spec_overlap_seconds}.")
     parser.add_argument('-m', '--merge', type=int, default=1, help=f'Specify 0 to not merge adjacent labels of same species. Default = 1, i.e. merge.')
     parser.add_argument('-p', '--min_score', type=float, default=cfg.infer.min_score, help=f"Generate label if score >= this. Default = {cfg.infer.min_score}.")
+    parser.add_argument('--recurse', default=False, action='store_true', help='If specified, process all subdirectories of the input directory.')
+    parser.add_argument('--rtype', type=str, default='audacity', help="Output type. One of \"audacity\", \"csv\" or \"both\". Default is \"audacity\".")
     parser.add_argument('-s', '--start', type=str, default='', help="Optional start time in hh:mm:ss format, where hh and mm are optional.")
     parser.add_argument('--threads', type=int, default=cfg.infer.num_threads, help=f'Number of threads. Default = {cfg.infer.num_threads}')
     parser.add_argument('--power', type=float, default=cfg.infer.audio_exponent, help=f'Power parameter to mel spectrograms. Default = {cfg.infer.audio_exponent}')
@@ -797,12 +1001,17 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    level = logging.DEBUG if args.debug else logging.INFO
-    logging.basicConfig(level=level, format='%(asctime)s.%(msecs)03d %(message)s', datefmt='%H:%M:%S')
+    if args.debug:
+        num_threads = 1
+        level = logging.DEBUG
+    else:
+        num_threads = args.threads
+        level = logging.INFO
+
+    logging.basicConfig(stream=sys.stderr, level=level, format='%(asctime)s.%(msecs)03d %(message)s', datefmt='%H:%M:%S', force=True)
     start_time = time.time()
     logging.info("Initializing")
 
-    num_threads = args.threads
     cfg.infer.use_banding_codes = args.band
     cfg.audio.power = args.power
     cfg.infer.min_score = args.min_score
@@ -810,8 +1019,25 @@ if __name__ == '__main__':
         logging.error("Error: min_score must be >= 0")
         quit()
 
+    output_type = args.rtype.lower()
+    if output_type not in ["audacity", "csv", "both"]:
+        logging.error("Error: --rtype argument must be \"audacity\", \"csv\" or \"both\".")
+        quit()
+
+    # if no output path is specified, put the output in the input directory
+    output_path = args.output
+    if len(output_path) == 0:
+        if os.path.isdir(args.input):
+            output_path = args.input
+        else:
+            output_path = Path(args.input).parent
+    elif not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    # select device
     if torch.cuda.is_available():
         device = 'cuda'
+        torch.cuda.empty_cache()
         logging.info(f"Using CUDA")
     elif torch.backends.mps.is_available():
         device = 'mps'
@@ -848,41 +1074,35 @@ if __name__ == '__main__':
     cfg.infer.bpf_end_freq = args.bpfend
     cfg.infer.bpf_damp = args.bpfdamp
 
-    file_list = Analyzer._get_file_list(args.input)
+    # for efficiency, do initialization once, not once per thread
+    init = Initializer(args.input, args.date, args.lat, args.lon, args.region, args.filelist, device, args.recurse, num_threads)
+    init.run()
+
+    analyzers = []
+    num_threads = min(num_threads, len(init.file_info_list)) # don't need more threads than recordings
     if num_threads == 1:
-        # keep it simple in case multithreading code has undesirable side-effects (e.g. disabling echo to terminal)
-        analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region,
-                            args.filelist, args.debug, args.merge, args.overlap, device, args.embed, num_threads, 1)
-        analyzer.run(file_list)
+        # keep it simple in this case
+        analyzer = Analyzer(init, output_path, args.start, args.end, args.debug, args.merge, args.overlap, device, output_type, args.embed, 1)
+        analyzers.append(analyzer)
+        analyzer.run()
     else:
-        # split input files into one group per thread
-        file_lists = [[] for i in range(num_threads)]
-        for i in range(len(file_list)):
-            file_lists[i % num_threads].append(file_list[i])
-
-        # for some reason using processes is faster than just using threads, but that disables output on Windows
-        processes = []
+        threads = []
         for i in range(num_threads):
-            if len(file_lists[i]) > 0:
-                analyzer = Analyzer(args.input, args.output, args.start, args.end, args.date, args.lat, args.lon, args.region,
-                                    args.filelist, args.debug, args.merge, args.overlap, device, args.embed, num_threads, i + 1)
-                if os.name == "posix":
-                    process = mp.Process(target=analyzer.run, args=(file_lists[i], ))
-                else:
-                    process = threading.Thread(target=analyzer.run, args=(file_lists[i], ))
+            analyzer = Analyzer(init, output_path, args.start, args.end, args.debug, args.merge, args.overlap, device, output_type, args.embed, i + 1)
+            analyzers.append(analyzer)
+            thread = threading.Thread(target=analyzer.run, args=())
+            thread.start()
+            threads.append(thread)
 
-                process.start()
-                processes.append(process)
-
-        # wait for processes to complete
-        for process in processes:
+        # wait for threads to complete
+        for thread in threads:
             try:
-                process.join()
+                thread.join()
             except Exception as e:
                 logging.error(f"Caught exception: {e}")
 
-    if os.name == "posix":
-        os.system("stty echo")
+    if output_type in ["csv", "both"]:
+        save_csv(analyzers, output_path)
 
     elapsed = time.time() - start_time
     minutes = int(elapsed) // 60
