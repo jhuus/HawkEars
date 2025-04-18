@@ -103,7 +103,6 @@ class Audio:
 
         left_sum = left_spec.sum()
         right_sum = right_spec.sum()
-        logging.debug(f"Audio::_choose_channel left sum = {left_sum:.4f}, right sum = {right_sum:.4f}")
 
         if left_sum == 0 and right_sum > 0:
             # left channel is null
@@ -133,7 +132,6 @@ class Audio:
     # you have to call load() before calling this;
     # if raw_spectrograms array is specified, populate it with spectrograms before normalization
     def get_spectrograms(self, offsets, segment_len=None, low_band=False, raw_spectrograms=None):
-        logging.debug(f"Audio::get_spectrograms offsets={offsets}")
         if not self.have_signal:
             return None
 
@@ -165,29 +163,18 @@ class Audio:
     def signal_len(self):
         return len(self.signal) if self.have_signal else 0
 
-    # if logging level is DEBUG, librosa.load generates a lot of output,
-    # so temporarily update level
-    def _call_librosa_load(self, path, mono):
-        saved_log_level = logging.root.level
-        logging.root.setLevel(logging.ERROR)
-        signal, sr = librosa.load(path, sr=cfg.audio.sampling_rate, mono=mono)
-        logging.root.setLevel(saved_log_level)
-
-        return signal, sr
-
     def load(self, path):
         try:
             self.have_signal = True
             self.path = path
 
             if cfg.audio.choose_channel:
-                self.signal, _ = self._call_librosa_load(path, mono=False)
+                self.signal, _ = librosa.load(path, sr=cfg.audio.sampling_rate, mono=False)
 
-                logging.debug(f"Audio::load signal.shape={self.signal.shape}")
                 if len(self.signal.shape) == 2:
                     self.signal = self._choose_channel(self.signal[0], self.signal[1])
             else:
-                self.signal, _ = self._call_librosa_load(path, mono=True)
+                self.signal, _ = librosa.load(path, sr=cfg.audio.sampling_rate, mono=True)
 
         except Exception as e:
             self.have_signal = False
@@ -195,5 +182,4 @@ class Audio:
             self.path = None
             logging.error(f'Caught exception in audio load of {path}: {e}')
 
-        logging.debug('Done loading audio file')
         return self.signal, cfg.audio.sampling_rate
