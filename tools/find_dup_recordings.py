@@ -109,11 +109,11 @@ if __name__ == '__main__':
     mode = args.mode
     species_name = args.name
 
-    if len(db_name) == 0:
+    if db_name is None:
         print('Error: database name (--db) is required.')
         quit()
 
-    if len(species_name) == 0:
+    if species_name is None:
         print('Error: species name (--name) is required.')
         quit()
 
