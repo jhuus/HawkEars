@@ -30,6 +30,9 @@ class ExtractByImage(extractor.Extractor):
         self.images_path = images_path
         self.dest_dir = dest_dir
 
+        if self.dest_dir is not None and not os.path.exists(dest_dir):
+            os.mkdir(dest_dir)
+
     # get list of specs from directory of images
     def _process_image_dir(self):
         self.offsets = {}
