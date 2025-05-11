@@ -24,7 +24,7 @@ from core import util
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s.%(msecs)03d %(message)s', datefmt='%H:%M:%S')
 
-output_path = "../data/specs.pickle"
+output_path = "../data/specs.pkl"
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--cfg', type=str, default="base", help=f'Configuration name. Default = "base".')
