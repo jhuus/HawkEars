@@ -53,6 +53,7 @@ Bell's Vireo,BEVI
 Belted Kingfisher,BEKI
 Bewick's Wren,BEWR
 Black Oystercatcher,BLOY
+Black Rail,BLRA
 Black Tern,BLTE
 Black Turnstone,BLTU
 Black-and-white Warbler,BAWW
@@ -106,6 +107,7 @@ Chestnut-sided Warbler,CSWA
 Chimney Swift,CHSW
 Chipping Sparrow,CHSP
 Chuck-will's-widow,CWWI
+Clapper Rail,CLRA
 Clark's Nutcracker,CLNU
 Clay-colored Sparrow,CCSP
 Cliff Swallow,CLSW
@@ -142,6 +144,7 @@ Eurasian Collared-Dove,EUCD
 European Starling,EUST
 Evening Grosbeak,EVGR
 Field Sparrow,FISP
+Fish Crow,FICR
 Forster's Tern,FOTE
 Fox Sparrow,FOSP
 Franklin's Gull,FRGU
@@ -182,6 +185,7 @@ House Wren,HOWR
 Indigo Bunting,INBU
 Kentucky Warbler,KEWA
 Killdeer,KILL
+King Rail,KIRA
 Kirtland's Warbler,KIWA
 Lapland Longspur,LALO
 Lark Sparrow,LASP
@@ -232,7 +236,6 @@ Orchard Oriole,OROR
 Osprey,OSPR
 Ovenbird,OVEN
 Pacific Wren,PAWR
-Western Flycatcher,WEFL
 Palm Warbler,PAWA
 Pectoral Sandpiper,PESA
 Peregrine Falcon,PEFA
@@ -264,6 +267,7 @@ Ring-billed Gull,RBGU
 Ring-necked Duck,RNDU
 Ring-necked Pheasant,RNEP
 Rock Pigeon,ROPI
+Rock Ptarmigan,ROPT
 Rock Wren,ROWR
 Rose-breasted Grosbeak,RBGR
 Rough-legged Hawk,RLHA
@@ -295,6 +299,7 @@ Sora,SORA
 Spotted Sandpiper,SPSA
 Spotted Towhee,SPTO
 Sprague's Pipit,SPPI
+Spruce Grouse,SPGR
 Steller's Jay,STJA
 Summer Tanager,SUTA
 Swainson's Hawk,SWHA
@@ -316,6 +321,7 @@ Vesper Sparrow,VESP
 Violet-green Swallow,VGSW
 Virginia Rail,VIRA
 Warbling Vireo,WAVI
+Western Flycatcher,WEFL
 Western Grebe,WEGR
 Western Kingbird,WEKI
 Western Meadowlark,WEME
