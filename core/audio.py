@@ -20,9 +20,11 @@ class Audio:
         self.signal = None
         self.device = device
 
+        # use low_band_win_length here, since this is only used for low-band in the HawkEars classifier
+        # (will be more flexible when classifier and toolkit are separated)
         self.linear_transform = ta.transforms.Spectrogram(
-            n_fft=2*cfg.audio.win_length,
-            win_length=cfg.audio.win_length,
+            n_fft=2*cfg.audio.low_band_win_length,
+            win_length=cfg.audio.low_band_win_length,
             hop_length=int(cfg.audio.segment_len * cfg.audio.sampling_rate / cfg.audio.spec_width),
             power=1
         ).to(self.device)
@@ -64,7 +66,8 @@ class Audio:
             high_clip_idx = int(2 * spec.shape[0] * max_audio_freq / cfg.audio.sampling_rate)
             low_clip_idx = int(2 * spec.shape[0] * min_audio_freq / cfg.audio.sampling_rate)
             spec = spec[:high_clip_idx, low_clip_idx:]
-            spec = cv2.resize(spec, dsize=(spec.shape[1], spec_height), interpolation=cv2.INTER_AREA)
+            spec = cv2.resize(spec, dsize=(spec.shape[1], spec_height + cfg.audio.drop_bottom_freq), interpolation=cv2.INTER_AREA)
+            spec = spec[cfg.audio.drop_bottom_freq:, :] # optionally drop some lowest frequencies
 
         return spec
 
