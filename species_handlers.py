@@ -22,6 +22,7 @@ class Species_Handlers:
             'MOCH': self.soundalike_with_location,
             'NOPO': self.soundalike_with_location,
             #'PIGR': self.amplitude,
+            'SPGR': self.spruce_grouse,
             'RUGR': self.ruffed_grouse,
             'YTWA': self.soundalike_with_location,
         }
@@ -61,10 +62,21 @@ class Species_Handlers:
         self.check_occurrence = check_occurrence  # if true, we're checking species occurrence for given county/week
         self.week_num = week_num                # for when check_occurrence = True
         self.low_band_specs = audio.get_spectrograms(offsets=offsets, low_band=True)
+        self.low_band_predictions = None
 
         if self.low_band_model is None:
             self.low_band_model = main_model.MainModel.load_from_checkpoint(cfg.misc.low_band_ckpt_path, map_location=torch.device(self.device))
             self.low_band_model.eval() # set inference mode
+
+    # Used for Ruffed Grouse and Spruce Grouse
+    def get_low_band_predictions(self):
+        if self.low_band_predictions is None:
+            spec_array = np.zeros((len(self.low_band_specs), 1, cfg.audio.low_band_spec_height, cfg.audio.spec_width))
+            for i in range(len(self.low_band_specs)):
+                spec_array[i] = self.low_band_specs[i].reshape((1, cfg.audio.low_band_spec_height, cfg.audio.spec_width)).astype(np.float32)
+
+            with torch.no_grad():
+                self.low_band_predictions = self.low_band_model.get_predictions(spec_array, self.device, use_softmax=True)
 
     # Handle cases where a faint vocalization is mistaken for another species.
     # For example, distant songs of American Robin and similar-sounding species are sometimes mistaken for Pine Grosbeak,
@@ -150,22 +162,26 @@ class Species_Handlers:
                     class_info.scores[i] = 0
 
     # Use the low band spectrogram and model to check for Ruffed Grouse drumming.
-    # The frequency is too low to detect properly with the normal spectrogram,
-    # and splitting it helps to keep low frequency noise out of the latter.
     def ruffed_grouse(self, class_info):
-        spec_array = np.zeros((len(self.low_band_specs), 1, cfg.audio.low_band_spec_height, cfg.audio.spec_width))
-        for i in range(len(self.low_band_specs)):
-            spec_array[i] = self.low_band_specs[i].reshape((1, cfg.audio.low_band_spec_height, cfg.audio.spec_width)).astype(np.float32)
+        self.get_low_band_predictions()
 
-        with torch.no_grad():
-            predictions = self.low_band_model.get_predictions(spec_array, self.device, use_softmax=True)
+        # merge with main predictions (drumming is detected here, other RUGR sounds are detected by the main ensemble)
+        exponent = 1 # set > 0 to lower the drumming predictions a bit
+        for i in range(len(self.offsets)):
+            class_info.scores[i] = max(class_info.scores[i], self.low_band_predictions[i][0] ** exponent)
+            if class_info.scores[i] >= cfg.infer.min_score:
+                class_info.has_label = True
 
-            # merge with main predictions (drumming is detected here, other RUGR sounds are detected by the main ensemble)
-            exponent = 1.7 # lower the drumming predictions a bit to reduce false positives
-            for i in range(len(self.offsets)):
-                class_info.scores[i] = max(class_info.scores[i], predictions[i][0] ** exponent)
-                if class_info.scores[i] >= cfg.infer.min_score:
-                    class_info.has_label = True
+    # Use the low band spectrogram and model to check for Spruce Grouse fluttering.
+    def spruce_grouse(self, class_info):
+        self.get_low_band_predictions()
+
+        # merge with main predictions (flutter is detected here, other SPGR sounds are detected by the main ensemble)
+        exponent = 1 # set > 0 to lower the flutter predictions a bit
+        for i in range(len(self.offsets)):
+            class_info.scores[i] = max(class_info.scores[i], self.low_band_predictions[i][1] ** exponent)
+            if class_info.scores[i] >= cfg.infer.min_score:
+                class_info.has_label = True
 
     # Return the highest amplitude from the raw spectrograms.
     # Since they overlap, just check every 3rd one.
