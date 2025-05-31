@@ -25,7 +25,9 @@ class Audio:
     low_band_spec_height = 64
     low_band_min_audio_freq = 0
     low_band_max_audio_freq = 200
+    low_band_win_length = 8192
     low_band_mel_scale = False
+    drop_bottom_freq = 6 # drop this many bottom frequencies in linear spectrograms
 
 @dataclass
 class Training:
@@ -51,7 +53,9 @@ class Training:
     num_epochs = 10
     LR_epochs = None        # default = num_epochs, higher values reduce effective learning rate decay
     save_last_n = 3         # save checkpoints for this many last epochs
-    label_smoothing = 0.125
+    weight_exponent = .4    # for class weights used in loss function
+    pos_label_smoothing = 0.1
+    neg_label_smoothing = 0.05
     training_db = "training" # name of training database
     num_folds = 1           # for k-fold cross-validation
     val_portion = 0         # used only if num_folds = 1
@@ -59,13 +63,13 @@ class Training:
 
     # data augmentation (see core/dataset.py to understand these parameters)
     augmentation = True
-    prob_simple_merge = 0.35
-    prob_real_noise = 0.3
-    prob_speckle = .1
-    prob_fade1 = .2
-    prob_fade2 = 1
-    prob_shift = 1
-    max_shift = 6
+    prob_simple_merge = 0.38
+    prob_real_noise = 0.32
+    prob_speckle = 0
+    prob_fade1 = 0
+    prob_fade2 = .7
+    prob_shift = 0
+    max_shift = 8
     min_fade1 = .1
     max_fade1 = .8
     min_fade2 = .1
