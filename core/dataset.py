@@ -78,8 +78,8 @@ class CustomDataset(Dataset):
         spec = self.transform(spec)
 
         # apply label smoothing here for multi-label case
-        if self.training and cfg.train.multi_label and cfg.train.label_smoothing > 0:
-            label = label * (1 - cfg.train.label_smoothing) + cfg.train.label_smoothing / len(self.class_df)
+        if self.training and cfg.train.multi_label:
+            label = (label * (1.0 - cfg.train.pos_label_smoothing) + (1.0 - label) * cfg.train.neg_label_smoothing)
 
         if cfg.train.multi_label:
             label = label.astype(np.float32)
@@ -124,7 +124,7 @@ class CustomDataset(Dataset):
     # return a white noise spectrogram with the given variance
     def _get_white_noise(self, variance):
         white_noise = np.zeros((1, cfg.audio.spec_height, cfg.audio.spec_width, 1))
-        white_noise[0] = 1 + skimage.util.random_noise(white_noise[0], mode='gaussian', var=variance, clip=False)
+        white_noise[0] = 1 + skimage.util.random_noise(white_noise[0], mode='gaussian', var=variance, clip=False, rng=cfg.train.seed)
         white_noise[0] -= np.min(white_noise) # set min = 0
         white_noise[0] /= np.max(white_noise) # set max = 1
         return white_noise[0]
