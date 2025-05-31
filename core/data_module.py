@@ -126,8 +126,8 @@ class DataModule(pl.LightningDataModule):
     def class_weights(self):
         if cfg.train.use_class_weights:
             labels = self.train_spec_df['class_index'].to_numpy()
-            class_weights=sklearn.utils.class_weight.compute_class_weight('balanced', classes=np.unique(labels), y=labels)
-            class_weights = np.sqrt(class_weights) # even out the weights a little
+            class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', classes=np.unique(labels), y=labels)
+            class_weights = class_weights ** cfg.train.weight_exponent
         else:
             class_weights = np.ones(self.num_train_classes)
 
