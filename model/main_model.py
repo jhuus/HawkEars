@@ -32,7 +32,7 @@ def get_loss_fn(weights):
         return torch.nn.BCEWithLogitsLoss(weight=weights)
     else:
         # single-label (multi-class) embeddings, usually for binary classifiers
-        return torch.nn.CrossEntropyLoss(weight=weights, label_smoothing=cfg.train.label_smoothing)
+        return torch.nn.CrossEntropyLoss(weight=weights, label_smoothing=cfg.train.pos_label_smoothing)
 
 # https://github.com/facebookresearch/mixup-cifar10/blob/main/train.py
 def mixup(data, targets, alpha=1.0, device='cuda'):
