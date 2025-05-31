@@ -43,6 +43,7 @@ Black-billed Magpie,BBMA,bkbmag1
 Black-capped Chickadee,BCCH,bkcchi
 Black-crowned Night Heron,BCNH,bcnher
 Black-headed Grosbeak,BHGR,bkhgro
+Black Rail,BLRA,blkrai
 Black-throated Blue Warbler,BTBW,btbwar
 Black-throated Gray Warbler,BTGW,btywar
 Black-throated Green Warbler,BTNW,btnwar
@@ -76,8 +77,8 @@ Canada Warbler,CAWA,canwar
 Cape May Warbler,CMWA,camwar
 Carolina Wren,CARW,carwre
 Caspian Tern,CATE,caster1
-Cassin's Vireo,CAVI,casvir
 Cassin's Finch,CAFI,casfin
+Cassin's Vireo,CAVI,casvir
 Cedar Waxwing,CEDW,cedwax
 Cerulean Warbler,CERW,cerwar
 Chestnut-backed Chickadee,CBCH,chbchi
@@ -86,6 +87,7 @@ Chestnut-sided Warbler,CSWA,chswar
 Chimney Swift,CHSW,chiswi
 Chipping Sparrow,CHSP,chispa
 Chuck-will's-widow,CWWI,chwwid
+Clapper Rail,CLRA,clarai11
 Clark's Nutcracker,CLNU,clanut
 Clay-colored Sparrow,CCSP,clcspa
 Cliff Swallow,CLSW,cliswa
@@ -122,6 +124,7 @@ Eurasian Collared-Dove,EUCD,eucdov
 European Starling,EUST,eursta
 Evening Grosbeak,EVGR,evegro
 Field Sparrow,FISP,fiespa
+Fish Crow,FICR,fiscro
 Forster's Tern,FOTE,forter
 Fox Sparrow,FOSP,foxspa
 Franklin's Gull,FRGU,fragul
@@ -162,6 +165,7 @@ House Wren,HOWR,houwre
 Indigo Bunting,INBU,indbun
 Kentucky Warbler,KEWA,kenwar
 Killdeer,KILL,killde
+King Rail,KIRA,kinrai4
 Kirtland's Warbler,KIWA,kirwar
 Lapland Longspur,LALO,laplon
 Lark Sparrow,LASP,larspa
@@ -211,7 +215,6 @@ Orchard Oriole,OROR,orcori
 Osprey,OSPR,osprey
 Ovenbird,OVEN,ovenbi1
 Pacific Wren,PAWR,pacwre1
-Western Flycatcher,WEFL,wesfly
 Palm Warbler,PAWA,palwar
 Pectoral Sandpiper,PESA,pecsan
 Peregrine Falcon,PEFA,perfal
@@ -243,6 +246,7 @@ Ring-billed Gull,RBGU,ribgul
 Ring-necked Duck,RNDU,rinduc
 Ring-necked Pheasant,RNEP,rinphe1
 Rock Pigeon,ROPI,rocpig
+Rock Ptarmigan,ROPT,rocpta1
 Rock Wren,ROWR,rocwre
 Rose-breasted Grosbeak,RBGR,robgro
 Rough-legged Hawk,RLHA,rolhaw
@@ -274,6 +278,7 @@ Sora,SORA,sora
 Spotted Sandpiper,SPSA,sposan
 Spotted Towhee,SPTO,spotow
 Sprague's Pipit,SPPI,sprpip
+Spruce Grouse,SPGR,sprgro
 Steller's Jay,STJA,stejay
 Summer Tanager,SUTA,sumtan
 Swainson's Hawk,SWHA,swahaw
@@ -295,6 +300,7 @@ Vesper Sparrow,VESP,vesspa
 Violet-green Swallow,VGSW,vigswa
 Virginia Rail,VIRA,virrai
 Warbling Vireo,WAVI,warvir
+Western Flycatcher,WEFL,wesfly
 Western Grebe,WEGR,wesgre
 Western Kingbird,WEKI,weskin
 Western Meadowlark,WEME,wesmea
