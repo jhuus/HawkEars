@@ -84,9 +84,9 @@ class Inference:
     num_threads = 3              # multiple threads improves performance but uses more GPU memory
     spec_overlap_seconds = 1.5   # number of seconds overlap for adjacent 3-second spectrograms
     min_score = 0.80             # only generate labels when score is at least this
-    scaling_coefficient = 1.3    # Platt scaling coefficient, to align predictions with probabilities
-    scaling_intercept = 2.2      # Platt scaling intercept, to align predictions with probabilities
-    audio_exponent = .85         # power parameter for mel spectrograms during inference
+    scaling_coefficient = 1.7    # Platt scaling coefficient, to align predictions with probabilities
+    scaling_intercept = 1.9      # Platt scaling intercept, to align predictions with probabilities
+    audio_exponent = .75         # power parameter for mel spectrograms during inference
     use_banding_codes = True     # use banding codes instead of species names in labels
     top_n = 20                   # number of top matches to log in debug mode
     min_occurrence = .0001       # ignore species if occurrence less than this for location/week
