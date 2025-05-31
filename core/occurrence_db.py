@@ -87,6 +87,7 @@ class Occurrence_DB:
             return results
         except sqlite3.Error as e:
             print(f'Error in database get_all_counties: {e}')
+            return None
 
     def get_all_species(self):
         try:
@@ -105,6 +106,28 @@ class Occurrence_DB:
             return results
         except sqlite3.Error as e:
             print(f'Error in database get_all_species: {e}')
+            return None
+
+    # just get the IDs to check, not the values
+    def get_all_occurrences(self):
+        try:
+            query = f'''
+                SELECT CountyID, SpeciesID FROM Occurrence
+            '''
+
+            cursor = self.conn.cursor()
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            results = []
+            for row in rows:
+                county_id, species_id = row
+                result = SimpleNamespace(county_id=county_id, species_id=species_id)
+                results.append(result)
+
+            return results
+        except sqlite3.Error as e:
+            print(f'Error in database get_all_occurrences: {e}')
+            return None
 
     def get_occurrences(self, county_id, species_name):
         try:
@@ -132,6 +155,7 @@ class Occurrence_DB:
             return results
         except sqlite3.Error as e:
             print(f'Error in database get_occurrences: {e}')
+            return None
 
     def insert_county(self, name, code, min_x, max_x, min_y, max_y):
         try:
@@ -144,6 +168,7 @@ class Occurrence_DB:
             return cursor.lastrowid
         except sqlite3.Error as e:
             print(f'Error in database insert_county: {e}')
+            return None
 
     def insert_occurrences(self, county_id, species_id, value):
         try:
@@ -159,9 +184,11 @@ class Occurrence_DB:
             cursor = self.conn.cursor()
             cursor.execute(query, (county_id, species_id, compressed))
             self.conn.commit()
+            return True
 
         except sqlite3.Error as e:
             print(f'Error in database insert_occurrences: {e}')
+            return False
 
     def insert_species(self, name):
         try:
@@ -175,3 +202,4 @@ class Occurrence_DB:
             return cursor.lastrowid
         except sqlite3.Error as e:
             print(f'Error in database insert_species: {e}')
+            return None
