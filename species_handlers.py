@@ -76,7 +76,7 @@ class Species_Handlers:
                 spec_array[i] = self.low_band_specs[i].reshape((1, cfg.audio.low_band_spec_height, cfg.audio.spec_width)).astype(np.float32)
 
             with torch.no_grad():
-                self.low_band_predictions = self.low_band_model.get_predictions(spec_array, self.device, use_softmax=True)
+                self.low_band_predictions = self.low_band_model.get_predictions(spec_array, self.device, use_softmax=False)
 
     # Handle cases where a faint vocalization is mistaken for another species.
     # For example, distant songs of American Robin and similar-sounding species are sometimes mistaken for Pine Grosbeak,
@@ -175,6 +175,18 @@ class Species_Handlers:
     # Use the low band spectrogram and model to check for Spruce Grouse fluttering.
     def spruce_grouse(self, class_info):
         self.get_low_band_predictions()
+
+        # fluttering might be Sharp-tailed Grouse;
+        # if there are more scores > .5 for STGR than SPGR, treat as STGR
+        if 'STGR' in self.class_infos:
+            stgr_info = self.class_infos['STGR']
+            stgr_array = np.array(stgr_info.scores)
+            spgr_array = np.array(class_info.scores)
+            stgr_count = (stgr_array > .5).sum()
+            spgr_count = (spgr_array > .5).sum()
+
+            if stgr_count > spgr_count:
+                class_info = stgr_info
 
         # merge with main predictions (flutter is detected here, other SPGR sounds are detected by the main ensemble)
         exponent = 1 # set > 0 to lower the flutter predictions a bit
