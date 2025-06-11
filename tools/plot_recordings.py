@@ -29,11 +29,13 @@ parser.add_argument('-e', '--exp', type=float, default=.6, help='Raise spectrogr
 parser.add_argument('--seconds', type=float, default=cfg.audio.segment_len, help=f'Plot this many seconds per spectrogram. Default = {cfg.audio.segment_len}')
 parser.add_argument('--overlap', type=float, default=0, help='Spectrogram overlap in seconds. Default = 0.')
 parser.add_argument('--all', default=False, action='store_true', help='If this flag is specified, plot the whole recording instead of individual segments.')
+parser.add_argument('-l', '--low', type=int, default=0, help='1 = low frequency band (for Ruffed Grouse drumming etc.).')
 
 args = parser.parse_args()
 
 seconds, overlap, all = args.seconds, args.overlap, args.all
 input_dir, output_dir, exponent = args.input, args.output, args.exp
+low_band = args.low == 1
 if input_dir is None or output_dir is None:
     logging.error("Error: both -i and -o must be specified.")
     quit()
@@ -61,7 +63,7 @@ for audio_path in audio_paths:
     recording_seconds = len(signal) / rate
     if all:
         # plot the whole recording in one spectrogram
-        specs = _audio.get_spectrograms([0], segment_len=recording_seconds)
+        specs = _audio.get_spectrograms([0], segment_len=recording_seconds, low_band=low_band)
         if specs[0] is None:
             logging.error(f"Error: failed to extract spectrogram from \"{audio_path}\".")
             quit()
@@ -72,7 +74,7 @@ for audio_path in audio_paths:
         # plot individual segments
         increment = max(1.0, seconds - overlap)
         offsets = np.arange(0, recording_seconds - increment + .01, increment).tolist()
-        specs = _audio.get_spectrograms(offsets, segment_len=seconds)
+        specs = _audio.get_spectrograms(offsets, segment_len=seconds, low_band=low_band)
         for i, spec in enumerate(specs):
             image_path = os.path.join(output_dir, f"{Path(audio_path).stem}-{offsets[i]:.1f}.jpeg")
-            plot.plot_spec(spec ** exponent, image_path, show_dims=True)
+            plot.plot_spec(spec ** exponent, image_path, show_dims=True, low_band=low_band)
