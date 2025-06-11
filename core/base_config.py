@@ -76,7 +76,7 @@ class Training:
     speckle_variance = .012
 
     # experimental feature; restrict to one test species for now
-    prob_attenuate = .1
+    prob_attenuate = 0
     attenuate_species = {"Willow Ptarmigan"}
 
     classic_mixup = False # classic mixup is implemented in main_model.py

@@ -67,7 +67,7 @@ class CustomDataset(Dataset):
                 self.merged = True
 
             if np.max(spec) > 0: # skip augmentation for null spectrograms
-                spec = self._augment(spec)
+                spec = self._augment(spec, class_name)
 
         spec = self._normalize_spec(spec)
 
@@ -89,7 +89,11 @@ class CustomDataset(Dataset):
 
         return spec, label
 
-    def _augment(self, spec):
+    def _augment(self, spec, class_name):
+        if class_name in cfg.train.attenuate_species:
+            if random.random() < cfg.train.prob_attenuate:
+                spec = self._attenuate_high_frequencies(spec)
+
         if random.uniform(0, 1) < cfg.train.prob_real_noise:
             spec = self._add_real_noise(spec)
             self.added_noise = True
@@ -166,6 +170,27 @@ class CustomDataset(Dataset):
         index = random.randint(0, CACHE_LEN - 1)
         spec += spec * self.speckle[index]
         return spec
+
+    def _attenuate_high_frequencies(self, spec: np.ndarray, min_factor=0.05, rolloff_power_range=(3.0, 8.0)):
+        """
+        Attenuate high frequencies to mimic the effect of increasing distance.
+
+        Args:
+            spec (torch.Tensor): Mel spectrogram (n_mels, time).
+            min_factor (float): Attenuation at the highest frequency bin.
+            rolloff_power_range (tuple): Controls how sharp and early the dropoff is.
+
+        Returns:
+            Attenuated spectrogram.
+        """
+        n_mels = spec.shape[0]
+        rolloff_power = np.random.uniform(*rolloff_power_range)
+
+        freq = np.linspace(0, 1, n_mels)
+        attenuation_curve = ((1.0 - freq) ** rolloff_power) * (1.0 - min_factor) + min_factor
+
+        return spec * attenuation_curve[:, None]
+
 
     # normalize so max value is 1
     def _normalize_spec(self, spec):
