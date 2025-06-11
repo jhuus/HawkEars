@@ -5,11 +5,11 @@ import math
 import warnings
 warnings.filterwarnings('ignore') # librosa generates too many warnings
 
-import cv2
 import librosa
 import numpy as np
 import torch
 import torchaudio as ta
+import torch.nn.functional as F
 
 from core import cfg
 
@@ -59,15 +59,14 @@ class Audio:
         if mel_scale:
             spec = self.mel_transform(tensor).cpu().numpy()[0]
         else:
-            spec = self.linear_transform(tensor).cpu().numpy()[0]
-
-        if not mel_scale:
-            # clip frequencies above max_audio_freq and below min_audio_freq
-            high_clip_idx = int(2 * spec.shape[0] * max_audio_freq / cfg.audio.sampling_rate)
-            low_clip_idx = int(2 * spec.shape[0] * min_audio_freq / cfg.audio.sampling_rate)
-            spec = spec[:high_clip_idx, low_clip_idx:]
-            spec = cv2.resize(spec, dsize=(spec.shape[1], spec_height + cfg.audio.drop_bottom_freq), interpolation=cv2.INTER_AREA)
-            spec = spec[cfg.audio.drop_bottom_freq:, :] # optionally drop some lowest frequencies
+            spec = self.linear_transform(tensor)
+            freqs = torch.fft.rfftfreq(2*cfg.audio.low_band_win_length, d=1/cfg.audio.sampling_rate)  # [freq_bins]
+            mask = (freqs >= min_audio_freq) & (freqs <= max_audio_freq)
+            spec = spec[:, mask, :]  # shape: [channel, selected_freq_bins, time_frames]
+            spec = spec.unsqueeze(1)
+            spec = F.interpolate(spec, size=(spec_height, cfg.audio.spec_width), mode='bilinear', align_corners=False)
+            spec = spec.squeeze(1)
+            spec = spec.cpu().numpy()[0]
 
         return spec
 
