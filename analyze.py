@@ -82,7 +82,6 @@ class Label:
 class BaseClass:
     def __init__(self):
         self.occurrences = {}
-        self.init_occurrence_info()
 
     # init self.occur_db, self.all_counties and self.occurrence_species
     def init_occurrence_info(self):
@@ -345,6 +344,7 @@ class Initializer(BaseClass):
 
     def run(self):
         # collect all the basic info
+        self.init_occurrence_info()
         self.file_info_list = self._get_file_info_list(self.input_path)
         self.class_info_list = self._get_class_info_list()
         self._process_location_and_date()
@@ -893,6 +893,7 @@ class Analyzer(BaseClass):
         else:
             self.use_openvino = False
 
+        self.init_occurrence_info()
         self._get_models()
         self.audio = audio.Audio(device=self.device)
         self.species_handlers = species_handlers.Species_Handlers(self.device)
