@@ -52,9 +52,9 @@ class Training:
     num_epochs = 10
     LR_epochs = None        # default = num_epochs, higher values reduce effective learning rate decay
     save_last_n = 3         # save checkpoints for this many last epochs
-    weight_exponent = .4    # for class weights used in loss function
+    weight_exponent = .5    # for class weights used in loss function
     pos_label_smoothing = 0.1
-    neg_label_smoothing = 0.05
+    neg_label_smoothing = 0.03
     training_db = "training" # name of training database
     num_folds = 1           # for k-fold cross-validation
     val_portion = 0         # used only if num_folds = 1
@@ -65,9 +65,9 @@ class Training:
     prob_simple_merge = 0.38
     prob_real_noise = 0.32
     prob_speckle = 0
-    prob_fade1 = 0
+    prob_fade1 = .2
     prob_fade2 = .7
-    prob_shift = 0
+    prob_shift = .5
     max_shift = 8
     min_fade1 = .1
     max_fade1 = .8
