@@ -18,12 +18,18 @@ class Species_Handlers:
             'BOOW': self.soundalike_with_location,
             'BWHA': self.soundalike_no_location,
             'CBCH': self.soundalike_with_location,
+            'EATO': self.soundalike_with_location,
+            'INBU': self.soundalike_with_location,
             #'LALO': self.amplitude,
+            'LAZB': self.soundalike_with_location,
             'MOCH': self.soundalike_with_location,
             'NOPO': self.soundalike_with_location,
             #'PIGR': self.amplitude,
-            'SPGR': self.spruce_grouse,
             'RUGR': self.ruffed_grouse,
+            'SCTA': self.soundalike_with_location,
+            'SPGR': self.spruce_grouse,
+            'SPTO': self.soundalike_with_location,
+            'WETA': self.soundalike_with_location,
             'YTWA': self.soundalike_with_location,
         }
 
@@ -40,11 +46,19 @@ class Species_Handlers:
 
         # for the soundalike_with_location case
         self.soundalike_with_location_config = {
-            'BOOW': SimpleNamespace(soundalike_code='WISN', min_score=.1, min_common=.005, max_rare=.0001),
-            'CBCH': SimpleNamespace(soundalike_code='BCCH', min_score=0, min_common=.1, max_rare=.0001),
-            'MOCH': SimpleNamespace(soundalike_code='BCCH', min_score=0, min_common=.1, max_rare=.0001),
-            'NOPO': SimpleNamespace(soundalike_code='CORA', min_score=.1, min_common=.005, max_rare=.0001),
-            'YTWA': SimpleNamespace(soundalike_code='SWSP', min_score=.1, min_common=.005, max_rare=.0001),
+            'BOOW': SimpleNamespace(soundalike_code='WISN', min_score=.1, min_common=.01, max_rare=.0001),
+            'CBCH': SimpleNamespace(soundalike_code='BCCH', min_score=.1, min_common=.01, max_rare=.0001),
+            'EATO': SimpleNamespace(soundalike_code='SPTO', min_score=.1, min_common=.01, max_rare=.0001),
+            'INBU': SimpleNamespace(soundalike_code='LAZB', min_score=.1, min_common=.01, max_rare=.0001),
+            'LAZB': SimpleNamespace(soundalike_code='INBU', min_score=.1, min_common=.01, max_rare=.0001),
+            'MOCH': SimpleNamespace(soundalike_code='BCCH', min_score=.1, min_common=.01, max_rare=.0001),
+            'NOPO': SimpleNamespace(soundalike_code='CORA', min_score=.1, min_common=.01, max_rare=.0001),
+            'RBSA': SimpleNamespace(soundalike_code='YBSA', min_score=.1, min_common=.01, max_rare=.0001),
+            'SCTA': SimpleNamespace(soundalike_code='WETA', min_score=.1, min_common=.01, max_rare=.0001),
+            'SPTO': SimpleNamespace(soundalike_code='EATO', min_score=.1, min_common=.01, max_rare=.0001),
+            'WETA': SimpleNamespace(soundalike_code='SCTA', min_score=.1, min_common=.01, max_rare=.0001),
+            'YBSA': SimpleNamespace(soundalike_code='RBSA', min_score=.1, min_common=.01, max_rare=.0001),
+            'YTWA': SimpleNamespace(soundalike_code='SWSP', min_score=.1, min_common=.01, max_rare=.0001),
         }
 
         self.device = device
