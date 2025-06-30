@@ -90,9 +90,12 @@ class CustomDataset(Dataset):
         return spec, label
 
     def _augment(self, spec, class_name):
+        """
+        # disable experimental feature
         if class_name in cfg.train.attenuate_species:
             if random.random() < cfg.train.prob_attenuate:
                 spec = self._attenuate_high_frequencies(spec)
+        """
 
         if random.uniform(0, 1) < cfg.train.prob_real_noise:
             spec = self._add_real_noise(spec)
