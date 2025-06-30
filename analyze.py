@@ -360,7 +360,7 @@ class Initializer(BaseClass):
 
 # Main inference class.
 class Analyzer(BaseClass):
-    def __init__(self, initializer, output_path, start_time, end_time, debug_mode, merge, overlap, device, output_type, embed=False, thread_num=1):
+    def __init__(self, initializer, output_path, start_time, end_time, debug_mode, merge, overlap, device, output_type, embed=False, fast=False, thread_num=1):
         super().__init__()
         self.init = initializer
         self.output_path = output_path
@@ -371,6 +371,7 @@ class Analyzer(BaseClass):
         self.device = device
         self.output_type = output_type
         self.embed = embed
+        self.fast = fast
         self.thread_num = thread_num
 
         if cfg.infer.min_score == 0:
@@ -836,6 +837,9 @@ class Analyzer(BaseClass):
 
         # log info per model
         for i, model_path in enumerate(self.model_paths):
+            if self.fast and Path(model_path).name.startswith('vovnet'):
+                continue # skip vovnet models in fast mode
+
             model_info = [{"path": self.model_paths[i]}]
             if not self.use_openvino:
                 model_info += self.models[i].summary()
@@ -867,6 +871,9 @@ class Analyzer(BaseClass):
 
             self.models = []
             for model_path in self.model_paths:
+                if self.fast and Path(model_path).name.startswith('vovnet'):
+                    continue # skip vovnet models in fast mode
+
                 model_onnx = core.read_model(model=model_path)
                 model_openvino = core.compile_model(model=model_onnx, device_name='CPU')
                 self.models.append(model_openvino)
@@ -878,6 +885,9 @@ class Analyzer(BaseClass):
 
             self.models = []
             for model_path in self.model_paths:
+                if self.fast and Path(model_path).name.startswith('vovnet'):
+                    continue # skip vovnet models in fast mode
+
                 model = main_model.MainModel.load_from_checkpoint(model_path, map_location=torch.device(self.device))
                 model.eval() # set inference mode
                 self.models.append(model)
@@ -966,6 +976,7 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--band', type=int, default=1 * cfg.infer.use_banding_codes, help=f"If 1, use banding codes labels. If 0, use common names. Default = {1 * cfg.infer.use_banding_codes}.")
     parser.add_argument('-d', '--debug', default=False, action='store_true', help='Flag for debug mode (analyze one spectrogram only, and output several top candidates).')
     parser.add_argument('--embed', default=False, action='store_true', help='If specified, generate a pickle file containing embeddings for each recording processed.')
+    parser.add_argument('--fast', default=False, action='store_true', help='If specified, reduce ensemble size for faster inference.')
     parser.add_argument('-e', '--end', type=str, default='', help="Optional end time in hh:mm:ss format, where hh and mm are optional.")
     parser.add_argument('-i', '--input', type=str, default='', help="Input path (single audio file or directory). No default.")
     parser.add_argument('-o', '--output', type=str, default='', help="Output directory to contain label files. Default is input path, if that is a directory.")
@@ -1083,13 +1094,13 @@ if __name__ == '__main__':
     num_threads = min(num_threads, len(init.file_info_list)) # don't need more threads than recordings
     if num_threads == 1:
         # keep it simple in this case
-        analyzer = Analyzer(init, output_path, args.start, args.end, args.debug, args.merge, args.overlap, device, output_type, args.embed, 1)
+        analyzer = Analyzer(init, output_path, args.start, args.end, args.debug, args.merge, args.overlap, device, output_type, args.embed, args.fast, 1)
         analyzers.append(analyzer)
         analyzer.run()
     else:
         threads = []
         for i in range(num_threads):
-            analyzer = Analyzer(init, output_path, args.start, args.end, args.debug, args.merge, args.overlap, device, output_type, args.embed, i + 1)
+            analyzer = Analyzer(init, output_path, args.start, args.end, args.debug, args.merge, args.overlap, device, output_type, args.embed, args.fast, i + 1)
             analyzers.append(analyzer)
             thread = threading.Thread(target=analyzer.run, args=())
             thread.start()
