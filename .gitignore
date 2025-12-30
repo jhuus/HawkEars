@@ -1,0 +1,101 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+#  Usually contains a "build" and "dist" folder
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+hypothesis/
+
+# Pytest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Environments
+.env/
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Hatch environments
+.hatch/
+
+# pyproject.toml.lock (if using tools that generate it)
+poetry.lock
+hatch.lock
+
+# Mac OS junk
+.DS_Store
+
+# Windows junk
+Thumbs.db
+desktop.ini
+
+# Ignore any directory (at any depth) that starts with an underscore
+# and any file that starts with _tmp_ or _temp_
+**/_*/
+_tmp_*
+_temp_*
+
+# Other
+data/
+logs/
+yaml/
+*.ckpt
+*.onnx
+*.jpeg
+.*/
+.Rhistory

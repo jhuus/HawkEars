@@ -1,0 +1,106 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hawkears"
+dynamic = ["version"]
+description = 'Bioacoustic classifier for Canada and the northern United States.'
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+keywords = []
+authors = [
+  { name = "Jan Huus", email = "jhuus1@gmail.com" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+  "click>=8.1,<8.3",
+  "numpy>=2.0,<2.4",
+  "onnx>=1.18,<2.0",
+  "pandas>=2.0,<2.3",
+  "britekit>=0.5.0",
+  "omegaconf>=2.3,<2.4",
+]
+
+[project.scripts]
+hawkears = "hawkears.cli:cli"
+
+[project.urls]
+Documentation = "https://github.com/jhuus/HawkEars2#readme"
+Issues = "https://github.com/jhuus/HawkEars2/issues"
+Source = "https://github.com/jhuus/HawkEars2"
+
+[tool.hatch.version]
+path = "src/hawkears/__about__.py"
+
+[tool.hatch.envs.hawkears]
+dependencies = [
+  "pytest>=8.3.5",
+  "black>=25.0.0",
+  "ruff>=0.11.12",
+  "mypy>=1.0.0",
+  "twine>=6.1.0",
+  "types-PyYAML",
+  "types-requests",
+]
+
+post-install-commands = [
+  "pip install -e .",
+]
+
+[tool.hatch.envs.hawkears.scripts]
+test = "pytest {args:tests}"
+format = "black src tests"
+lint = "ruff check src tests"
+typecheck = "mypy src tests"
+check = "black --check src tests && ruff check src tests && mypy src tests"
+
+[tool.hatch.build]
+include = ["src"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hawkears"]
+
+# Ensure non-Python sample assets are included in the wheel so
+# importlib.resources.files("hawkears.install") can access them.
+[tool.hatch.build.targets.wheel.force-include]
+"install" = "hawkears/install"
+
+[tool.hatch.build.targets.sdist]
+only-include = [
+  "src/hawkears",
+  "install",
+]
+
+[tool.hatch.build.targets.sdist.force-include]
+"install" = "hawkears/install"
+
+[tool.coverage.run]
+source_pkgs = ["hawkears", "tests"]
+branch = true
+parallel = true
+omit = [
+  "src/hawkears/__about__.py",
+]
+
+[tool.coverage.paths]
+hawkears = ["src/hawkears", "*/hawkears/src/hawkears"]
+tests = ["tests", "*/hawkears/tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
