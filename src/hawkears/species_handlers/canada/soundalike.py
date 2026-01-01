@@ -5,6 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace as SN
 
 import numpy as np
+from scipy.ndimage import maximum_filter1d
+
 
 from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.class_manager import ClassManager
@@ -27,10 +29,14 @@ class SoundAlikeHandler:
         self.class_mgr = class_mgr
         self.occur_mgr = occur_mgr
 
-        # location-independent cases
+        # location-independent cases (see code below to understand the variables)
+        self.frame_distance = 5  # max distance to check for high soundalike scores
+        self.max_independent = 16  # treat as valid if >= this many independent frames
+        self.min_coverage = 0.5  # treat as soundalike if it overlaps by this much
         self.no_location = {
-            "BWHA": SN(soundalike="WTSP", min_score=0.5, min_frames=3, enabled=True),
-            "VATH": SN(soundalike="WTSP", min_score=0.5, min_frames=3, enabled=True),
+            # "BWHA": SN(soundalike="WTSP", min_score=0.7, enabled=True),
+            "HASP": SN(soundalike="WTSP", min_score=0.7, enabled=True),
+            # "VATH": SN(soundalike="WTSP", min_score=0.7, enabled=True),
         }
 
         # location-dependent cases
@@ -83,21 +89,44 @@ class SoundAlikeHandler:
         """
         Handle cases where one species is frequently mistaken for another, without location/date processing.
         For example, a fragment of a White-throated Sparrow song is sometimes mistaken for a Broad-winged Hawk.
-        If the recording contains a sufficient number of White-throated Sparrow frames above a threshold, set
-        all Broad-winged Hawk scores to zero.
+        If high-scoring WTSP frames overlap sufficiently with high-scoring BWHA frames, set all BWHA scores
+        to zero.
         """
         for code, defn in self.no_location.items():
             if not defn.enabled:
                 continue
 
-            index = self.class_mgr.class_info_by_code(code).index
-            other_index = self.class_mgr.class_info_by_code(defn.soundalike).index
+            class_idx = self.class_mgr.class_info_by_code(code).index
+            class_scores = frame_map[:, class_idx]
+            if class_scores.max() < self.cfg.infer.min_score:
+                continue  # nothing to do
+            soundalike_idx = self.class_mgr.class_info_by_code(defn.soundalike).index
+            soundalike_scores = frame_map[:, soundalike_idx]
+            if soundalike_scores.max() < defn.min_score:
+                continue  # nothing to do
 
-            count = np.count_nonzero(frame_map[:, other_index] > defn.min_score)
-            if count >= defn.min_frames:
-                # There are at least min_frames frames > min_score for the soundalike.
-                # Assume any occurrences of this species are FPs, so set scores = 0.
-                frame_map[:, index] = 0
+            # Spread high soundalike scores to adjacent frames
+            soundalike_scores = maximum_filter1d(
+                soundalike_scores, size=2 * self.frame_distance + 1, mode="constant"
+            )
+
+            # Skip if enough high scores where there is no soundalike
+            class_mask = class_scores >= self.cfg.infer.min_score
+            soundalike_mask = soundalike_scores >= defn.min_score
+            independent = class_mask & ~soundalike_mask
+            if independent.sum() >= self.max_independent:
+                continue
+
+            # Calculate proportion of high class frames that overlap with high soundalike frames
+            covered = class_mask & soundalike_mask
+            class_sum = class_mask.sum()
+            if class_sum == 0:
+                continue  # avoid divide-by-zero
+            coverage = covered.sum() / class_sum
+            if coverage >= self.min_coverage:
+                # Soundalike is dominant and sufficiently overlapping,
+                # so zero it out
+                frame_map[:, class_idx] = 0.0
 
     def _process_location_dependent(self, frame_map, recording_path):
         """

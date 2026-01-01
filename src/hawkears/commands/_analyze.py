@@ -21,7 +21,7 @@ def analyze(
     cfg_path: Optional[str] = None,
     input_path: str = "",
     output_path: str = "",
-    rtype: str = "both",
+    rtype: str = "audacity",
     date: Optional[str] = None,
     region: Optional[str] = None,
     lat: Optional[float] = None,
@@ -46,7 +46,7 @@ def analyze(
     - cfg_path (str): Path to YAML configuration file defining model and inference settings.
     - input_path (str): Path to input audio file or directory containing audio files.
     - output_path (str): Path to output directory where results will be saved.
-    - rtype (str): Output format type. Options are "audacity", "csv", or "both".
+    - rtype (str): Output format type. Options are "audacity", "csv", or "both". Default is "audacity".
     - date (str, optional): Date as yyyymmdd, mmdd, or 'file'. Specifying 'file' extracts the date from the file name,
       using the file_date_regex config parameter.
     - region (str, optional): eBird region code, e.g. 'CA-AB' for Alberta. Use as an alternative to latitude/longitude.
@@ -172,8 +172,8 @@ def analyze(
     "-r",
     "--rtype",
     type=str,
-    default="both",
-    help='Output format type. Options are "audacity", "csv", or "both". Default="both".',
+    default="audacity",
+    help='Output format type. Options are "audacity", "csv", or "both". Default="audacity".',
 )
 @click.option(
     "--date",
