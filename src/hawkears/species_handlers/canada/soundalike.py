@@ -30,13 +30,14 @@ class SoundAlikeHandler:
         self.occur_mgr = occur_mgr
 
         # location-independent cases (see code below to understand the variables)
+        self.min_score = 0.5  # compare frames with scores >= this
         self.frame_distance = 5  # max distance to check for high soundalike scores
-        self.max_independent = 16  # treat as valid if >= this many independent frames
+        self.max_independent = 24  # treat as valid if >= this many independent frames
         self.min_coverage = 0.5  # treat as soundalike if it overlaps by this much
         self.no_location = {
-            # "BWHA": SN(soundalike="WTSP", min_score=0.7, enabled=True),
-            "HASP": SN(soundalike="WTSP", min_score=0.7, enabled=True),
-            # "VATH": SN(soundalike="WTSP", min_score=0.7, enabled=True),
+            "BWHA": SN(soundalike="WTSP", enabled=True),
+            "HASP": SN(soundalike="WTSP", enabled=True),
+            "VATH": SN(soundalike="WTSP", enabled=True),
         }
 
         # location-dependent cases
@@ -96,13 +97,20 @@ class SoundAlikeHandler:
             if not defn.enabled:
                 continue
 
-            class_idx = self.class_mgr.class_info_by_code(code).index
+            info = self.class_mgr.class_info_by_code(code)
+            if not info.include:
+                continue  # omitted from output anyway
+
+            class_idx = info.index
             class_scores = frame_map[:, class_idx]
-            if class_scores.max() < self.cfg.infer.min_score:
+            if (
+                class_scores.max() < self.cfg.infer.min_score
+                or class_scores.max() < self.min_score
+            ):
                 continue  # nothing to do
             soundalike_idx = self.class_mgr.class_info_by_code(defn.soundalike).index
             soundalike_scores = frame_map[:, soundalike_idx]
-            if soundalike_scores.max() < defn.min_score:
+            if soundalike_scores.max() < self.min_score:
                 continue  # nothing to do
 
             # Spread high soundalike scores to adjacent frames
@@ -111,8 +119,8 @@ class SoundAlikeHandler:
             )
 
             # Skip if enough high scores where there is no soundalike
-            class_mask = class_scores >= self.cfg.infer.min_score
-            soundalike_mask = soundalike_scores >= defn.min_score
+            class_mask = class_scores >= self.min_score
+            soundalike_mask = soundalike_scores >= self.min_score
             independent = class_mask & ~soundalike_mask
             if independent.sum() >= self.max_independent:
                 continue
@@ -123,9 +131,9 @@ class SoundAlikeHandler:
             if class_sum == 0:
                 continue  # avoid divide-by-zero
             coverage = covered.sum() / class_sum
+
+            # If soundalike is sufficiently overlapping, zero out the class scores
             if coverage >= self.min_coverage:
-                # Soundalike is dominant and sufficiently overlapping,
-                # so zero it out
                 frame_map[:, class_idx] = 0.0
 
     def _process_location_dependent(self, frame_map, recording_path):
@@ -148,8 +156,10 @@ class SoundAlikeHandler:
                 continue
 
             info = self.class_mgr.class_info_by_code(code)
-            other_info = self.class_mgr.class_info_by_code(defn.soundalike)
+            if not info.include:
+                continue  # omitted from output anyway
 
+            other_info = self.class_mgr.class_info_by_code(defn.soundalike)
             value = self.occur_mgr.get_value(filename, info.name)
             other_value = self.occur_mgr.get_value(filename, other_info.name)
 
