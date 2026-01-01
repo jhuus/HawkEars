@@ -127,10 +127,10 @@ class ClassManager:
         else:
             raise Exception("Invalid value: {self.cfg.infer.label_field=}")
 
-    def all_classes(self):
+    def all_classes(self) -> list[ClassInfo]:
         """Return list of all class objects."""
         return self._all_classes
 
-    def included_classes(self):
+    def included_classes(self) -> list[ClassInfo]:
         """Return list of class objects that are not excluded from output."""
         return self._included_classes
