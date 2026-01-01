@@ -32,10 +32,6 @@ class LowBandHandler:
         if not self.enabled:
             return
 
-        self.predictor = Predictor(
-            self.low_band_cfg.misc.ckpt_folder, device, self.low_band_cfg
-        )
-
         # Get indexes of RUGR and SPGR in low-band and main models
         low_band_class_mgr = ClassManager(self.low_band_cfg)
         self.class_indexes = []
@@ -47,8 +43,16 @@ class LowBandHandler:
                     f"{name} not found in models. Skipping low-band classifier."
                 )
                 self.enabled = False
-            else:
+            elif main_info.include:
                 self.class_indexes.append((low_band_info.index, main_info.index))
+
+        if len(self.class_indexes) == 0:
+            self.enabled = False # RUGR and SPGR are excluded from output anyway
+            return
+
+        self.predictor = Predictor(
+            self.low_band_cfg.misc.ckpt_folder, device, self.low_band_cfg
+        )
 
     def __call__(
         self, recording_path: str, frame_map, normalized_specs, unnormalized_specs
