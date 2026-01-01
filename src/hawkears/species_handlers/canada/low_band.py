@@ -47,7 +47,7 @@ class LowBandHandler:
                 self.class_indexes.append((low_band_info.index, main_info.index))
 
         if len(self.class_indexes) == 0:
-            self.enabled = False # RUGR and SPGR are excluded from output anyway
+            self.enabled = False  # RUGR and SPGR are excluded from output anyway
             return
 
         self.predictor = Predictor(

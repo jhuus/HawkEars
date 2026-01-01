@@ -6,6 +6,7 @@ from hawkears.core.class_manager import ClassManager
 from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.occurrence_manager import OccurrenceManager
 from hawkears.species_handlers.base import SpeciesHandlers
+from hawkears.species_handlers.canada.boost_scores import BoostScoreHandler
 from hawkears.species_handlers.canada.low_band import LowBandHandler
 from hawkears.species_handlers.canada.soundalike import SoundAlikeHandler
 
@@ -40,6 +41,7 @@ class CanadaSpeciesHandlers(SpeciesHandlers):
         self.handlers: list[SpeciesHandler] = [
             LowBandHandler(cfg, class_mgr, occur_mgr, self.device),
             SoundAlikeHandler(cfg, class_mgr, occur_mgr, self.device),
+            BoostScoreHandler(cfg, class_mgr, occur_mgr, self.device),
         ]
 
     def process_recording(
