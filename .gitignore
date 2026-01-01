@@ -93,6 +93,7 @@ _temp_*
 # Other
 data/
 logs/
+reports/
 yaml/
 *.ckpt
 *.onnx
