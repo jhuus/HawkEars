@@ -38,6 +38,7 @@ class CanadaHeuristicsManager(HeuristicsManager):
         self.class_mgr = class_mgr
         self.device = get_device()
 
+        # Sequence is very important here
         self.handlers: list[Heuristics] = [
             LowBandHeuristics(cfg, class_mgr, occur_mgr, self.device),
             SoundAlikeHeuristics(cfg, class_mgr, occur_mgr, self.device),

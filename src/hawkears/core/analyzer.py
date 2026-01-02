@@ -15,7 +15,7 @@ from britekit import Predictor
 from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.class_manager import ClassManager
 from hawkears.core.occurrence_manager import OccurrenceManager
-from hawkears.species_handlers.base import SpeciesHandlers
+from hawkears.heuristics.base import HeuristicsManager
 
 
 class Analyzer:
@@ -29,13 +29,13 @@ class Analyzer:
         self.rarities_dataframes: list = []
         self.class_mgr = ClassManager(cfg)
 
-    def _load_species_handlers(self):
+    def _load_heuristics_manager(self):
         """
-        Load a SpeciesHandlers subclass, if one was specified.
+        Load a HeuristicsManager subclass, if one was specified.
         """
-        class_path = self.cfg.hawkears.species_handlers
+        class_path = self.cfg.hawkears.heuristics_manager
         if class_path is None:
-            self.species_handlers = None
+            self.heuristics_manager = None
             return
 
         module_path, class_name = class_path.rsplit(".", 1)
@@ -43,11 +43,11 @@ class Analyzer:
         module = importlib.import_module(module_path)
         cls = getattr(module, class_name)
 
-        if not issubclass(cls, SpeciesHandlers):
-            raise TypeError(f"{class_path} must subclass SpeciesHandlers")
+        if not issubclass(cls, HeuristicsManager):
+            raise TypeError(f"{class_path} must subclass HeuristicsManager")
 
-        species_handlers = cls(self.cfg, self.class_mgr, self.occur_mgr)
-        return species_handlers
+        heuristics_manager = cls(self.cfg, self.class_mgr, self.occur_mgr)
+        return heuristics_manager
 
     @staticmethod
     def _split_list(input_list, n):
@@ -85,7 +85,7 @@ class Analyzer:
         - rtype (str): Output format: "audacity", "csv" or "both".
         - start_seconds (float): Where to start processing each recording, in seconds from start.
         """
-        species_handlers = self._load_species_handlers()
+        heuristics_manager = self._load_heuristics_manager()
 
         predictor = Predictor(self.cfg.misc.ckpt_folder, cfg=self.cfg)
         for recording_path in recording_paths:
@@ -94,10 +94,10 @@ class Analyzer:
                 recording_path, start_seconds
             )
 
-            if species_handlers is not None:
+            if heuristics_manager is not None:
                 # update the frame map with special logic for some species
                 normalized_specs, unnormalized_specs = predictor.get_specs()
-                species_handlers.process_recording(
+                heuristics_manager.process_recording(
                     recording_path, frame_map, normalized_specs, unnormalized_specs
                 )
 

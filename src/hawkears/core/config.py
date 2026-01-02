@@ -59,7 +59,7 @@ class HawkEarsConfig:
     occurrence_pickle: str = "data/occurrence.pkl"
 
     save_rarities: bool = False  # save labels for low-occurrence classes?
-    species_handlers: Optional[str] = None
+    heuristics_manager: Optional[str] = None
 
 
 @dataclass
