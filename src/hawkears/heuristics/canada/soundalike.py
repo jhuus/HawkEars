@@ -13,7 +13,7 @@ from hawkears.core.class_manager import ClassManager
 from hawkears.core.occurrence_manager import OccurrenceManager
 
 
-class SoundAlikeHandler:
+class SoundAlikeHeuristics:
     """
     Handler for groups of species that sound alike.
     """

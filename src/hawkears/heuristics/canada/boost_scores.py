@@ -5,7 +5,7 @@ from hawkears.core.class_manager import ClassManager
 from hawkears.core.occurrence_manager import OccurrenceManager
 
 
-class BoostScoreHandler:
+class BoostScoreHeuristics:
     """
     Handler to boost scores when presence is confirmed.
     """

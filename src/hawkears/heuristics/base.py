@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 
 
-class SpeciesHandlers(ABC):
+class HeuristicsManager(ABC):
     """Base class for species handlers."""
 
     @abstractmethod

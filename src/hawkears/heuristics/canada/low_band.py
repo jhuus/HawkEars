@@ -14,7 +14,7 @@ from hawkears.core.class_manager import ClassManager
 from hawkears.core.occurrence_manager import OccurrenceManager
 
 
-class LowBandHandler:
+class LowBandHeuristics:
     """
     Handler for the low-band model used to detect RUGR drumming and SPGR wing claps.
     """
