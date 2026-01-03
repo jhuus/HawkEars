@@ -8,7 +8,6 @@ from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.occurrence_manager import OccurrenceManager
 from hawkears.heuristics.base import HeuristicsManager
 from hawkears.heuristics.canada.boost_scores import BoostScoreHeuristics
-from hawkears.heuristics.canada.filters import FilterHeuristics
 from hawkears.heuristics.canada.low_band import LowBandHeuristics
 from hawkears.heuristics.canada.soundalike import SoundAlikeHeuristics
 
