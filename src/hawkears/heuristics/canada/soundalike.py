@@ -3,10 +3,12 @@
 import logging
 from pathlib import Path
 from types import SimpleNamespace as SN
+from typing import Any
 
 import numpy as np
 from scipy.ndimage import maximum_filter1d
 
+from britekit import Audio
 
 from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.class_manager import ClassManager
@@ -23,6 +25,7 @@ class SoundAlikeHeuristics:
         cfg: HawkEarsBaseConfig,
         class_mgr: ClassManager,
         occur_mgr: OccurrenceManager,
+        audio: Audio,
         device: str,
     ):
         self.cfg = cfg
@@ -51,7 +54,8 @@ class SoundAlikeHeuristics:
             "LAZB": SN(soundalike="INBU", enabled=True),
             "MOCH": SN(soundalike="BCCH", enabled=True),
             "NOPO": SN(soundalike="CORA", enabled=True),
-            "RBSA": SN(soundalike="YBSA", enabled=True),
+            "RBSA": SN(soundalike="RNSA", enabled=True),
+            "RNSA": SN(soundalike="RBSA", enabled=True),
             "SCTA": SN(soundalike="WETA", enabled=True),
             "SPTO": SN(soundalike="EATO", enabled=True),
             "WETA": SN(soundalike="SCTA", enabled=True),
@@ -66,7 +70,11 @@ class SoundAlikeHeuristics:
             self._check_definition(code, defn)
 
     def __call__(
-        self, recording_path: str, frame_map, normalized_specs, unnormalized_specs
+        self,
+        recording_path: str,
+        start_times: list[float],
+        frame_map: np.ndarray,
+        specs: Any,
     ):
         self._process_location_independent(frame_map)
         self._process_location_dependent(frame_map, recording_path)

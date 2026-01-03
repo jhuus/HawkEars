@@ -61,6 +61,15 @@ class HawkEarsConfig:
     save_rarities: bool = False  # save labels for low-occurrence classes?
     heuristics_manager: Optional[str] = None
 
+    # Filter parameters
+    filter_ckpt: Optional[str] = None
+    lpf_end: float = 0.7  # lpf = low-pass filter
+    lpf_min_val: float = 0.0
+    lpf_steepness: float = 50.0
+    hpf_start: float = 0.55  # hpf = high-pass filter
+    hpf_min_val: float = 0.1
+    hpf_steepness: float = 25.0
+
 
 @dataclass
 class HawkEarsBaseConfig(BaseConfig):

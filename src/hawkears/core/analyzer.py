@@ -29,7 +29,7 @@ class Analyzer:
         self.rarities_dataframes: list = []
         self.class_mgr = ClassManager(cfg)
 
-    def _load_heuristics_manager(self):
+    def _load_heuristics_manager(self, audio):
         """
         Load a HeuristicsManager subclass, if one was specified.
         """
@@ -46,7 +46,7 @@ class Analyzer:
         if not issubclass(cls, HeuristicsManager):
             raise TypeError(f"{class_path} must subclass HeuristicsManager")
 
-        heuristics_manager = cls(self.cfg, self.class_mgr, self.occur_mgr)
+        heuristics_manager = cls(self.cfg, self.class_mgr, self.occur_mgr, audio)
         return heuristics_manager
 
     @staticmethod
@@ -85,9 +85,9 @@ class Analyzer:
         - rtype (str): Output format: "audacity", "csv" or "both".
         - start_seconds (float): Where to start processing each recording, in seconds from start.
         """
-        heuristics_manager = self._load_heuristics_manager()
-
         predictor = Predictor(self.cfg.misc.ckpt_folder, cfg=self.cfg)
+        heuristics_manager = self._load_heuristics_manager(predictor.audio)
+
         for recording_path in recording_paths:
             logging.info(f"[Thread {thread_num}] Processing {recording_path}")
             scores, frame_map, offsets = predictor.get_recording_scores(
@@ -98,7 +98,7 @@ class Analyzer:
                 # update the frame map with special logic for some species
                 normalized_specs, unnormalized_specs = predictor.get_specs()
                 heuristics_manager.process_recording(
-                    recording_path, frame_map, normalized_specs, unnormalized_specs
+                    recording_path, offsets, frame_map, normalized_specs
                 )
 
             if scores is None:

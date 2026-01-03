@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from britekit import Audio
 from britekit.core.util import get_device
 
 from hawkears.core.class_manager import ClassManager
@@ -7,10 +8,11 @@ from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.occurrence_manager import OccurrenceManager
 from hawkears.heuristics.base import HeuristicsManager
 from hawkears.heuristics.canada.boost_scores import BoostScoreHeuristics
+from hawkears.heuristics.canada.filters import FilterHeuristics
 from hawkears.heuristics.canada.low_band import LowBandHeuristics
 from hawkears.heuristics.canada.soundalike import SoundAlikeHeuristics
 
-from typing import Protocol
+from typing import Any, Protocol
 import numpy as np
 
 
@@ -18,9 +20,9 @@ class Heuristics(Protocol):
     def __call__(
         self,
         recording_path: str,
+        start_times: list[float],
         frame_map: np.ndarray,
-        normalized_specs,
-        unnormalized_specs,
+        specs: Any,
     ) -> None: ...
 
 
@@ -32,6 +34,7 @@ class CanadaHeuristicsManager(HeuristicsManager):
         cfg: HawkEarsBaseConfig,
         class_mgr: ClassManager,
         occur_mgr: OccurrenceManager,
+        audio: Audio,
     ):
         super().__init__()
         self.cfg = cfg
@@ -40,13 +43,17 @@ class CanadaHeuristicsManager(HeuristicsManager):
 
         # Sequence is very important here
         self.handlers: list[Heuristics] = [
-            LowBandHeuristics(cfg, class_mgr, occur_mgr, self.device),
-            SoundAlikeHeuristics(cfg, class_mgr, occur_mgr, self.device),
-            BoostScoreHeuristics(cfg, class_mgr, occur_mgr, self.device),
+            LowBandHeuristics(cfg, class_mgr, occur_mgr, audio, self.device),
+            SoundAlikeHeuristics(cfg, class_mgr, occur_mgr, audio, self.device),
+            BoostScoreHeuristics(cfg, class_mgr, occur_mgr, audio, self.device),
         ]
 
     def process_recording(
-        self, recording_path: str, frame_map, normalized_specs, unnormalized_specs
+        self,
+        recording_path: str,
+        start_times: list[float],
+        frame_map: np.ndarray,
+        specs: Any,
     ):
         for handler in self.handlers:
-            handler(recording_path, frame_map, normalized_specs, unnormalized_specs)
+            handler(recording_path, start_times, frame_map, specs)

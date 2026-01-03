@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+from typing import Any
+
+from britekit import Audio
+import numpy as np
 
 from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.class_manager import ClassManager
@@ -15,6 +19,7 @@ class BoostScoreHeuristics:
         cfg: HawkEarsBaseConfig,
         class_mgr: ClassManager,
         occur_mgr: OccurrenceManager,
+        audio: Audio,
         device: str,
     ):
         # Consider a class confirmed if min_frames > min_score.
@@ -51,7 +56,11 @@ class BoostScoreHeuristics:
                 self.class_codes.append(info.code)
 
     def __call__(
-        self, recording_path: str, frame_map, normalized_specs, unnormalized_specs
+        self,
+        recording_path: str,
+        start_times: list[float],
+        frame_map: np.ndarray,
+        specs: Any,
     ):
         for i, index in enumerate(self.class_indexes):
             scores = frame_map[:, index]

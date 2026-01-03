@@ -3,9 +3,9 @@
 from copy import deepcopy
 import logging
 import os
-from typing import cast
+from typing import cast, Any
 
-from britekit import Predictor
+from britekit import Audio, Predictor
 import numpy as np
 from omegaconf import OmegaConf, DictConfig
 
@@ -24,6 +24,7 @@ class LowBandHeuristics:
         cfg: HawkEarsBaseConfig,
         class_mgr: ClassManager,
         occur_mgr: OccurrenceManager,
+        audio: Audio,
         device: str,
     ):
         self.cfg = cfg
@@ -55,7 +56,11 @@ class LowBandHeuristics:
         )
 
     def __call__(
-        self, recording_path: str, frame_map, normalized_specs, unnormalized_specs
+        self,
+        recording_path: str,
+        start_times: list[float],
+        frame_map: np.ndarray,
+        specs: Any,
     ):
         """
         Use the low-band model to get a frame map for the given recording.
