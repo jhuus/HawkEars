@@ -54,12 +54,21 @@ class SoundAlikeHeuristics:
             "LAZB": [SN(soundalike="INBU", enabled=True)],
             "MOCH": [SN(soundalike="BCCH", enabled=True)],
             "NOPO": [SN(soundalike="CORA", enabled=True)],
-            "RBSA": [SN(soundalike="RNSA", enabled=True), SN(soundalike="YBSA", enabled=True)],
-            "RNSA": [SN(soundalike="RBSA", enabled=True), SN(soundalike="YBSA", enabled=True)],
+            "RBSA": [
+                SN(soundalike="RNSA", enabled=True),
+                SN(soundalike="YBSA", enabled=True),
+            ],
+            "RNSA": [
+                SN(soundalike="RBSA", enabled=True),
+                SN(soundalike="YBSA", enabled=True),
+            ],
             "SCTA": [SN(soundalike="WETA", enabled=True)],
             "SPTO": [SN(soundalike="EATO", enabled=True)],
             "WETA": [SN(soundalike="SCTA", enabled=True)],
-            "YBSA": [SN(soundalike="RBSA", enabled=True), SN(soundalike="RNSA", enabled=True)],
+            "YBSA": [
+                SN(soundalike="RBSA", enabled=True),
+                SN(soundalike="RNSA", enabled=True),
+            ],
             "YTWA": [SN(soundalike="SWSP", enabled=True)],
         }
 
@@ -120,7 +129,9 @@ class SoundAlikeHeuristics:
                     or class_scores.max() < self.min_score
                 ):
                     continue  # nothing to do
-                soundalike_idx = self.class_mgr.class_info_by_code(defn.soundalike).index
+                soundalike_idx = self.class_mgr.class_info_by_code(
+                    defn.soundalike
+                ).index
                 soundalike_scores = frame_map[:, soundalike_idx]
                 if soundalike_scores.max() < self.min_score:
                     continue  # nothing to do
