@@ -51,6 +51,7 @@ class LowBandHeuristics:
             self.enabled = False  # RUGR and SPGR are excluded from output anyway
             return
 
+        self.audio = audio
         self.predictor = Predictor(
             self.low_band_cfg.misc.ckpt_folder, device, self.low_band_cfg
         )
@@ -68,6 +69,11 @@ class LowBandHeuristics:
         """
         if not self.enabled:
             return
+
+        # synchronize audio objects to avoid reload of recording
+        self.predictor.audio.path = self.audio.path
+        self.predictor.audio.signal = self.audio.signal
+        self.predictor.audio.cached = None
 
         _, low_band_frame_map, _ = self.predictor.get_recording_scores(recording_path)
 
