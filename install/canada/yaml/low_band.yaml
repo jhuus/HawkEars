@@ -1,0 +1,18 @@
+audio:
+  spec_duration: 3.0
+  spec_height: 64
+  spec_width: 384
+  min_freq: 0
+  max_freq: 120
+  freq_scale: "linear"
+  win_length: .2
+  sampling_rate: 1500
+  choose_channel: false
+infer:
+  audio_power: 0.74
+  overlap: 1.0
+  segment_len: null
+  scaling_coefficient: 1.74
+  scaling_intercept: -1.76
+misc:
+  ckpt_folder: "data/ckpt-low-band"

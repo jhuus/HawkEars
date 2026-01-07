@@ -1,0 +1,15 @@
+audio:
+  spec_duration: 3.0
+  spec_height: 192
+  spec_width: 384
+  min_freq: 200
+  max_freq: 13000
+  win_length: .058
+  sampling_rate: 28000
+  choose_channel: true
+infer:
+  overlap: 2.0
+  segment_len: null
+hawkears:
+  species_handlers: "hawkears.species_handlers.canada.main.CanadaSpeciesHandlers"
+  save_rarities: true
