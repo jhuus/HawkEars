@@ -8,6 +8,7 @@ from typing import cast, Any
 from britekit import Audio, Predictor
 import numpy as np
 from omegaconf import OmegaConf, DictConfig
+import torchaudio as ta
 
 from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.class_manager import ClassManager
@@ -27,14 +28,13 @@ class LowBandHeuristics:
         audio: Audio,
         device: str,
     ):
-        self.cfg = cfg
         self.enabled = True
-        self._init_low_band_config(cfg)
+        self.cfg = self._init_config(cfg)
         if not self.enabled:
             return
 
         # Get indexes of RUGR and SPGR in low-band and main models
-        low_band_class_mgr = ClassManager(self.low_band_cfg)
+        low_band_class_mgr = ClassManager(self.cfg)
         self.class_indexes = []
         for name in ["Ruffed Grouse", "Spruce Grouse"]:
             main_info = class_mgr.class_info_by_name(name)
@@ -51,10 +51,10 @@ class LowBandHeuristics:
             self.enabled = False  # RUGR and SPGR are excluded from output anyway
             return
 
-        self.audio = audio
-        self.predictor = Predictor(
-            self.low_band_cfg.misc.ckpt_folder, device, self.low_band_cfg
-        )
+        self.predictor = Predictor(self.cfg.misc.ckpt_folder, device, self.cfg)
+
+        # This causes it to resample instead of having to reload the recording
+        self.predictor.audio = audio
 
     def __call__(
         self,
@@ -67,18 +67,19 @@ class LowBandHeuristics:
         Use the low-band model to get a frame map for the given recording.
         Then update the input frame map using the max score for RUGR and SPGR.
         """
+        import torch
+
         if not self.enabled:
             return
 
-        # synchronize audio objects to avoid reload of recording
-        self.predictor.audio.path = self.audio.path
-        self.predictor.audio.signal = self.audio.signal
-        self.predictor.audio.cached = None
-
+        # Calling set_config triggers a resample and ensures it uses the
+        # correct spectrogram parameters
+        self.predictor.audio.set_config(self.cfg)
         _, low_band_frame_map, _ = self.predictor.get_recording_scores(recording_path)
 
         # shape = (num_frames, num_classes)
-        assert frame_map.shape[0] == low_band_frame_map.shape[0]
+        if frame_map.shape[0] != low_band_frame_map.shape[0]:
+            raise Exception(f"In low-band classifier, expected {frame_map.shape} == {low_band_frame_map.shape}")
 
         for from_idx, to_idx in self.class_indexes:
             assert (
@@ -88,18 +89,20 @@ class LowBandHeuristics:
                 frame_map[:, to_idx], low_band_frame_map[:, from_idx]
             )
 
-    def _init_low_band_config(self, cfg: HawkEarsBaseConfig):
-        """Create low-band model config object."""
+    def _init_config(self, cfg: HawkEarsBaseConfig):
+        """Create low-band model config object from main config object."""
         low_band_cfg = deepcopy(cfg)
 
         yaml_path = os.path.join("yaml", "low_band.yaml")
         if not os.path.exists(yaml_path):
             logging.error(f"File {yaml_path} not found. Skipping low-band classifier.")
             self.enabled = False
-            return
+            return cfg
 
         yaml_cfg = cast(DictConfig, OmegaConf.load(yaml_path))
-        self.low_band_cfg = cast(
+        low_band_cfg = cast(
             HawkEarsBaseConfig,
             OmegaConf.merge(low_band_cfg, OmegaConf.create(yaml_cfg)),
         )
+
+        return low_band_cfg

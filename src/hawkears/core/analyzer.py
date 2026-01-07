@@ -100,6 +100,7 @@ class Analyzer:
                 heuristics_manager.process_recording(
                     recording_path, offsets, frame_map, normalized_specs
                 )
+                predictor.audio.set_config(self.cfg) # restore after low-band
 
             if scores is None:
                 continue  # error should have been logged in get_recording_scores
