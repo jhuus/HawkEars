@@ -91,10 +91,10 @@ _tmp_*
 _temp_*
 
 # Other
-data/
-logs/
-reports/
-yaml/
+/data/
+/logs/
+/reports/
+/yaml/
 *.ckpt
 *.onnx
 *.jpeg
