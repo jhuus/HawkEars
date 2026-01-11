@@ -33,7 +33,7 @@ def analyze(
     overlap: Optional[float] = None,
     segment_len: Optional[float] = None,
     recurse: bool = False,
-    debug_mode: bool = False,
+    show: bool = False,
 ):
     """
     Run inference on audio recordings to detect and classify sounds.
@@ -62,7 +62,7 @@ def analyze(
     - segment_len (float, optional): Fixed segment length in seconds. If specified, labels are
         fixed-length; otherwise they are variable-length.
     - recurse (bool): If true, process sub-directories of the input directory.
-    - debug_mode (bool): If specified, log the top scores for the first spectrogram, then stop.
+    - show (bool): If specified, show the top scores for the first spectrogram, then stop.
     """
 
     # defer slow imports to improve --help performance
@@ -132,9 +132,7 @@ def analyze(
 
         start_time = time.time()
         analyzer = Analyzer(cfg)
-        analyzer.run(
-            input_path, output_path, rtype, date, start_seconds, recurse, debug_mode
-        )
+        analyzer.run(input_path, output_path, rtype, date, start_seconds, recurse, show)
         elapsed_time = util.format_elapsed_time(start_time, time.time())
         logging.info(f"Elapsed time = {elapsed_time}")
     except InferenceError as e:
@@ -239,10 +237,16 @@ def analyze(
     help="If specified, process sub-directories of the input directory.",
 )
 @click.option(
-    "--debug",
-    "debug_mode",
+    "--show",
+    "show",
     is_flag=True,
-    help="If specified, log the top scores for the first spectrogram, then stop.",
+    help="If specified, show the top scores for the first spectrogram, then stop.",
+)
+@click.option(
+    "--debug",
+    "debug",
+    is_flag=True,
+    help="If specified, turn on debug logging.",
 )
 def _analyze_cmd(
     cfg_path: str,
@@ -260,11 +264,15 @@ def _analyze_cmd(
     overlap: Optional[float],
     segment_len: Optional[float],
     recurse: bool,
-    debug_mode: bool,
+    show: bool,
+    debug: bool,
 ):
     from britekit.core import util
 
-    util.set_logging(timestamp=True)
+    if debug:
+        util.set_logging(level=logging.DEBUG, timestamp=True)
+    else:
+        util.set_logging(level=logging.INFO, timestamp=True)
 
     if start_seconds_str:
         start_seconds = util.get_seconds_from_time_string(start_seconds_str)
@@ -287,5 +295,5 @@ def _analyze_cmd(
         overlap,
         segment_len,
         recurse,
-        debug_mode,
+        show,
     )

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from typing import Any
-
 from britekit import Audio
 import numpy as np
 
@@ -58,9 +56,7 @@ class BoostScoreHeuristics:
     def __call__(
         self,
         recording_path: str,
-        start_times: list[float],
         frame_map: np.ndarray,
-        specs: Any,
     ):
         for i, index in enumerate(self.class_indexes):
             scores = frame_map[:, index]

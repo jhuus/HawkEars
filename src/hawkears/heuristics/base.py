@@ -7,6 +7,6 @@ class HeuristicsManager(ABC):
     """Base class for species handlers."""
 
     @abstractmethod
-    def process_recording(self, recording_path, start_times, frame_map, specs):
+    def process_recording(self, recording_path, frame_map):
         """Called once per recording. May mutate frame_map in place."""
         ...

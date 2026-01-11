@@ -61,6 +61,11 @@ class HawkEarsConfig:
     save_rarities: bool = False  # save labels for low-occurrence classes?
     heuristics_manager: Optional[str] = None
 
+    # Each model in the main ensemble processes non-overlapping spectrograms
+    # for efficiency, but overlap is achieved by starting them this much after
+    # the previous model's spectrograms
+    spec_increment: float = 0.5
+
 
 @dataclass
 class HawkEarsBaseConfig(BaseConfig):

@@ -3,7 +3,6 @@
 import logging
 from pathlib import Path
 from types import SimpleNamespace as SN
-from typing import Any
 
 import numpy as np
 from scipy.ndimage import maximum_filter1d
@@ -83,9 +82,7 @@ class SoundAlikeHeuristics:
     def __call__(
         self,
         recording_path: str,
-        start_times: list[float],
         frame_map: np.ndarray,
-        specs: Any,
     ):
         self._process_location_independent(frame_map)
         self._process_location_dependent(frame_map, recording_path)

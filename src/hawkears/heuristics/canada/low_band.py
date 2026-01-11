@@ -3,12 +3,11 @@
 from copy import deepcopy
 import logging
 import os
-from typing import cast, Any
+from typing import cast
 
 from britekit import Audio, Predictor
 import numpy as np
 from omegaconf import OmegaConf, DictConfig
-import torchaudio as ta
 
 from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.class_manager import ClassManager
@@ -59,16 +58,12 @@ class LowBandHeuristics:
     def __call__(
         self,
         recording_path: str,
-        start_times: list[float],
         frame_map: np.ndarray,
-        specs: Any,
     ):
         """
         Use the low-band model to get a frame map for the given recording.
         Then update the input frame map using the max score for RUGR and SPGR.
         """
-        import torch
-
         if not self.enabled:
             return
 
@@ -77,16 +72,17 @@ class LowBandHeuristics:
         self.predictor.audio.set_config(self.cfg)
         _, low_band_frame_map, _ = self.predictor.get_recording_scores(recording_path)
 
-        # shape = (num_frames, num_classes)
-        if frame_map.shape[0] != low_band_frame_map.shape[0]:
-            raise Exception(f"In low-band classifier, expected {frame_map.shape} == {low_band_frame_map.shape}")
-
+        # shape = (num_frames, num_classes) and occasionally the two maps
+        # differ by one or two frames
+        num_frames = min(frame_map.shape[0], low_band_frame_map.shape[0])
         for from_idx, to_idx in self.class_indexes:
             assert (
                 to_idx < frame_map.shape[1] and from_idx < low_band_frame_map.shape[1]
             )
-            frame_map[:, to_idx] = np.maximum(
-                frame_map[:, to_idx], low_band_frame_map[:, from_idx]
+            # raise RUGR/SPGR scores to exponent to reduce FPs
+            low_band_scores = low_band_frame_map[:num_frames, from_idx] ** 2
+            frame_map[:num_frames, to_idx] = np.maximum(
+                frame_map[:num_frames, to_idx], low_band_scores
             )
 
     def _init_config(self, cfg: HawkEarsBaseConfig):

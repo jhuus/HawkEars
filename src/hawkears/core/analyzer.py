@@ -74,7 +74,7 @@ class Analyzer:
         rtype,
         start_seconds,
         thread_num,
-        debug_mode=False,
+        show=False,
     ):
         """
         This runs on its own thread and processes all recordings in the given list.
@@ -90,23 +90,19 @@ class Analyzer:
 
         for recording_path in recording_paths:
             logging.info(f"[Thread {thread_num}] Processing {recording_path}")
-            scores, frame_map, offsets = predictor.get_recording_scores(
-                recording_path, start_seconds
+            frame_map = predictor.get_overlapping_scores(
+                recording_path, self.cfg.hawkears.spec_increment, start_seconds
             )
+            # _, frame_map, _ = predictor.get_recording_scores(recording_path, start_seconds)
 
             if heuristics_manager is not None:
-                # update the frame map with special logic for some species
-                normalized_specs, unnormalized_specs = predictor.get_specs()
-                heuristics_manager.process_recording(
-                    recording_path, offsets, frame_map, normalized_specs
-                )
-                predictor.audio.set_config(self.cfg) # restore after low-band
+                # update the frame map with special logic for some species,
+                # then restore audio settings
+                heuristics_manager.process_recording(recording_path, frame_map)
+                predictor.audio.set_config(self.cfg, resample=False)
 
-            if scores is None:
-                continue  # error should have been logged in get_recording_scores
-
-            if debug_mode:
-                predictor.log_scores(scores)  # log the scores for debugging
+            if show:
+                predictor.show_scores(None, frame_map)
 
             # update scores before output
             recording_name = Path(recording_path).name
@@ -127,17 +123,17 @@ class Analyzer:
 
             if rtype in {"csv", "both"}:
                 dataframe = predictor.get_dataframe(
-                    scores, frame_map, offsets, recording_stem
+                    None, frame_map, None, recording_stem
                 )
                 self.dataframes.append(dataframe)
 
                 if rarities_frame_map is not None:
                     dataframe = predictor.get_dataframe(
-                        scores, rarities_frame_map, offsets, recording_stem
+                        None, rarities_frame_map, None, recording_stem
                     )
                     self.rarities_dataframes.append(dataframe)
 
-            if debug_mode:
+            if show:
                 break
 
         if thread_num == 1:
@@ -232,7 +228,7 @@ class Analyzer:
         date: Optional[str] = None,
         start_seconds: float = 0,
         recurse: bool = False,
-        debug_mode: bool = False,
+        show: bool = False,
     ):
         """
         Run inference.
@@ -244,7 +240,7 @@ class Analyzer:
         - date (str): If specified, recording date or "file" to get dates from filenames.
         - start_seconds (float): Where to start processing each recording, in seconds.
         - recurse (bool): If specified, process sub-directories of the input directory.
-        - debug_mode (bool): If true, log scores for the first spectrogram, then stop.
+        - show (bool): If true, show scores for the first spectrogram, then stop.
         For example, '71' and '1:11' have the same meaning, and cause the first 71 seconds to be ignored. Default = 0.
         """
 
@@ -285,7 +281,7 @@ class Analyzer:
                 rtype,
                 start_seconds,
                 1,
-                debug_mode,
+                show,
             )
         else:
             recordings_per_thread = self._split_list(recording_paths, num_threads)
@@ -299,7 +295,7 @@ class Analyzer:
                         rtype,
                         start_seconds,
                         i + 1,
-                        debug_mode,
+                        show,
                     ),
                 )
                 thread.start()

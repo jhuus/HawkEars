@@ -8,8 +8,7 @@ audio:
   sampling_rate: 28000
   choose_channel: true
 infer:
-  overlap: 2.0
   segment_len: null
 hawkears:
-  species_handlers: "hawkears.species_handlers.canada.main.CanadaSpeciesHandlers"
+  heuristics_manager: "hawkears.heuristics.canada.main.CanadaHeuristicsManager"
   save_rarities: true
