@@ -46,6 +46,8 @@ class LowBandHeuristics:
             elif main_info.include:
                 self.class_indexes.append((low_band_info.index, main_info.index))
 
+        logging.debug(f"LowBandHeuristics::__init__ {self.class_indexes=}")
+
         if len(self.class_indexes) == 0:
             self.enabled = False  # RUGR and SPGR are excluded from output anyway
             return
@@ -59,6 +61,7 @@ class LowBandHeuristics:
         self,
         recording_path: str,
         frame_map: np.ndarray,
+        start_seconds: float,
     ):
         """
         Use the low-band model to get a frame map for the given recording.
@@ -70,7 +73,9 @@ class LowBandHeuristics:
         # Calling set_config triggers a resample and ensures it uses the
         # correct spectrogram parameters
         self.predictor.audio.set_config(self.cfg)
-        _, low_band_frame_map, _ = self.predictor.get_recording_scores(recording_path)
+        _, low_band_frame_map, _ = self.predictor.get_recording_scores(
+            recording_path, start_seconds
+        )
 
         # shape = (num_frames, num_classes) and occasionally the two maps
         # differ by one or two frames
@@ -80,7 +85,7 @@ class LowBandHeuristics:
                 to_idx < frame_map.shape[1] and from_idx < low_band_frame_map.shape[1]
             )
             # raise RUGR/SPGR scores to exponent to reduce FPs
-            low_band_scores = low_band_frame_map[:num_frames, from_idx] ** 2
+            low_band_scores = low_band_frame_map[:num_frames, from_idx] ** 1.5
             frame_map[:num_frames, to_idx] = np.maximum(
                 frame_map[:num_frames, to_idx], low_band_scores
             )

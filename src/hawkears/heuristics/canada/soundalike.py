@@ -83,6 +83,7 @@ class SoundAlikeHeuristics:
         self,
         recording_path: str,
         frame_map: np.ndarray,
+        start_seconds: float,
     ):
         self._process_location_independent(frame_map)
         self._process_location_dependent(frame_map, recording_path)

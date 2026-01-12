@@ -57,6 +57,7 @@ class BoostScoreHeuristics:
         self,
         recording_path: str,
         frame_map: np.ndarray,
+        start_seconds: float,
     ):
         for i, index in enumerate(self.class_indexes):
             scores = frame_map[:, index]

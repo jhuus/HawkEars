@@ -93,12 +93,13 @@ class Analyzer:
             frame_map = predictor.get_overlapping_scores(
                 recording_path, self.cfg.hawkears.spec_increment, start_seconds
             )
-            # _, frame_map, _ = predictor.get_recording_scores(recording_path, start_seconds)
 
             if heuristics_manager is not None:
                 # update the frame map with special logic for some species,
                 # then restore audio settings
-                heuristics_manager.process_recording(recording_path, frame_map)
+                heuristics_manager.process_recording(
+                    recording_path, frame_map, start_seconds
+                )
                 predictor.audio.set_config(self.cfg, resample=False)
 
             if show:
@@ -143,10 +144,11 @@ class Analyzer:
         """
         Apply updates to the frame map containing initial scores:
 
-        1. Apply class-specific updates, e.g. using a low-band classifier
-        2. Set scores to zero for excluded classes
-        3. Set scores to zero for low-occurrence (rare) classes
-        4. Apply the raise-score-if-confirmed heuristic
+        1. Set scores to zero for excluded classes
+        2. Set scores to zero for low-occurrence (rare) classes
+
+        Also return a rarities_frame_map containing scores for class that
+        were set to zero due to low occurrence.
         """
         import numpy as np
 

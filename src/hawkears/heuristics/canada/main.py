@@ -20,6 +20,7 @@ class Heuristics(Protocol):
         self,
         recording_path: str,
         frame_map: np.ndarray,
+        start_seconds: float,
     ) -> None: ...
 
 
@@ -49,6 +50,7 @@ class CanadaHeuristicsManager(HeuristicsManager):
         self,
         recording_path: str,
         frame_map: np.ndarray,
+        start_seconds: float,
     ):
         for handler in self.handlers:
-            handler(recording_path, frame_map)
+            handler(recording_path, frame_map, start_seconds)
