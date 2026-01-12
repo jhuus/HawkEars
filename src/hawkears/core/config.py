@@ -66,6 +66,8 @@ class HawkEarsConfig:
     # the previous model's spectrograms
     spec_increment: float = 0.5
 
+    low_band_classifier: bool = False  # if true, include low-band classifier
+
 
 @dataclass
 class HawkEarsBaseConfig(BaseConfig):

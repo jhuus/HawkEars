@@ -32,6 +32,10 @@ class LowBandHeuristics:
         if not self.enabled:
             return
 
+        if not self.cfg.hawkears.low_band_classifier:
+            self.enabled = False
+            return
+
         # Get indexes of RUGR and SPGR in low-band and main models
         low_band_class_mgr = ClassManager(self.cfg)
         self.class_indexes = []

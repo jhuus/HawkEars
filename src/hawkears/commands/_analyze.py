@@ -32,6 +32,7 @@ def analyze(
     num_threads: Optional[int] = None,
     overlap: Optional[float] = None,
     segment_len: Optional[float] = None,
+    low_band: bool = False,
     recurse: bool = False,
     show: bool = False,
 ):
@@ -61,8 +62,9 @@ def analyze(
     - overlap (float, optional): Spectrogram overlap in seconds for sliding window analysis.
     - segment_len (float, optional): Fixed segment length in seconds. If specified, labels are
         fixed-length; otherwise they are variable-length.
-    - recurse (bool): If true, process sub-directories of the input directory.
-    - show (bool): If specified, show the top scores for the first spectrogram, then stop.
+    - low_band (bool, optional): If true, run low-band classifier in addition to main models (default=False).
+    - recurse (bool, optional): If true, process sub-directories of the input directory (default=False).
+    - show (bool, optional): If true, show the top scores for the first spectrogram, then stop.
     """
 
     # defer slow imports to improve --help performance
@@ -125,6 +127,9 @@ def analyze(
 
         if segment_len is not None:
             cfg.infer.segment_len = segment_len
+
+        if low_band:
+            cfg.hawkears.low_band_classifier = True
 
         # run inference
         device = util.get_device()
@@ -231,6 +236,12 @@ def analyze(
     help="Optional segment length in seconds. If specified, labels are fixed-length. Otherwise they are variable-length.",
 )
 @click.option(
+    "--low",
+    "low_band",
+    is_flag=True,
+    help="If specified, run low-band classifier in addition to main models.",
+)
+@click.option(
     "--recurse",
     "recurse",
     is_flag=True,
@@ -263,6 +274,7 @@ def _analyze_cmd(
     num_threads: Optional[int],
     overlap: Optional[float],
     segment_len: Optional[float],
+    low_band: bool,
     recurse: bool,
     show: bool,
     debug: bool,
@@ -294,6 +306,7 @@ def _analyze_cmd(
         num_threads,
         overlap,
         segment_len,
+        low_band,
         recurse,
         show,
     )
