@@ -88,8 +88,7 @@ class LowBandHeuristics:
             assert (
                 to_idx < frame_map.shape[1] and from_idx < low_band_frame_map.shape[1]
             )
-            # raise RUGR/SPGR scores to exponent to reduce FPs
-            low_band_scores = low_band_frame_map[:num_frames, from_idx] ** 1.5
+            low_band_scores = low_band_frame_map[:num_frames, from_idx]
             frame_map[:num_frames, to_idx] = np.maximum(
                 frame_map[:num_frames, to_idx], low_band_scores
             )

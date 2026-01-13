@@ -13,6 +13,6 @@ infer:
   overlap: 0
   segment_len: null
   scaling_coefficient: 1.0
-  scaling_intercept: 0.0
+  scaling_intercept: 0.7 # increase intercept to lower scores
 misc:
   ckpt_folder: "data/ckpt-low-band"
