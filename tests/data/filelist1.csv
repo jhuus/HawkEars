@@ -1,0 +1,7 @@
+filename,region,latitude,longitude,recording_date,comment
+file1.mp3,,50.28401,-122.56107,2015-07-12,get county code from lat/lon
+file2.mp3,CA-ON-OT,,,2022-01-01,use county code
+file3.mp3,US-WA-007,,,2022-12-31,use county code
+file4.mp3,,,,2025-07-01,warn date will be ignored since no location
+file5.mp3,,,,,process without location/date
+file6.mp3,,200,-200,2015-07-12,no matching county
