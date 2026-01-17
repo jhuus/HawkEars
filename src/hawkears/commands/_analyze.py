@@ -2,7 +2,7 @@
 
 # File name starts with _ to keep it out of typeahead for API users.
 # Defer some imports to improve --help performance.
-import importlib
+import importlib.util
 import logging
 import os
 from pathlib import Path
@@ -13,7 +13,7 @@ import click
 from omegaconf import OmegaConf, DictConfig
 
 from britekit.core.exceptions import InferenceError
-from britekit.core.util import cli_help_from_doc
+from britekit.core.util import cli_help_from_doc, get_device
 
 from hawkears.core.config import HawkEarsBaseConfig
 
@@ -130,12 +130,15 @@ def analyze(
             cfg.infer.segment_len = segment_len
 
         if low_band:
-            cfg.hawkears.low_band_classifier = True
+            cfg.hawkears.low_band_classifier_gpu = True
+            cfg.hawkears.low_band_classifier_cpu = True
 
         # run inference
-        device = util.get_device()
+        device = get_device()
         if device == "cpu" and importlib.util.find_spec("openvino") is None:
-            logging.info(f"*** Install OpenVINO for better performance with CPU-based inference ***")
+            logging.info(
+                "*** Install OpenVINO for better performance with CPU-based inference ***"
+            )
 
         logging.info(f"Using {device.upper()} for inference")
 

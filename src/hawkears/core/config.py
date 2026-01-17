@@ -66,7 +66,10 @@ class HawkEarsConfig:
     # the previous model's spectrograms
     spec_increment: float = 0.5
 
-    low_band_classifier: bool = False  # if true, include low-band classifier
+    low_band_classifier_gpu: bool = True  # if true and GPU, include low-band classifier
+    low_band_classifier_cpu: bool = (
+        False  # if true and not GPU, include low-band classifier
+    )
 
 
 @dataclass
