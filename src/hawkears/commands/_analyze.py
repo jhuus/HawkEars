@@ -2,6 +2,7 @@
 
 # File name starts with _ to keep it out of typeahead for API users.
 # Defer some imports to improve --help performance.
+import importlib
 import logging
 import os
 from pathlib import Path
@@ -133,6 +134,9 @@ def analyze(
 
         # run inference
         device = util.get_device()
+        if device == "cpu" and importlib.util.find_spec("openvino") is None:
+            logging.info(f"*** Install OpenVINO for better performance with CPU-based inference ***")
+
         logging.info(f"Using {device.upper()} for inference")
 
         start_time = time.time()
