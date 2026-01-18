@@ -1,0 +1,9 @@
+# These setting override default.yaml when running on Apple Metal.
+# That is, default.yaml is applied, and then default-mps.yaml is
+# applied if device='mps'.
+audio:
+  choose_channel: true
+misc:
+  max_models: 2
+hawkears:
+  low_band_classifier: false

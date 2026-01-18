@@ -1,0 +1,7 @@
+# These setting override default.yaml when running with just a CPU.
+# That is, default.yaml is applied, and then default-cpu.yaml is
+# applied if device='cpu'.
+audio:
+  choose_channel: false
+hawkears:
+  low_band_classifier: false
