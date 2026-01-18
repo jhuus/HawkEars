@@ -12,3 +12,4 @@ infer:
 hawkears:
   heuristics_manager: "hawkears.heuristics.canada.main.CanadaHeuristicsManager"
   save_rarities: true
+  spec_increment: 0.5

@@ -32,11 +32,7 @@ class LowBandHeuristics:
         if not self.enabled:
             return
 
-        if device == "cuda":
-            if not self.cfg.hawkears.low_band_classifier_gpu:
-                self.enabled = False
-                return
-        elif not self.cfg.hawkears.low_band_classifier_cpu:
+        if not self.cfg.hawkears.low_band_classifier:
             self.enabled = False
             return
 

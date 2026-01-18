@@ -1,3 +1,5 @@
+# These settings are used by the low-band classifier, which detects
+# Ruffed Grouse drumming and Spruce Grouse wing beats.
 audio:
   spec_duration: 4.0
   spec_height: 64
@@ -9,10 +11,11 @@ audio:
   sampling_rate: 1280
   choose_channel: false
 infer:
-  audio_power: 0.74
-  overlap: 0
+  audio_power: 1.2
   segment_len: null
   scaling_coefficient: 1.0
   scaling_intercept: 0.7 # increase intercept to lower scores
 misc:
   ckpt_folder: "data/ckpt-low-band"
+hawkears:
+  spec_increment: 1.5

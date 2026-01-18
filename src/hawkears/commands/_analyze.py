@@ -2,7 +2,6 @@
 
 # File name starts with _ to keep it out of typeahead for API users.
 # Defer some imports to improve --help performance.
-import importlib.util
 import logging
 import os
 from pathlib import Path
@@ -73,7 +72,12 @@ def analyze(
     from hawkears.core.analyzer import Analyzer
 
     try:
-        # get config, merging default.yaml if it exists, then the specified one, if any
+        # Validate parameters
+        if rtype not in {"audacity", "csv", "both"}:
+            logging.error(f"Error. invalid rtype value: {rtype}")
+            return
+
+        # Get config, merging default.yaml if it exists
         cfg = OmegaConf.structured(HawkEarsBaseConfig())
         default_yaml_path = os.path.join("yaml", "default.yaml")
         if os.path.exists(default_yaml_path):
@@ -85,17 +89,45 @@ def analyze(
             logging.error(f"Error: {default_yaml_path} not found.")
             return
 
+        device = get_device()
+        if device == "cpu":
+            # Apply CPU-specific config overrides
+            cpu_yaml_path = os.path.join("yaml", "default-cpu.yaml")
+            if os.path.exists(cpu_yaml_path):
+                yaml_cfg = cast(DictConfig, OmegaConf.load(cpu_yaml_path))
+                cfg = cast(
+                    HawkEarsBaseConfig, OmegaConf.merge(cfg, OmegaConf.create(yaml_cfg))
+                )
+            else:
+                logging.error(f"Error: {cpu_yaml_path} not found.")
+                return
+
+            import importlib.util
+
+            if importlib.util.find_spec("openvino") is None:
+                logging.info(
+                    "*** Install OpenVINO for better performance with CPU-based inference ***"
+                )
+        elif device == "mps":
+            # Apply MPS-specific config overrides for Apple Metal processors
+            mps_yaml_path = os.path.join("yaml", "default-mps.yaml")
+            if os.path.exists(mps_yaml_path):
+                yaml_cfg = cast(DictConfig, OmegaConf.load(mps_yaml_path))
+                cfg = cast(
+                    HawkEarsBaseConfig, OmegaConf.merge(cfg, OmegaConf.create(yaml_cfg))
+                )
+            else:
+                logging.error(f"Error: {mps_yaml_path} not found.")
+                return
+
+        # Override with config specified in parameters last
         if cfg_path is not None:
             yaml_cfg = cast(DictConfig, OmegaConf.load(cfg_path))
             cfg = cast(
                 HawkEarsBaseConfig, OmegaConf.merge(cfg, OmegaConf.create(yaml_cfg))
             )
 
-        # process parameters
-        if rtype not in {"audacity", "csv", "both"}:
-            logging.error(f"Error. invalid rtype value: {rtype}")
-            return
-
+        # Process parameters
         if output_path:
             if not os.path.exists(output_path):
                 os.makedirs(output_path)
@@ -130,18 +162,10 @@ def analyze(
             cfg.infer.segment_len = segment_len
 
         if low_band:
-            cfg.hawkears.low_band_classifier_gpu = True
-            cfg.hawkears.low_band_classifier_cpu = True
+            cfg.hawkears.low_band_classifier = True
 
-        # run inference
-        device = get_device()
-        if device == "cpu" and importlib.util.find_spec("openvino") is None:
-            logging.info(
-                "*** Install OpenVINO for better performance with CPU-based inference ***"
-            )
-
+        # Run inference
         logging.info(f"Using {device.upper()} for inference")
-
         start_time = time.time()
         analyzer = Analyzer(cfg)
         analyzer.run(input_path, output_path, rtype, date, start_seconds, recurse, show)
