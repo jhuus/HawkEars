@@ -5,3 +5,4 @@ audio:
   choose_channel: false
 hawkears:
   low_band_classifier: false
+  spec_increment: 1.5
