@@ -74,7 +74,7 @@ class Analyzer:
         rtype,
         start_seconds,
         thread_num,
-        show=False,
+        top=False,
     ):
         """
         This runs on its own thread and processes all recordings in the given list.
@@ -84,6 +84,8 @@ class Analyzer:
         - output_path (str): Where to write the output.
         - rtype (str): Output format: "audacity", "csv" or "both".
         - start_seconds (float): Where to start processing each recording, in seconds from start.
+        - thread_num (int): Thread number
+        - top (bool): If true, show the top scores for the first spectrogram, then return.
         """
         predictor = Predictor(self.cfg.misc.ckpt_folder, cfg=self.cfg)
         heuristics_manager = self._load_heuristics_manager(predictor.audio)
@@ -102,7 +104,7 @@ class Analyzer:
                 )
                 predictor.audio.set_config(self.cfg, resample=False)
 
-            if show:
+            if top:
                 predictor.show_scores(None, frame_map)
 
             # update scores before output
@@ -134,7 +136,7 @@ class Analyzer:
                     )
                     self.rarities_dataframes.append(dataframe)
 
-            if show:
+            if top:
                 break
 
         if thread_num == 1:
@@ -230,7 +232,7 @@ class Analyzer:
         date: Optional[str] = None,
         start_seconds: float = 0,
         recurse: bool = False,
-        show: bool = False,
+        top: bool = False,
     ):
         """
         Run inference.
@@ -242,7 +244,7 @@ class Analyzer:
         - date (str): If specified, recording date or "file" to get dates from filenames.
         - start_seconds (float): Where to start processing each recording, in seconds.
         - recurse (bool): If specified, process sub-directories of the input directory.
-        - show (bool): If true, show scores for the first spectrogram, then stop.
+        - top (bool): If true, show the top scores for the first spectrogram, then stop.
         For example, '71' and '1:11' have the same meaning, and cause the first 71 seconds to be ignored. Default = 0.
         """
 
@@ -283,7 +285,7 @@ class Analyzer:
                 rtype,
                 start_seconds,
                 1,
-                show,
+                top,
             )
         else:
             recordings_per_thread = self._split_list(recording_paths, num_threads)
@@ -297,7 +299,7 @@ class Analyzer:
                         rtype,
                         start_seconds,
                         i + 1,
-                        show,
+                        top,
                     ),
                 )
                 thread.start()

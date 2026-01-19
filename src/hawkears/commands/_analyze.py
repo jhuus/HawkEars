@@ -32,9 +32,10 @@ def analyze(
     num_threads: Optional[int] = None,
     overlap: Optional[float] = None,
     segment_len: Optional[float] = None,
+    label_field: str = "codes",
     low_band: bool = False,
     recurse: bool = False,
-    show: bool = False,
+    top: bool = False,
 ):
     """
     Run inference on audio recordings to detect and classify sounds.
@@ -62,9 +63,10 @@ def analyze(
     - overlap (float, optional): Spectrogram overlap in seconds for sliding window analysis.
     - segment_len (float, optional): Fixed segment length in seconds. If specified, labels are
         fixed-length; otherwise they are variable-length.
+    - label_field (str): Type of label to output, from "codes", "names", "alt_codes" or "alt_names".
     - low_band (bool, optional): If true, run low-band classifier in addition to main models (default=False).
     - recurse (bool, optional): If true, process sub-directories of the input directory (default=False).
-    - show (bool, optional): If true, show the top scores for the first spectrogram, then stop.
+    - top (bool, optional): If true, show the top scores for the first spectrogram, then stop.
     """
 
     # defer slow imports to improve --help performance
@@ -72,11 +74,6 @@ def analyze(
     from hawkears.core.analyzer import Analyzer
 
     try:
-        # Validate parameters
-        if rtype not in {"audacity", "csv", "both"}:
-            logging.error(f"Error. invalid rtype value: {rtype}")
-            return
-
         # Get config, merging default.yaml if it exists
         cfg = OmegaConf.structured(HawkEarsBaseConfig())
         default_yaml_path = os.path.join("yaml", "default.yaml")
@@ -128,6 +125,25 @@ def analyze(
             )
 
         # Process parameters
+        if rtype not in {"audacity", "csv", "both"}:
+            logging.error(f"Error. invalid rtype value: {rtype}")
+            return
+
+        label_map = {
+            "code": "codes",
+            "name": "names",
+            "alt_code": "alt_codes",
+            "alt_name": "alt_names",
+        }
+        valid_labels = set(["codes", "names", "alt_codes", "alt_names"])
+        if label_field in label_map:
+            label_field = label_map[label_field]
+        if label_field in valid_labels:
+            cfg.infer.label_field = label_field
+        else:
+            logging.error(f"Error. invalid label field: {label_field}")
+            return
+
         if output_path:
             if not os.path.exists(output_path):
                 os.makedirs(output_path)
@@ -168,7 +184,7 @@ def analyze(
         logging.info(f"Using {device.upper()} for inference")
         start_time = time.time()
         analyzer = Analyzer(cfg)
-        analyzer.run(input_path, output_path, rtype, date, start_seconds, recurse, show)
+        analyzer.run(input_path, output_path, rtype, date, start_seconds, recurse, top)
         elapsed_time = util.format_elapsed_time(start_time, time.time())
         logging.info(f"Elapsed time = {elapsed_time}")
     except InferenceError as e:
@@ -267,6 +283,15 @@ def analyze(
     help="Optional segment length in seconds. If specified, labels are fixed-length. Otherwise they are variable-length.",
 )
 @click.option(
+    "--label",
+    "label_field",
+    type=str,
+    default="codes",
+    help='Optional label field. Valid values are "codes", "names", "alt_codes" and "alt_names"."'
+    ' Default is "codes", which outputs 4-letter species codes, while "names" outputs common names, '
+    '"alt_names" outputs scientific names and "alt_codes" outputs 6-letter species codes.',
+)
+@click.option(
     "--low",
     "low_band",
     is_flag=True,
@@ -279,8 +304,8 @@ def analyze(
     help="If specified, process sub-directories of the input directory.",
 )
 @click.option(
-    "--show",
-    "show",
+    "--top",
+    "top",
     is_flag=True,
     help="If specified, show the top scores for the first spectrogram, then stop.",
 )
@@ -305,9 +330,10 @@ def _analyze_cmd(
     num_threads: Optional[int],
     overlap: Optional[float],
     segment_len: Optional[float],
+    label_field: str,
     low_band: bool,
     recurse: bool,
-    show: bool,
+    top: bool,
     debug: bool,
 ):
     from britekit.core import util
@@ -337,7 +363,8 @@ def _analyze_cmd(
         num_threads,
         overlap,
         segment_len,
+        label_field,
         low_band,
         recurse,
-        show,
+        top,
     )
