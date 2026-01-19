@@ -134,6 +134,10 @@ def analyze(
             "name": "names",
             "alt_code": "alt_codes",
             "alt_name": "alt_names",
+            "alt-code": "alt_codes",
+            "alt-name": "alt_names",
+            "alt-codes": "alt_codes",
+            "alt-names": "alt_names",
         }
         valid_labels = set(["codes", "names", "alt_codes", "alt_names"])
         if label_field in label_map:
