@@ -122,7 +122,9 @@ class Analyzer:
                         os.makedirs(rarities_dir)
 
                     file_path = str(Path(rarities_dir) / f"{recording_stem}_scores.txt")
-                    self._save_audacity_labels(predictor, rarities_frame_map, file_path)
+                    self._save_audacity_labels(
+                        predictor, rarities_frame_map, file_path, False
+                    )
 
             if rtype in {"csv", "both"}:
                 dataframe = predictor.get_dataframe(
@@ -180,6 +182,7 @@ class Analyzer:
         predictor: Predictor,
         frame_map,
         file_path: str,
+        write_empty_file: bool = True,
     ) -> None:
         """
         Given an array of raw scores, convert to Audacity labels and save in the given file.
@@ -196,6 +199,16 @@ class Analyzer:
         """
         try:
             labels = predictor.get_frame_labels(frame_map)
+
+            # Check if there is any output
+            if not write_empty_file:
+                has_output = False
+                for name in sorted(labels):
+                    if labels[name]:
+                        has_output = True
+                        break
+                if not has_output:
+                    return
 
             with open(file_path, "w") as out_file:
                 for name in sorted(labels):

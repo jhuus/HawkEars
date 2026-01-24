@@ -42,15 +42,23 @@ class SoundAlikeHeuristics:
             "VATH": [SN(soundalike="WTSP", enabled=True)],
         }
 
-        # location-dependent cases
+        # Location-dependent cases. If the "key" species is rare and
+        # the soundalike is common, occurrences of the key species will be
+        # replaced with the soundalike.
         self.max_rare = 0.001  # main species occurrence < this?
         self.min_common = 0.01  # soundalike species occurrence > this?
         self.with_location = {
+            "BAGO": [SN(soundalike="COGO", enabled=True)],
+            "BITH": [SN(soundalike="GCTH", enabled=True)],
             "BOOW": [SN(soundalike="WISN", enabled=True)],
             "CBCH": [SN(soundalike="BCCH", enabled=True)],
+            "COGO": [SN(soundalike="BAGO", enabled=True)],
             "EATO": [SN(soundalike="SPTO", enabled=True)],
+            "GCTH": [SN(soundalike="BITH", enabled=True)],
+            "HUGO": [SN(soundalike="MAGO", enabled=True)],
             "INBU": [SN(soundalike="LAZB", enabled=True)],
             "LAZB": [SN(soundalike="INBU", enabled=True)],
+            "MAGO": [SN(soundalike="HUGO", enabled=True)],
             "MOCH": [SN(soundalike="BCCH", enabled=True)],
             "NOPO": [SN(soundalike="CORA", enabled=True)],
             "RBSA": [
