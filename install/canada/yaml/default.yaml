@@ -8,7 +8,11 @@ audio:
   sampling_rate: 28000
   choose_channel: true
 infer:
+  min_score: 0.7
   segment_len: null
+  label_field: "codes"
+  scaling_coefficient: 1.29
+  scaling_intercept: 0.16
 hawkears:
   heuristics_manager: "hawkears.heuristics.canada.main.CanadaHeuristicsManager"
   save_rarities: true
