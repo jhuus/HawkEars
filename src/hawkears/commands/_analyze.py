@@ -32,7 +32,7 @@ def analyze(
     num_threads: Optional[int] = None,
     overlap: Optional[float] = None,
     segment_len: Optional[float] = None,
-    label_field: str = "codes",
+    label_field: Optional[str] = None,
     low_band: bool = False,
     recurse: bool = False,
     top: bool = False,
@@ -129,6 +129,7 @@ def analyze(
             logging.error(f"Error. invalid rtype value: {rtype}")
             return
 
+        valid_labels = set(["codes", "names", "alt_codes", "alt_names"])
         label_map = {
             "code": "codes",
             "name": "names",
@@ -139,14 +140,17 @@ def analyze(
             "alt-codes": "alt_codes",
             "alt-names": "alt_names",
         }
-        valid_labels = set(["codes", "names", "alt_codes", "alt_names"])
-        if label_field in label_map:
-            label_field = label_map[label_field]
-        if label_field in valid_labels:
-            cfg.infer.label_field = label_field
+
+        if label_field is None:
+            label_field = cfg.infer.label_field
         else:
-            logging.error(f"Error. invalid label field: {label_field}")
-            return
+            if label_field in label_map:
+                label_field = label_map[label_field]
+            if label_field in valid_labels:
+                cfg.infer.label_field = label_field
+            else:
+                logging.error(f"Error. invalid label field: {label_field}")
+                return
 
         if output_path:
             if not os.path.exists(output_path):
@@ -290,9 +294,9 @@ def analyze(
     "--label",
     "label_field",
     type=str,
-    default="codes",
     help='Optional label field. Valid values are "codes", "names", "alt_codes" and "alt_names"."'
-    ' Default is "codes", which outputs 4-letter species codes, while "names" outputs common names, '
+    " Defaults to the value specified in default.yaml."
+    '"codes" outputs 4-letter species codes, while "names" outputs common names, '
     '"alt_names" outputs scientific names and "alt_codes" outputs 6-letter species codes.',
 )
 @click.option(
@@ -334,7 +338,7 @@ def _analyze_cmd(
     num_threads: Optional[int],
     overlap: Optional[float],
     segment_len: Optional[float],
-    label_field: str,
+    label_field: Optional[str],
     low_band: bool,
     recurse: bool,
     top: bool,
