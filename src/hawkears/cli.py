@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import click
+import warnings
 
 try:
     from .__about__ import __version__  # type: ignore
@@ -15,6 +16,7 @@ except Exception:
 from .commands._analyze import _analyze_cmd
 from .commands._init import _init_cmd
 
+warnings.filterwarnings("ignore", message="Found keys that are in the model state dict")
 
 @click.group()
 @click.version_option(__version__)  # enabled the "hawkears --version" command
