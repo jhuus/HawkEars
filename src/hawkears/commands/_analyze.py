@@ -21,7 +21,7 @@ def analyze(
     cfg_path: Optional[str] = None,
     input_path: str = "",
     output_path: str = "",
-    rtype: str = "both",
+    rtype: str = "audacity",
     date: Optional[str] = None,
     region: Optional[str] = None,
     lat: Optional[float] = None,
@@ -230,8 +230,8 @@ def analyze(
     "-r",
     "--rtype",
     type=str,
-    default="both",
-    help='Output format type. Options are "audacity", "csv", or "both". Default="both".',
+    default="audacity",
+    help='Output format type. Options are "audacity", "csv", or "both". Default="audacity".',
 )
 @click.option(
     "--date",
