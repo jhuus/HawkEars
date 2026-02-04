@@ -7,7 +7,7 @@ from pathlib import Path
 import threading
 from typing import Optional
 
-import pandas as pd
+import polars as pl
 
 from britekit import util
 from britekit import Predictor
@@ -323,14 +323,12 @@ class Analyzer:
                 thread.join()
 
         if rtype in {"csv", "both"}:
-            # write combined CSVs for all threads
+            # write combined CSVs for all threads using polars for speed
             file_path = os.path.join(output_path, "scores.csv")
-            df = pd.concat(self.dataframes, ignore_index=True)
-            sorted_df = df.sort_values(by=["recording", "name", "start_time"])
-            sorted_df.to_csv(file_path, index=False, float_format="%.3f")
+            df = pl.concat([pl.from_pandas(d) for d in self.dataframes])
+            df.sort(["recording", "name", "start_time"]).write_csv(file_path, float_precision=3)
 
             if len(self.rarities_dataframes) > 0:
                 file_path = os.path.join(output_path, "rarities.csv")
-                df = pd.concat(self.rarities_dataframes, ignore_index=True)
-                sorted_df = df.sort_values(by=["recording", "name", "start_time"])
-                sorted_df.to_csv(file_path, index=False, float_format="%.3f")
+                df = pl.concat([pl.from_pandas(d) for d in self.rarities_dataframes])
+                df.sort(["recording", "name", "start_time"]).write_csv(file_path, float_precision=3)
