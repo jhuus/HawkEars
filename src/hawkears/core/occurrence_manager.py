@@ -158,10 +158,6 @@ class OccurrenceManager:
 
             region = county.code
 
-        print(
-            f"OccurrenceManager::_process_recordings region={region}, date={self.date}"
-        )
-
         week_num = self.week_num
         self.file_info = {}
         for recording_path in self.recording_paths:
