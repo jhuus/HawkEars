@@ -61,6 +61,7 @@ class SoundAlikeHeuristics:
             "MAGO": [SN(soundalike="HUGO", enabled=True)],
             "MOCH": [SN(soundalike="BCCH", enabled=True)],
             "NOPO": [SN(soundalike="CORA", enabled=True)],
+            "PAWR": [SN(soundalike="WIWR", enabled=True)],
             "RBSA": [
                 SN(soundalike="RNSA", enabled=True),
                 SN(soundalike="YBSA", enabled=True),
@@ -72,6 +73,7 @@ class SoundAlikeHeuristics:
             "SCTA": [SN(soundalike="WETA", enabled=True)],
             "SPTO": [SN(soundalike="EATO", enabled=True)],
             "WETA": [SN(soundalike="SCTA", enabled=True)],
+            "WIWR": [SN(soundalike="PAWR", enabled=True)],
             "YBSA": [
                 SN(soundalike="RBSA", enabled=True),
                 SN(soundalike="RNSA", enabled=True),
