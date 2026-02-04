@@ -49,8 +49,7 @@ def analyze(
     - input_path (str): Path to input audio file or directory containing audio files.
     - output_path (str): Path to output directory where results will be saved.
     - rtype (str): Output format type. Options are "audacity", "csv", or "both". Default is "audacity".
-    - date (str, optional): Date as yyyymmdd, mmdd, or 'file'. Specifying 'file' extracts the date from the file name,
-      using the file_date_regex config parameter.
+    - date (str, optional): Date as yyyymmdd, mmdd, or 'file'. Specifying 'file' extracts the date from the file name.
     - region (str, optional): eBird region code, e.g. 'CA-AB' for Alberta. Use as an alternative to latitude/longitude.
     - lat (float, optional): Latitude
     - lon (float, optional): Longitude
@@ -237,7 +236,7 @@ def analyze(
     "--date",
     "date",
     type=str,
-    help="Date as yyyymmdd, mmdd, or 'file'. Specifying 'file' extracts the date from the file name, using the file_date_regex config parameter.",
+    help="Date as yyyymmdd, mmdd, or 'file'. Specifying 'file' extracts the date from the file name.",
 )
 @click.option(
     "--region",

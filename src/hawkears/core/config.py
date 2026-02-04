@@ -29,10 +29,6 @@ class HawkEarsConfig:
     min_occurrence: float = (
         0.001  # ignore species if occurrence less than this for location/week
     )
-    file_date_regex: str = (
-        "\\S+_(\\d+)_.*"  # regex to extract date from file name (e.g. HNCAM015_20210529_161122.mp3)
-    )
-    file_date_regex_group: int = 1  # use group at offset 1
 
     # Parameters to control an inference heuristic.
     # If lower_min_if_confirmed is true, count the number of seconds for a class in a recording,

@@ -13,6 +13,10 @@ from britekit import OccurrencePickleProvider
 from hawkears.core.class_manager import ClassManager
 from hawkears.core.config import HawkEarsBaseConfig
 
+# Pattern matches YYYYMMDD, YYYY-MM-DD, or YYYY_MM_DD
+# The \2 backreference ensures consistent separator (or none)
+_DATE_PATTERN = re.compile(r"((?:19|20)\d{2})([-_]?)(\d{2})\2(\d{2})")
+
 
 class OccurrenceManager:
     def __init__(
@@ -30,10 +34,12 @@ class OccurrenceManager:
         self.class_name_set = set(self.provider.data["classes"])
         self.logged_location_error = False
 
-        if date is not None:
+        if date is None:
+            date = self.cfg.hawkears.date
+
+        self.date = date
+        if date is not None and date != "file":
             self.week_num = self._get_week_num_from_date_str(date)
-        elif self.cfg.hawkears.date is not None:
-            self.week_num = self._get_week_num_from_date_str(self.cfg.hawkears.date)
         else:
             self.week_num = None
 
@@ -66,11 +72,14 @@ class OccurrenceManager:
             return None
 
     def _get_week_num_from_filename(self, filename):
-        cfg = self.cfg.hawkears
-        result = re.split(cfg.file_date_regex, filename)
-        if len(result) > cfg.file_date_regex_group:
-            date_str = result[cfg.file_date_regex_group]
-            return self._get_week_num_from_date_str(date_str)
+        match = _DATE_PATTERN.search(filename)
+        if match:
+            year = int(match.group(1))
+            month = int(match.group(3))
+            day = int(match.group(4))
+            if 1 <= month <= 12 and 1 <= day <= 31:
+                date_str = f"{year:04d}{month:02d}{day:02d}"
+                return self._get_week_num_from_date_str(date_str)
 
         return None
 
@@ -149,11 +158,15 @@ class OccurrenceManager:
 
             region = county.code
 
+        print(
+            f"OccurrenceManager::_process_recordings region={region}, date={self.date}"
+        )
+
         week_num = self.week_num
         self.file_info = {}
         for recording_path in self.recording_paths:
             name = Path(recording_path).name
-            if cfg.date == "file":
+            if self.date == "file":
                 week_num = self._get_week_num_from_filename(name)
                 if week_num is None:
                     logging.error(f"Error: unable to extract valid date from {name}.")

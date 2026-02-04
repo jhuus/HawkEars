@@ -18,6 +18,7 @@ from .commands._init import _init_cmd
 
 warnings.filterwarnings("ignore", message="Found keys that are in the model state dict")
 
+
 @click.group()
 @click.version_option(__version__)  # enabled the "hawkears --version" command
 def cli():
