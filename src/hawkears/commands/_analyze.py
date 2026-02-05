@@ -27,13 +27,13 @@ def analyze(
     lat: Optional[float] = None,
     lon: Optional[float] = None,
     filelist: Optional[str] = None,
+    include: Optional[str] = None,
+    exclude: Optional[str] = None,
     start_seconds: float = 0,
     min_score: Optional[float] = None,
     num_threads: Optional[int] = None,
-    overlap: Optional[float] = None,
     segment_len: Optional[float] = None,
     label_field: Optional[str] = None,
-    low_band: bool = False,
     recurse: bool = False,
     top: bool = False,
 ):
@@ -42,31 +42,32 @@ def analyze(
 
     This command processes audio files or directories and generates predictions
     using a trained model or ensemble. The output can be saved as Audacity labels,
-    CSV files, or both.
+    CSV files, or Raven selection tables.
 
     Args:
-    - cfg_path (str): Path to YAML configuration file defining model and inference settings.
+    - cfg_path (str, optional): Path to YAML configuration file defining model and inference settings.
     - input_path (str): Path to input audio file or directory containing audio files.
     - output_path (str): Path to output directory where results will be saved.
-    - rtype (str): Output format type. Options are "audacity", "csv", or "raven". Default="audacity".
-      To get multiple output formats, specify "audacity+csv" for example. Only the first three characters
-      are needed, so you could specify "aud+csv+rav" to get all three output formats.
+    - rtype (str, optional): Output format type. Use "audacity", "csv", or "raven", or combine
+      with "+" (e.g., "audacity+csv"). Only first three characters needed. Default="audacity".
     - date (str, optional): Date as yyyymmdd, mmdd, or 'file'. Specifying 'file' extracts the date from the file name.
     - region (str, optional): eBird region code, e.g. 'CA-AB' for Alberta. Use as an alternative to latitude/longitude.
-    - lat (float, optional): Latitude
-    - lon (float, optional): Longitude
-    - filelist (str, optional): Path to CSV file containing input file names, latitudes and longitudes (or region codes)
-      and recording dates.
-    - start_seconds (float, optional): Where to start processing each recording, in seconds.
-      For example, '71' and '1:11' have the same meaning, and cause the first 71 seconds to be ignored. Default = 0.
+    - lat (float, optional): Latitude.
+    - lon (float, optional): Longitude.
+    - filelist (str, optional): Path to CSV file containing input file names, latitudes and longitudes
+      (or region codes) and recording dates.
+    - include (str, optional): Path to text file listing species to include. If specified,
+      exclude all other species. Defaults to value in config file.
+    - exclude (str, optional): Path to text file listing species to exclude.
+      Defaults to value in config file.
+    - start_seconds (float, optional): Where to start processing each recording, in seconds. Default=0.
     - min_score (float, optional): Confidence threshold. Predictions below this value are excluded.
-    - num_threads (int, optional): Number of threads to use for processing. Default is 3.
-    - overlap (float, optional): Spectrogram overlap in seconds for sliding window analysis.
+    - num_threads (int, optional): Number of threads to use for processing.
     - segment_len (float, optional): Fixed segment length in seconds. If specified, labels are
-        fixed-length; otherwise they are variable-length.
-    - label_field (str): Type of label to output, from "codes", "names", "alt_codes" or "alt_names".
-    - low_band (bool, optional): If true, run low-band classifier in addition to main models (default=False).
-    - recurse (bool, optional): If true, process sub-directories of the input directory (default=False).
+      fixed-length; otherwise they are variable-length.
+    - label_field (str, optional): Type of label to output: "codes" (4-letter), "names" (common names),
+      "alt_codes" (6-letter), or "alt_names" (scientific names).
+    - recurse (bool, optional): If true, process sub-directories of the input directory.
     - top (bool, optional): If true, show the top scores for the first spectrogram, then stop.
     """
 
@@ -126,9 +127,11 @@ def analyze(
             )
 
         # Process parameters
-        rtypes = rtype.split('+')
+        rtypes = rtype.split("+")
         for val in rtypes:
-            if not (val.startswith("aud") or val.startswith("csv") or val.startswith("rav")):
+            if not (
+                val.startswith("aud") or val.startswith("csv") or val.startswith("rav")
+            ):
                 logging.error(f"Error. invalid rtype value: {val}")
                 return
 
@@ -176,20 +179,20 @@ def analyze(
         if filelist is not None:
             cfg.hawkears.filelist = filelist
 
+        if include is not None:
+            cfg.hawkears.include_list = include
+
+        if exclude is not None:
+            cfg.hawkears.exclude_list = exclude
+
         if min_score is not None:
             cfg.infer.min_score = min_score
 
         if num_threads is not None:
             cfg.infer.num_threads = num_threads
 
-        if overlap is not None:
-            cfg.infer.overlap = overlap
-
         if segment_len is not None:
             cfg.infer.segment_len = segment_len
-
-        if low_band:
-            cfg.hawkears.low_band_classifier = True
 
         # Run inference
         logging.info(f"Using {device.upper()} for inference")
@@ -234,8 +237,8 @@ def analyze(
     "--rtype",
     type=str,
     default="audacity",
-    help='Output format type. Options are "audacity", "csv", or "raven". Default="audacity". ' \
-    'To get multiple output formats, specify "audacity+csv" for example. Only the first three characters ' \
+    help='Output format type. Options are "audacity", "csv", or "raven". Default="audacity". '
+    'To get multiple output formats, specify "audacity+csv" for example. Only the first three characters '
     'are needed, so you could specify "aud+csv+rav" to get all three output formats.',
 )
 @click.option(
@@ -261,8 +264,20 @@ def analyze(
 )
 @click.option(
     "--filelist",
-    type=click.Path(file_okay=True, dir_okay=False),
+    type=click.Path(file_okay=True, dir_okay=False, exists=True),
     help="Path to CSV file containing input file names, latitudes and longitudes (or region codes) and recording dates.",
+)
+@click.option(
+    "--include",
+    type=click.Path(file_okay=True, dir_okay=False, exists=True),
+    help="Path to text file listing common names of species to include. If specified, exclude all other species. "
+    "Defaults to value in config file.",
+)
+@click.option(
+    "--exclude",
+    type=click.Path(file_okay=True, dir_okay=False, exists=True),
+    help="Path to text file listing common names of species to exclude. "
+    "Defaults to value in config file.",
 )
 @click.option(
     "--start",
@@ -284,12 +299,6 @@ def analyze(
     help="Number of threads (optional, default = 3)",
 )
 @click.option(
-    "--overlap",
-    "overlap",
-    type=float,
-    help="Amount of segment overlap in seconds.",
-)
-@click.option(
     "--seg",
     "segment_len",
     type=float,
@@ -303,12 +312,6 @@ def analyze(
     " Defaults to the value specified in default.yaml."
     '"codes" outputs 4-letter species codes, while "names" outputs common names, '
     '"alt_names" outputs scientific names and "alt_codes" outputs 6-letter species codes.',
-)
-@click.option(
-    "--low",
-    "low_band",
-    is_flag=True,
-    help="If specified, run low-band classifier in addition to main models.",
 )
 @click.option(
     "--recurse",
@@ -338,13 +341,13 @@ def _analyze_cmd(
     lat: Optional[float],
     lon: Optional[float],
     filelist: Optional[str],
+    include: Optional[str],
+    exclude: Optional[str],
     start_seconds_str: Optional[str],
     min_score: Optional[float],
     num_threads: Optional[int],
-    overlap: Optional[float],
     segment_len: Optional[float],
     label_field: Optional[str],
-    low_band: bool,
     recurse: bool,
     top: bool,
     debug: bool,
@@ -371,13 +374,13 @@ def _analyze_cmd(
         lat,
         lon,
         filelist,
+        include,
+        exclude,
         start_seconds,
         min_score,
         num_threads,
-        overlap,
         segment_len,
         label_field,
-        low_band,
         recurse,
         top,
     )

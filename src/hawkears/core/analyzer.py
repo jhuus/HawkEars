@@ -140,7 +140,9 @@ class Analyzer:
                 dataframe = predictor.get_dataframe(
                     None, frame_map, None, recording_stem
                 )
-                file_path = str(Path(output_path) / f"{recording_stem}.HawkEars.selection.table.txt")
+                file_path = str(
+                    Path(output_path) / f"{recording_stem}.HawkEars.selection.table.txt"
+                )
                 self._save_raven_table(dataframe, file_path, recording_name)
 
             if top:
@@ -234,18 +236,20 @@ class Analyzer:
         """
         df = pl.from_pandas(dataframe)
         df = df.sort(["name", "start_time"])
-        raven_df = pl.DataFrame({
-            "Selection": range(1, len(df) + 1),
-            "View": ["Spectrogram 1"] * len(df),
-            "Channel": [1] * len(df),
-            "Begin File": [recording_name] * len(df),
-            "Begin Time (s)": df["start_time"],
-            "End Time (s)": df["end_time"],
-            "Low Freq (Hz)": [self.cfg.audio.min_freq] * len(df),
-            "High Freq (Hz)": [self.cfg.audio.max_freq] * len(df),
-            "Species": df["name"],
-            "Confidence": df["score"],
-        })
+        raven_df = pl.DataFrame(
+            {
+                "Selection": range(1, len(df) + 1),
+                "View": ["Spectrogram 1"] * len(df),
+                "Channel": [1] * len(df),
+                "Begin File": [recording_name] * len(df),
+                "Begin Time (s)": df["start_time"],
+                "End Time (s)": df["end_time"],
+                "Low Freq (Hz)": [self.cfg.audio.min_freq] * len(df),
+                "High Freq (Hz)": [self.cfg.audio.max_freq] * len(df),
+                "Species": df["name"],
+                "Confidence": df["score"],
+            }
+        )
         raven_df.write_csv(file_path, separator="\t", float_precision=4)
 
     def _get_recording_paths(self, input_path, recurse):
@@ -364,13 +368,19 @@ class Analyzer:
 
         if self.do_csv:
             # create combined dataframe from all threads
-            df = pl.concat([pl.from_pandas(d) for d in self.dataframes], how="vertical_relaxed")
+            df = pl.concat(
+                [pl.from_pandas(d) for d in self.dataframes], how="vertical_relaxed"
+            )
             df = df.sort(["recording", "name", "start_time"])
             file_path = os.path.join(output_path, "scores.csv")
             df.write_csv(file_path, float_precision=3)
 
         if len(self.rarities_dataframes) > 0:
             file_path = os.path.join(output_path, "rarities.csv")
-            df = pl.concat([pl.from_pandas(d) for d in self.rarities_dataframes], how="vertical_relaxed")
-            df.sort(["recording", "name", "start_time"]).write_csv(file_path, float_precision=3)
-
+            df = pl.concat(
+                [pl.from_pandas(d) for d in self.rarities_dataframes],
+                how="vertical_relaxed",
+            )
+            df.sort(["recording", "name", "start_time"]).write_csv(
+                file_path, float_precision=3
+            )
