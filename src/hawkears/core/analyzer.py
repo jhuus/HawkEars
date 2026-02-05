@@ -71,7 +71,6 @@ class Analyzer:
         self,
         recording_paths,
         output_path,
-        rtype,
         start_seconds,
         thread_num,
         top=False,
@@ -82,7 +81,6 @@ class Analyzer:
         Args:
         - recording_paths (list): Individual recording paths.
         - output_path (str): Where to write the output.
-        - rtype (str): Output format: "audacity", "csv" or "both".
         - start_seconds (float): Where to start processing each recording, in seconds from start.
         - thread_num (int): Thread number
         - top (bool): If true, show the top scores for the first spectrogram, then return.
@@ -112,7 +110,7 @@ class Analyzer:
             rarities_frame_map = self._update_frame_map(frame_map, recording_name)
 
             recording_stem = Path(recording_path).stem
-            if rtype in {"audacity", "both"}:
+            if self.do_audacity:
                 file_path = str(Path(output_path) / f"{recording_stem}_scores.txt")
                 self._save_audacity_labels(predictor, frame_map, file_path)
 
@@ -126,7 +124,7 @@ class Analyzer:
                         predictor, rarities_frame_map, file_path, False
                     )
 
-            if rtype in {"csv", "both"}:
+            if self.do_csv:
                 dataframe = predictor.get_dataframe(
                     None, frame_map, None, recording_stem
                 )
@@ -137,6 +135,13 @@ class Analyzer:
                         None, rarities_frame_map, None, recording_stem
                     )
                     self.rarities_dataframes.append(dataframe)
+
+            if self.do_raven:
+                dataframe = predictor.get_dataframe(
+                    None, frame_map, None, recording_stem
+                )
+                file_path = str(Path(output_path) / f"{recording_stem}.HawkEars.selection.table.txt")
+                self._save_raven_table(dataframe, file_path, recording_name)
 
             if top:
                 break
@@ -218,6 +223,31 @@ class Analyzer:
         except (IOError, OSError) as e:
             raise Exception(f"Failed to write Audacity labels to {file_path}: {str(e)}")
 
+    def _save_raven_table(self, dataframe, file_path: str, recording_name: str) -> None:
+        """
+        Save detection results in Raven selection table format (tab-delimited).
+
+        Args:
+        - dataframe: Pandas DataFrame with columns ['recording', 'name', 'start_time', 'end_time', 'score'].
+        - file_path (str): Output path for the Raven selection table.
+        - recording_name (str): Name of the audio file.
+        """
+        df = pl.from_pandas(dataframe)
+        df = df.sort(["name", "start_time"])
+        raven_df = pl.DataFrame({
+            "Selection": range(1, len(df) + 1),
+            "View": ["Spectrogram 1"] * len(df),
+            "Channel": [1] * len(df),
+            "Begin File": [recording_name] * len(df),
+            "Begin Time (s)": df["start_time"],
+            "End Time (s)": df["end_time"],
+            "Low Freq (Hz)": [self.cfg.audio.min_freq] * len(df),
+            "High Freq (Hz)": [self.cfg.audio.max_freq] * len(df),
+            "Species": df["name"],
+            "Confidence": df["score"],
+        })
+        raven_df.write_csv(file_path, separator="\t", float_precision=4)
+
     def _get_recording_paths(self, input_path, recurse):
         if os.path.isfile(input_path):
             return [input_path]
@@ -241,7 +271,7 @@ class Analyzer:
         self,
         input_path: str,
         output_path: str,
-        rtype: str = "audacity",
+        rtypes: list[str] = ["audacity"],
         date: Optional[str] = None,
         start_seconds: float = 0,
         recurse: bool = False,
@@ -253,7 +283,8 @@ class Analyzer:
         Args:
         - input_path (str): Recording or directory containing recordings.
         - output_path (str): Output directory.
-        - rtype (str): Output format: "audacity", "csv" or "both".
+        - rtypes (list[str]): List of output formats. Valid values are "audacity", "csv" or
+          "raven". Only the first three characters are needed, so ["aud", "csv", "rav"] is fine.
         - date (str): If specified, recording date or "file" to get dates from filenames.
         - start_seconds (float): Where to start processing each recording, in seconds.
         - recurse (bool): If specified, process sub-directories of the input directory.
@@ -266,6 +297,17 @@ class Analyzer:
         cfg = self.cfg.hawkears
         self.check_occurrence = False
         self.occur_mgr: Optional[OccurrenceManager] = None
+
+        self.do_csv = False
+        self.do_audacity = False
+        self.do_raven = False
+        for val in rtypes:
+            if val.startswith("aud"):
+                self.do_audacity = True
+            elif val.startswith("csv"):
+                self.do_csv = True
+            elif val.startswith("rav"):
+                self.do_raven = True
 
         if cfg.filelist is not None:
             self.check_occurrence = True
@@ -295,7 +337,6 @@ class Analyzer:
             self._process_recordings(
                 recording_paths,
                 output_path,
-                rtype,
                 start_seconds,
                 1,
                 top,
@@ -309,7 +350,6 @@ class Analyzer:
                     args=(
                         recordings_per_thread[i],
                         output_path,
-                        rtype,
                         start_seconds,
                         i + 1,
                         top,
@@ -322,13 +362,15 @@ class Analyzer:
                 # thread exceptions should be handled in caller
                 thread.join()
 
-        if rtype in {"csv", "both"}:
-            # write combined CSVs for all threads using polars for speed
+        if self.do_csv:
+            # create combined dataframe from all threads
+            df = pl.concat([pl.from_pandas(d) for d in self.dataframes], how="vertical_relaxed")
+            df = df.sort(["recording", "name", "start_time"])
             file_path = os.path.join(output_path, "scores.csv")
-            df = pl.concat([pl.from_pandas(d) for d in self.dataframes])
+            df.write_csv(file_path, float_precision=3)
+
+        if len(self.rarities_dataframes) > 0:
+            file_path = os.path.join(output_path, "rarities.csv")
+            df = pl.concat([pl.from_pandas(d) for d in self.rarities_dataframes], how="vertical_relaxed")
             df.sort(["recording", "name", "start_time"]).write_csv(file_path, float_precision=3)
 
-            if len(self.rarities_dataframes) > 0:
-                file_path = os.path.join(output_path, "rarities.csv")
-                df = pl.concat([pl.from_pandas(d) for d in self.rarities_dataframes])
-                df.sort(["recording", "name", "start_time"]).write_csv(file_path, float_precision=3)

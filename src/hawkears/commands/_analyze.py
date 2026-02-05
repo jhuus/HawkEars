@@ -48,7 +48,9 @@ def analyze(
     - cfg_path (str): Path to YAML configuration file defining model and inference settings.
     - input_path (str): Path to input audio file or directory containing audio files.
     - output_path (str): Path to output directory where results will be saved.
-    - rtype (str): Output format type. Options are "audacity", "csv", or "both". Default is "audacity".
+    - rtype (str): Output format type. Options are "audacity", "csv", or "raven". Default="audacity".
+      To get multiple output formats, specify "audacity+csv" for example. Only the first three characters
+      are needed, so you could specify "aud+csv+rav" to get all three output formats.
     - date (str, optional): Date as yyyymmdd, mmdd, or 'file'. Specifying 'file' extracts the date from the file name.
     - region (str, optional): eBird region code, e.g. 'CA-AB' for Alberta. Use as an alternative to latitude/longitude.
     - lat (float, optional): Latitude
@@ -124,9 +126,11 @@ def analyze(
             )
 
         # Process parameters
-        if rtype not in {"audacity", "csv", "both"}:
-            logging.error(f"Error. invalid rtype value: {rtype}")
-            return
+        rtypes = rtype.split('+')
+        for val in rtypes:
+            if not (val.startswith("aud") or val.startswith("csv") or val.startswith("rav")):
+                logging.error(f"Error. invalid rtype value: {val}")
+                return
 
         valid_labels = set(["codes", "names", "alt_codes", "alt_names"])
         label_map = {
@@ -191,7 +195,7 @@ def analyze(
         logging.info(f"Using {device.upper()} for inference")
         start_time = time.time()
         analyzer = Analyzer(cfg)
-        analyzer.run(input_path, output_path, rtype, date, start_seconds, recurse, top)
+        analyzer.run(input_path, output_path, rtypes, date, start_seconds, recurse, top)
         elapsed_time = util.format_elapsed_time(start_time, time.time())
         logging.info(f"Elapsed time = {elapsed_time}")
     except InferenceError as e:
@@ -230,7 +234,9 @@ def analyze(
     "--rtype",
     type=str,
     default="audacity",
-    help='Output format type. Options are "audacity", "csv", or "both". Default="audacity".',
+    help='Output format type. Options are "audacity", "csv", or "raven". Default="audacity". ' \
+    'To get multiple output formats, specify "audacity+csv" for example. Only the first three characters ' \
+    'are needed, so you could specify "aud+csv+rav" to get all three output formats.',
 )
 @click.option(
     "--date",
