@@ -31,15 +31,59 @@ class SoundAlikeHeuristics:
         self.class_mgr = class_mgr
         self.occur_mgr = occur_mgr
 
-        # location-independent cases (see code below to understand the variables)
+        # Location-independent cases
         self.min_score = 0.5  # compare frames with scores >= this
-        self.frame_distance = 5  # max distance to check for high soundalike scores
-        self.max_independent = 24  # treat as valid if >= this many independent frames
-        self.min_coverage = 0.5  # treat as soundalike if it overlaps by this much
+
+        # frame_distance: max distance to check for high soundalike scores
+        # max_independent: treat as valid if >= this many independent frames
+        # min_coverage: treat as soundalike if it overlaps by this much or more
+        # min_soundalike: if min_coverage is 0, treat as soundalike if soundalike
+        # has at least this many frames within frame_distance
         self.no_location = {
-            "BWHA": [SN(soundalike="WTSP", enabled=True)],
-            "HASP": [SN(soundalike="WTSP", enabled=True)],
-            "VATH": [SN(soundalike="WTSP", enabled=True)],
+            # BWHA/WTSP is based on overlap
+            "BWHA": [
+                SN(
+                    soundalike="WTSP",
+                    frame_distance=5,
+                    min_coverage=0.5,
+                    max_independent=24,
+                    min_soundalike=0,
+                    enabled=True,
+                )
+            ],
+            # HASP/WTSP is based on overlap
+            "HASP": [
+                SN(
+                    soundalike="WTSP",
+                    frame_distance=5,
+                    min_coverage=0.5,
+                    max_independent=24,
+                    min_soundalike=0,
+                    enabled=True,
+                )
+            ],
+            # SWTH/FROG-PEEP is not based on overlap, so min_soundalike applies
+            "SWTH": [
+                SN(
+                    soundalike="FROG-PEEP",
+                    frame_distance=60,
+                    min_coverage=0,
+                    max_independent=0,  # ignored when min_coverage=0
+                    min_soundalike=20,
+                    enabled=True,
+                )
+            ],
+            # BWHA/WTSP is based on overlap
+            "VATH": [
+                SN(
+                    soundalike="WTSP",
+                    frame_distance=5,
+                    min_coverage=0.5,
+                    max_independent=24,
+                    min_soundalike=0,
+                    enabled=True,
+                )
+            ],
         }
 
         # Location-dependent cases. If the "key" species is rare and
@@ -121,9 +165,8 @@ class SoundAlikeHeuristics:
         to zero.
         """
         for code, defns in self.no_location.items():
-            updated = False
             for defn in defns:
-                if updated or not defn.enabled:
+                if not defn.enabled:
                     continue
 
                 info = self.class_mgr.class_info_by_code(code)
@@ -144,29 +187,60 @@ class SoundAlikeHeuristics:
                 if soundalike_scores.max() < self.min_score:
                     continue  # nothing to do
 
-                # Spread high soundalike scores to adjacent frames
-                soundalike_scores = maximum_filter1d(
-                    soundalike_scores, size=2 * self.frame_distance + 1, mode="constant"
-                )
+                if defn.min_coverage > 0:
+                    # Check soundalike based on overlap, so spread
+                    # high soundalike scores to adjacent frames
+                    soundalike_scores = maximum_filter1d(
+                        soundalike_scores,
+                        size=2 * defn.frame_distance + 1,
+                        mode="constant",
+                    )
 
-                # Skip if enough high scores where there is no soundalike
-                class_mask = class_scores >= self.min_score
-                soundalike_mask = soundalike_scores >= self.min_score
-                independent = class_mask & ~soundalike_mask
-                if independent.sum() >= self.max_independent:
-                    continue
+                    # Skip if enough high scores where there is no soundalike
+                    class_mask = class_scores >= self.min_score
+                    soundalike_mask = soundalike_scores >= self.min_score
+                    independent = class_mask & ~soundalike_mask
+                    if independent.sum() >= defn.max_independent:
+                        continue
 
-                # Calculate proportion of high class frames that overlap with high soundalike frames
-                covered = class_mask & soundalike_mask
-                class_sum = class_mask.sum()
-                if class_sum == 0:
-                    continue  # avoid divide-by-zero
-                coverage = covered.sum() / class_sum
+                    # Calculate proportion of high class frames that overlap with high soundalike frames
+                    covered = class_mask & soundalike_mask
+                    class_sum = class_mask.sum()
+                    if class_sum == 0:
+                        continue  # avoid divide-by-zero
+                    coverage = covered.sum() / class_sum
 
-                # If soundalike is sufficiently overlapping, zero out the class scores
-                if coverage >= self.min_coverage:
-                    frame_map[:, class_idx] = 0.0
-                    updated = True
+                    # If soundalike is sufficiently overlapping, zero out the class scores
+                    if coverage >= defn.min_coverage:
+                        frame_map[:, class_idx] = 0.0
+                else:
+                    # Check soundalike based on score count, so skip
+                    # if not enough high soundalike scores globally
+                    soundalike_high = soundalike_scores >= self.min_score
+                    if soundalike_high.sum() < defn.min_soundalike:
+                        continue
+
+                    # For each frame, count soundalike frames above threshold
+                    # within frame_distance. That is, every entry of soundalike_count
+                    # gives the number of soundalike frames above the threshold
+                    # within frame distance of that location.
+                    window = 2 * defn.frame_distance + 1
+                    soundalike_count = np.convolve(
+                        soundalike_high.astype(np.float64),
+                        np.ones(window),
+                        mode="same",
+                    )
+
+                    # soundalike_mask will be True for every entry where there
+                    # are "too many" soundalike frames above the
+                    # threshold within the defined distance
+                    soundalike_mask = soundalike_count >= defn.min_soundalike
+
+                    # Zero out any class scores with too many nearby soundalikes
+                    class_mask = class_scores >= self.min_score
+                    covered = class_mask & soundalike_mask
+                    if covered.sum() > 0:
+                        frame_map[covered, class_idx] = 0.0
 
     def _process_location_dependent(self, frame_map, recording_path):
         """
@@ -184,9 +258,8 @@ class SoundAlikeHeuristics:
 
         filename = Path(recording_path).name
         for code, defns in self.with_location.items():
-            updated = False
             for defn in defns:
-                if updated or not defn.enabled:
+                if not defn.enabled:
                     continue
 
                 info = self.class_mgr.class_info_by_code(code)
@@ -207,4 +280,3 @@ class SoundAlikeHeuristics:
                         frame_map[:, to_idx], frame_map[:, from_idx]
                     )
                     frame_map[:, from_idx] = 0
-                    updated = True
