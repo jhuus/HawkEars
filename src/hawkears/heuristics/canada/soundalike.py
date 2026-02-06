@@ -95,6 +95,7 @@ class SoundAlikeHeuristics:
             "BAGO": [SN(soundalike="COGO", enabled=True)],
             "BITH": [SN(soundalike="GCTH", enabled=True)],
             "BOOW": [SN(soundalike="WISN", enabled=True)],
+            "CAJA": [SN(soundalike="BLJA", enabled=True)],
             "CBCH": [SN(soundalike="BCCH", enabled=True)],
             "COGO": [SN(soundalike="BAGO", enabled=True)],
             "EATO": [SN(soundalike="SPTO", enabled=True)],
