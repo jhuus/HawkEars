@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from typing import Optional
+
 from britekit import Audio
 import numpy as np
 
@@ -56,9 +58,12 @@ class BoostScoreHeuristics:
     def __call__(
         self,
         recording_path: str,
-        frame_map: np.ndarray,
+        frame_map: Optional[np.ndarray],
         start_seconds: float,
     ):
+        if frame_map is None:
+            return
+
         for i, index in enumerate(self.class_indexes):
             scores = frame_map[:, index]
             hi_mask = scores > self.min_score

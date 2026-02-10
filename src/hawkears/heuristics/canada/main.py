@@ -11,7 +11,7 @@ from hawkears.heuristics.canada.boost_scores import BoostScoreHeuristics
 from hawkears.heuristics.canada.low_band import LowBandHeuristics
 from hawkears.heuristics.canada.soundalike import SoundAlikeHeuristics
 
-from typing import Protocol
+from typing import Optional, Protocol
 import numpy as np
 
 
@@ -19,7 +19,7 @@ class Heuristics(Protocol):
     def __call__(
         self,
         recording_path: str,
-        frame_map: np.ndarray,
+        frame_map: Optional[np.ndarray],
         start_seconds: float,
     ) -> None: ...
 
@@ -49,8 +49,11 @@ class CanadaHeuristicsManager(HeuristicsManager):
     def process_recording(
         self,
         recording_path: str,
-        frame_map: np.ndarray,
+        frame_map: Optional[np.ndarray],
         start_seconds: float,
     ):
+        if frame_map is None:
+            return
+
         for handler in self.handlers:
             handler(recording_path, frame_map, start_seconds)

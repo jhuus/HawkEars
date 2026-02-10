@@ -3,6 +3,7 @@
 import logging
 from pathlib import Path
 from types import SimpleNamespace as SN
+from typing import Optional
 
 import numpy as np
 from scipy.ndimage import maximum_filter1d
@@ -93,7 +94,10 @@ class SoundAlikeHeuristics:
         self.min_common = 0.01  # soundalike species occurrence > this?
         self.with_location = {
             "BAGO": [SN(soundalike="COGO", enabled=True)],
-            "BITH": [SN(soundalike="GCTH", enabled=True)],
+            "BITH": [
+                SN(soundalike="GCTH", enabled=True),
+                SN(soundalike="SWTH", enabled=True),
+            ],
             "BOOW": [SN(soundalike="WISN", enabled=True)],
             "CAJA": [SN(soundalike="BLJA", enabled=True)],
             "CBCH": [SN(soundalike="BCCH", enabled=True)],
@@ -104,7 +108,9 @@ class SoundAlikeHeuristics:
             "INBU": [SN(soundalike="LAZB", enabled=True)],
             "LAZB": [SN(soundalike="INBU", enabled=True)],
             "MAGO": [SN(soundalike="HUGO", enabled=True)],
+            "MOBL": [SN(soundalike="NOCA", enabled=True)],
             "MOCH": [SN(soundalike="BCCH", enabled=True)],
+            "NOCA": [SN(soundalike="MOBL", enabled=True)],
             "NOPO": [SN(soundalike="CORA", enabled=True)],
             "PAWR": [SN(soundalike="WIWR", enabled=True)],
             "RBSA": [
@@ -118,6 +124,7 @@ class SoundAlikeHeuristics:
             "SCTA": [SN(soundalike="WETA", enabled=True)],
             "SPTO": [SN(soundalike="EATO", enabled=True)],
             "WETA": [SN(soundalike="SCTA", enabled=True)],
+            "WEWA": [SN(soundalike="CHSP", enabled=True)],
             "WIWR": [SN(soundalike="PAWR", enabled=True)],
             "YBSA": [
                 SN(soundalike="RBSA", enabled=True),
@@ -137,11 +144,12 @@ class SoundAlikeHeuristics:
     def __call__(
         self,
         recording_path: str,
-        frame_map: np.ndarray,
+        frame_map: Optional[np.ndarray],
         start_seconds: float,
     ):
-        self._process_location_independent(frame_map)
-        self._process_location_dependent(frame_map, recording_path)
+        if frame_map is not None:
+            self._process_location_independent(frame_map)
+            self._process_location_dependent(frame_map, recording_path)
 
     def _check_definition(self, code, defn):
         info = self.class_mgr.class_info_by_code(code)

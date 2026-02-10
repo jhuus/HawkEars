@@ -94,6 +94,10 @@ class Analyzer:
                 recording_path, self.cfg.hawkears.spec_increment, start_seconds
             )
 
+            if frame_map is None:
+                logging.info(f"No predictions generated for {recording_path} (length = {predictor.audio.seconds():.2f} seconds)")
+                continue
+
             if heuristics_manager is not None:
                 # update the frame map with special logic for some species,
                 # then restore audio settings
