@@ -27,7 +27,7 @@ class HawkEarsConfig:
         None  # eBird county code or prefix, e.g. CA-ON=Ontario, CA-ON-OT=Ottawa
     )
     min_occurrence: float = (
-        0.001  # ignore species if occurrence less than this for location/week
+        0.0002  # ignore species if occurrence less than this for location/week
     )
 
     # Parameters to control an inference heuristic.
