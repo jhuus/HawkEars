@@ -99,6 +99,7 @@ class SoundAlikeHeuristics:
                 SN(soundalike="SWTH", enabled=True),
             ],
             "BOOW": [SN(soundalike="WISN", enabled=True)],
+            "CAGU": [SN(soundalike="RBGU", enabled=True)],
             "CAJA": [SN(soundalike="BLJA", enabled=True)],
             "CBCH": [SN(soundalike="BCCH", enabled=True)],
             "COGO": [SN(soundalike="BAGO", enabled=True)],
@@ -113,6 +114,9 @@ class SoundAlikeHeuristics:
             "NOCA": [SN(soundalike="MOBL", enabled=True)],
             "NOPO": [SN(soundalike="CORA", enabled=True)],
             "PAWR": [SN(soundalike="WIWR", enabled=True)],
+            "PHVI": [SN(soundalike="REVI", enabled=True)],
+            "PIGU": [SN(soundalike="CEDW", enabled=True)],
+            "RBGU": [SN(soundalike="CAGU", enabled=True)],
             "RBSA": [
                 SN(soundalike="RNSA", enabled=True),
                 SN(soundalike="YBSA", enabled=True),
@@ -123,6 +127,7 @@ class SoundAlikeHeuristics:
             ],
             "SCTA": [SN(soundalike="WETA", enabled=True)],
             "SPTO": [SN(soundalike="EATO", enabled=True)],
+            "VASW": [SN(soundalike="AMRE", enabled=True)],
             "WETA": [SN(soundalike="SCTA", enabled=True)],
             "WEWA": [SN(soundalike="CHSP", enabled=True)],
             "WIWR": [SN(soundalike="PAWR", enabled=True)],
@@ -267,25 +272,50 @@ class SoundAlikeHeuristics:
 
         filename = Path(recording_path).name
         for code, defns in self.with_location.items():
-            for defn in defns:
-                if not defn.enabled:
-                    continue
+            enabled_defns = [d for d in defns if d.enabled]
+            if not enabled_defns:
+                continue
 
-                info = self.class_mgr.class_info_by_code(code)
-                if not info.include:
-                    continue  # omitted from output anyway
+            info = self.class_mgr.class_info_by_code(code)
+            if not info.include:
+                continue  # omitted from output anyway
 
+            value = self.occur_mgr.get_value(filename, info.name)
+            if value >= self.max_rare:
+                continue  # code species is not rare here, skip
+
+            # Collect soundalikes that are common at this location
+            candidates = []
+            for defn in enabled_defns:
                 other_info = self.class_mgr.class_info_by_code(defn.soundalike)
-                value = self.occur_mgr.get_value(filename, info.name)
                 other_value = self.occur_mgr.get_value(filename, other_info.name)
+                if other_value > self.min_common:
+                    candidates.append((other_info, other_value))
 
-                if value < self.max_rare and other_value > self.min_common:
-                    # The defined species is rare and the soundalike is common,
-                    # so set soundalike scores to max of the two, then set defined
-                    # species scores to zero.
-                    from_idx = info.index
-                    to_idx = other_info.index
-                    frame_map[:, to_idx] = np.maximum(
-                        frame_map[:, to_idx], frame_map[:, from_idx]
-                    )
-                    frame_map[:, from_idx] = 0
+            if not candidates:
+                continue
+
+            # Pick the best candidate
+            if len(candidates) == 1:
+                best_info = candidates[0][0]
+            else:
+                # Sort by occurrence descending to compare top two
+                candidates.sort(key=lambda x: x[1], reverse=True)
+                if candidates[0][1] >= 10 * candidates[1][1]:
+                    # Most common is at least 10x more common than next
+                    best_info = candidates[0][0]
+                else:
+                    # Use highest sum of frame scores
+                    best_info = max(
+                        candidates,
+                        key=lambda x: frame_map[:, x[0].index].sum(),
+                    )[0]
+
+            # Set best candidate scores to max of the two, then zero out
+            # the original species scores.
+            from_idx = info.index
+            to_idx = best_info.index
+            frame_map[:, to_idx] = np.maximum(
+                frame_map[:, to_idx], frame_map[:, from_idx]
+            )
+            frame_map[:, from_idx] = 0
