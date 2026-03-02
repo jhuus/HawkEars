@@ -3,7 +3,7 @@
 # applied if device='mps'.
 audio:
   choose_channel: true
-misc:
+infer:
   max_models: 2
 hawkears:
   low_band_classifier: false
