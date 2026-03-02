@@ -118,6 +118,10 @@ class SoundAlikeHeuristics:
             "PAWR": [SN(soundalike="WIWR", enabled=True)],
             "PHVI": [SN(soundalike="REVI", enabled=True)],
             "PIGU": [SN(soundalike="CEDW", enabled=True)],
+            "PIWA": [
+                SN(soundalike="DEJU", enabled=True),
+                SN(soundalike="OCWA", enabled=True),
+            ],
             "RBGU": [SN(soundalike="CAGU", enabled=True)],
             "RBSA": [
                 SN(soundalike="RNSA", enabled=True),
