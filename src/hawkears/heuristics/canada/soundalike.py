@@ -94,6 +94,7 @@ class SoundAlikeHeuristics:
         self.min_common = 0.01  # soundalike species occurrence > this?
         self.with_location = {
             "BAGO": [SN(soundalike="COGO", enabled=True)],
+            "BCCH": [SN(soundalike="BOCH", enabled=True)],
             "BHVI": [SN(soundalike="CAVI", enabled=True)],
             "BITH": [
                 SN(soundalike="GCTH", enabled=True),
