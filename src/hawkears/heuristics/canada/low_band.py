@@ -3,7 +3,7 @@
 from copy import deepcopy
 import logging
 import os
-from typing import cast
+from typing import cast, Optional
 
 from britekit import Audio, Predictor
 import numpy as np
@@ -64,13 +64,14 @@ class LowBandHeuristics:
     def __call__(
         self,
         recording_path: str,
-        frame_map: np.ndarray,
+        frame_map: Optional[np.ndarray],
         start_seconds: float,
     ):
         """
         Use the low-band model to get a frame map for the given recording.
         Then update the input frame map using the max score for RUGR and SPGR.
         """
+        assert frame_map is not None
         if not self.enabled:
             return
 
