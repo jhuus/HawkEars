@@ -17,7 +17,7 @@ doi = {https://doi.org/10.1016/j.ecoinf.2025.103122},
 }
 ```
 
-This repository contains HawkEars 2.x. Because HawkEars 2.0 was a complete rewrite, using all new code based on [BriteKit](https://github.com/jhuus/BriteKit/), we used a brand new github repository. HawkEars 1.0, which is described in the paper referenced above, is still available [here](https://github.com/jhuus/HawkEars1/).
+This repository contains HawkEars 2.x. Because HawkEars 2.0 was a complete rewrite, using all new code based on [BriteKit](https://github.com/jhuus/BriteKit/), we used a brand new github repository. HawkEars 1.0, which is described in the paper referenced above, is still available [here](https://github.com/jhuus/HawkEars1/). A comparison of HawkEars 1.0 and 2.0 is provided here.
 
 ## Installation
 
@@ -170,8 +170,8 @@ analyze(
     - recurse (bool, optional): If true, process sub-directories of the input directory.
     - top (bool, optional): If true, show the top scores for the first spectrogram, then stop.
 
-
+## What's New in HawkEars 2.0
+As noted above, HawkEars 2.0 is a complete rewrite based on BriteKit. Differences with 1.0 a
 
 ## User Feedback
 If you have any problems during installation or usage, please post an issue here. We would also appreciate any enhancement requests or examples of false positives or false negatives, which can also be posted as issues, or in an email to jhuus at gmail dot com.
-
