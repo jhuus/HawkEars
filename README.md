@@ -1,1 +1,177 @@
-TODO
+![](images/HawkEars-Logo_Horiz_Descriptor_Full-Colour.png)
+
+## Introduction
+HawkEars is a desktop program that scans audio recordings for bird or amphibian sounds and generates label files formatted for [Audacity](https://www.audacityteam.org/), [Raven](https://www.ravensoundsoftware.com/) or as a CSV file. This repository includes the source code and trained models for a list of 360 bird and 15 amphibian species found in Canada and the northern United States. The complete list is found [here](https://github.com/jhuus/HawkEars2/install/canada/data/classes.csv). The repository does not include the raw data or spectrograms used to train the model.
+
+If you use HawkEars for your acoustic analyses and research, please cite as:
+```
+@article{HUUS2025103122,
+title = {HawkEars: A regional, high-performance avian acoustic classifier},
+author = {Jan Huus and Kevin G. Kelly and Erin M. Bayne and Elly C. Knight},
+url = {https://www.sciencedirect.com/science/article/pii/S1574954125001311},
+journal = {Ecological Informatics},
+pages = {103122},
+year = {2025},
+issn = {1574-9541},
+doi = {https://doi.org/10.1016/j.ecoinf.2025.103122},
+}
+```
+
+This repository contains HawkEars 2.x. Because HawkEars 2.0 was a complete rewrite, using all new code based on [BriteKit](https://github.com/jhuus/BriteKit/), we used a brand new github repository. HawkEars 1.0, which is described in the paper referenced above, is still available [here](https://github.com/jhuus/HawkEars1/).
+
+## Installation
+
+If you have a [CUDA-compatible NVIDIA GPU](https://developer.nvidia.com/cuda-gpus), such as a Geforce RTX, you can gain a major performance improvement by installing [CUDA](https://docs.nvidia.com/cuda/). If you have an Apple Metal processor, such as an M3 or M4, no CUDA installation is needed. If you have an Intel or AMD processor without a GPU, you can improve performance by installing Intel OpenVINO ("pip install openvino").
+
+It is best to install HawkEars in a virtual environment, such as a [Python venv](https://docs.python.org/3/library/venv.html). Once you have that set up, install HawkEars using pip, which is included in Python installations:
+
+```
+pip install hawkears
+```
+In Windows environments, you then need to uninstall and reinstall PyTorch:
+```
+pip uninstall -y torch torchvision torchaudio
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+```
+Note that cu126 refers to CUDA 12.6.\
+
+Once HawkEars is installed, initialize a working environment using the `init` command:
+```
+hawkears init
+```
+This creates and populates several directories under the current working directory. Use the --dest option to specify an alternative location.
+## Analyzing Field Recordings
+### Overview
+To run analysis (aka inference), type:
+
+```
+hawkears analyze -i <input path> -o <output path> <additional options>
+```
+
+Available options are listed [here](TBD), and you can view them by typing:
+
+```
+hawkears analyze --help
+```
+
+The input path can be a directory or a reference to a single audio file, but the output path must be a directory, where the output files will be stored. If no output directory is specified, output will be saved in the input directory. As a quick first test, try:
+
+```
+hawkears analyze -i recordings
+```
+
+This will analyze the recording(s) included in the recordings directory. The default output format is Audacity. So this example will generate a label file that you can view by opening the recording in Audacity, clicking File / Import / Labels and selecting the generated label file. Audacity should then look something like this:
+
+![](images/audacity-labels.png)
+
+### Output Format
+
+The --rtype option lets you specify Audacity, Raven, CSV or a combination. For example, to get Raven and CSV output, specify "--rtype raven+csv".
+
+By default, species are identified using [4-letter banding codes](https://www.birdpop.org/pages/birdSpeciesCodes.php), but common names can be shown instead using the "--label names" option. You can also specify "--label alt-names" for scientific names and "--label alt-codes" for 6-letter codes. The numeric suffix on each label is a score or prediction, which is similar to a probability.
+
+### Including or Excluding Species
+
+By default, labels are generated for birds only. This is because amphibians, mammals and other classes are listed in data/exclude.txt. You can use the --include or --exclude options to control which classes are included in the output. For example, if you are only interested in Ovenbirds and Tennessee Warblers, create a file called, for example, data/my_include.txt with those two names (one per line), and specify "--include data/my_include.txt".
+
+### Location and Date Processing
+
+When possible, you should provide locations and dates to the analyze command. In the simplest case this will filter out bird species that are "too rare" at that location/date. They are considered too rare if their occurrence value falls below the value specified in the [min_occurrence](TBD) config parameter. In some cases, HawkEars uses location and date values to identify a species. For example, if the neural networks identify an Eastern Towhee on the west coast of Canada, HawkEars will switch the ID to Spotted Towhee, since they sound very similar and Eastern Towhee is not found there. There are several ways to provide the location and date, as described in the [Command-line Options](#command-line-options) section.
+
+Where available, bird species occurrence values are from [eBird Status and Trends](https://science.ebird.org/en/status-and-trends). If not available there, they are from barcharts in the eBird Explore interface.
+
+## Command-line Options
+TBD
+
+* `--filelist <CSV file>`
+    * In the CSV file, provide four columns: filename, latitude, longitude and recording_date, where the latter is in YYYY-MM-DD format.
+* `--region <code>`
+    * The code can be any eBird county code or prefix. For example, CA-ON-OT is Ottawa, CA-ON is Ontario and CA is Canada. It's best to provide a specific county when possible.
+* `--lat <value>`
+    * The latitude. This requires that longitude and date are also specified, and that region is not specified.
+* `--lon <value>`
+    * The longitude. This requires that latitude and date are also specified, and that region is not specified.
+* `--date <argument>`
+    * The argument can be a date in YYYY-MM-DD format, or the word "file". If the latter is specified, HawkEars will get dates from the file names, where the date can occur anywhere in the file name in YYYY-MM-DD or YYYYMMDD format.
+
+
+## Configuration
+HawkEars is based on [BriteKit](https://github.com/jhuus/BriteKit/) and extends its [YAML](https://yaml.org/)-based configuration system. The analyze command reads default parameters from yaml/default.yaml. Any parameters in the audio, infer or misc groups override corresponding BriteKit defaults. The hawkears groups contains HawkEars-specific parameters. In a Linux or Windows environment, if no GPU is detected, analyze then reads yaml/default-CPU.yaml to apply additional overrides. In a Mac environment it reads yaml/default-MPS.yaml and applies those overrides.
+
+For settings in the audio, infer and misc sections, refer to the [BriteKit documentation](https://github.com/jhuus/BriteKit/blob/master/config-reference.md). The HawkEars-specific settings are in a hawkears section, which contains the following:
+
+TBD
+
+
+We recommend that you not make changes to any of the default YAML files described above. To apply your own overrides, create a file such as yaml/settings.yaml. Then in the analyze command specify `--config yaml/settings.yaml`. For example, you could use a custom YAML file like this to do X:
+
+TBD
+
+## API
+The HawkEars API allows you to call the analyze command from Python. When using the API, you can update configuration parameters like this:
+
+```
+import hawkears as he
+cfg = he.get_config()
+cfg.infer.min_occurrence = .001 # ignore species if occurrence less than this for location/week
+```
+
+The analyze command is as follows:
+
+```python
+analyze(
+    cfg_path: Optional[str] = None,
+    input_path: str = "",
+    output_path: str = "",
+    rtype: str = "audacity",
+    date: Optional[str] = None,
+    region: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    filelist: Optional[str] = None,
+    include: Optional[str] = None,
+    exclude: Optional[str] = None,
+    start_seconds: float = 0,
+    min_score: Optional[float] = None,
+    num_threads: Optional[int] = None,
+    segment_len: Optional[float] = None,
+    label_field: Optional[str] = None,
+    recurse: bool = False,
+    top: bool = False
+)
+```
+
+    Run inference on audio recordings to detect and classify sounds. The output can be saved as Audacity labels,
+    CSV files, or Raven selection tables.
+
+    Args:
+    - cfg_path (str, optional): Path to YAML configuration file defining model and inference settings.
+    - input_path (str): Path to input audio file or directory containing audio files.
+    - output_path (str): Path to output directory where results will be saved.
+    - rtype (str, optional): Output format type. Use "audacity", "csv", or "raven", or combine
+      with "+" (e.g., "audacity+csv"). Only first three characters needed. Default="audacity".
+    - date (str, optional): Date as yyyymmdd, mmdd, or 'file'. Specifying 'file' extracts the date from the file name.
+    - region (str, optional): eBird region code, e.g. 'CA-AB' for Alberta. Use as an alternative to latitude/longitude.
+    - lat (float, optional): Latitude.
+    - lon (float, optional): Longitude.
+    - filelist (str, optional): Path to CSV file containing input file names, latitudes and longitudes
+      (or region codes) and recording dates.
+    - include (str, optional): Path to text file listing species to include. If specified,
+      exclude all other species. Defaults to value in config file.
+    - exclude (str, optional): Path to text file listing species to exclude.
+      Defaults to value in config file.
+    - start_seconds (float, optional): Where to start processing each recording, in seconds. Default=0.
+    - min_score (float, optional): Confidence threshold. Predictions below this value are excluded.
+    - num_threads (int, optional): Number of threads to use for processing.
+    - segment_len (float, optional): Fixed segment length in seconds. If specified, labels are
+      fixed-length; otherwise they are variable-length.
+    - label_field (str, optional): Type of label to output: "codes" (4-letter), "names" (common names),
+      "alt_codes" (6-letter), or "alt_names" (scientific names).
+    - recurse (bool, optional): If true, process sub-directories of the input directory.
+    - top (bool, optional): If true, show the top scores for the first spectrogram, then stop.
+
+
+
+## User Feedback
+If you have any problems during installation or usage, please post an issue here. We would also appreciate any enhancement requests or examples of false positives or false negatives, which can also be posted as issues, or in an email to jhuus at gmail dot com.
+
