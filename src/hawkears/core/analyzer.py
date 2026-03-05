@@ -29,6 +29,19 @@ class Analyzer:
         self.rarities_dataframes: list = []
         self.class_mgr = ClassManager(cfg)
 
+        # Each model processes non-overlapping spectrograms, but at staggered offsets.
+        # Set self.spec_increment to define the increment between models.
+        # For example, if spec_increment = 0.5, model 1 processes offsets [0, 3, 6, ...],
+        # model 2 processes [0.5, 3.5, 6.5, ...].
+        # This is modified slightly to ensure all models also process offset 0.
+        self.spec_increment = 0.5
+        if self.cfg.infer.max_models is not None:
+            assert self.cfg.infer.max_models >= 1
+            if self.cfg.infer.max_models == 3:
+                self.spec_increment = 1.0
+            elif self.cfg.infer.max_models == 2:
+                self.spec_increment = 1.5
+
     def _load_heuristics_manager(self, audio):
         """
         Load a HeuristicsManager subclass, if one was specified.
@@ -91,11 +104,13 @@ class Analyzer:
         for recording_path in recording_paths:
             logging.info(f"[Thread {thread_num}] Processing {recording_path}")
             frame_map = predictor.get_overlapping_scores(
-                recording_path, self.cfg.hawkears.spec_increment, start_seconds
+                recording_path, self.spec_increment, start_seconds
             )
 
             if frame_map is None:
-                logging.info(f"No predictions generated for {recording_path} (length = {predictor.audio.seconds():.2f} seconds)")
+                logging.info(
+                    f"No predictions generated for {recording_path} (length = {predictor.audio.seconds():.2f} seconds)"
+                )
                 continue
 
             if heuristics_manager is not None:
