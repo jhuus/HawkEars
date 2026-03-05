@@ -7,4 +7,3 @@ infer:
   max_models: 1
 hawkears:
   low_band_classifier: false
-  spec_increment: 3.0

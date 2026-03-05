@@ -17,5 +17,3 @@ infer:
   scaling_intercept: 0.7 # increase intercept to lower scores
 misc:
   ckpt_folder: "data/ckpt-low-band"
-hawkears:
-  spec_increment: 1.5
