@@ -33,6 +33,7 @@ def analyze(
     min_score: Optional[float] = None,
     num_threads: Optional[int] = None,
     segment_len: Optional[float] = None,
+    max_models: Optional[int] = None,
     label_field: Optional[str] = None,
     recurse: bool = False,
     top: bool = False,
@@ -194,6 +195,9 @@ def analyze(
         if segment_len is not None:
             cfg.infer.segment_len = segment_len
 
+        if max_models is not None:
+            cfg.infer.max_models = max_models
+
         # Run inference
         logging.info(f"Using {device.upper()} for inference")
         start_time = time.time()
@@ -305,6 +309,12 @@ def analyze(
     help="Optional segment length in seconds. If specified, labels are fixed-length. Otherwise they are variable-length.",
 )
 @click.option(
+    "--models",
+    "max_models",
+    type=click.IntRange(1, 12),
+    help="Optional model count. If specified, use only this many models (i.e. checkpoints, or neural networks).",
+)
+@click.option(
     "--label",
     "label_field",
     type=str,
@@ -347,6 +357,7 @@ def _analyze_cmd(
     min_score: Optional[float],
     num_threads: Optional[int],
     segment_len: Optional[float],
+    max_models: Optional[int],
     label_field: Optional[str],
     recurse: bool,
     top: bool,
@@ -380,6 +391,7 @@ def _analyze_cmd(
         min_score,
         num_threads,
         segment_len,
+        max_models,
         label_field,
         recurse,
         top,
