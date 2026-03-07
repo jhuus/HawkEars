@@ -13,8 +13,8 @@ infer:
   audio_power: 0.74
   segment_len: null
   label_field: "codes"
-  scaling_coefficient: 1.0
-  scaling_intercept: 0.0
+  scaling_coefficient: 1.2
+  scaling_intercept: 0.3
 hawkears:
   heuristics_manager: "hawkears.heuristics.canada.main.CanadaHeuristicsManager"
   save_rarities: true
