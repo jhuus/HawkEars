@@ -13,7 +13,8 @@ import click
 from omegaconf import OmegaConf, DictConfig
 
 from britekit.core.exceptions import InferenceError
-from britekit.core.util import cli_help_from_doc, get_device
+from britekit.core import util
+from britekit.core.util import cli_help_from_doc
 
 from hawkears.core.config import HawkEarsBaseConfig
 
@@ -78,7 +79,6 @@ def analyze(
     """
 
     # defer slow imports to improve --help performance
-    from britekit.core import util
     from hawkears.core.analyzer import Analyzer
 
     try:
@@ -94,7 +94,7 @@ def analyze(
             logging.error(f"Error: {default_yaml_path} not found.")
             return
 
-        device = get_device()
+        device = util.get_device()
         if device == "cpu":
             # Apply CPU-specific config overrides
             cpu_yaml_path = os.path.join("yaml", "default-cpu.yaml")
@@ -220,7 +220,7 @@ def analyze(
             cfg.infer.max_models = available_models
 
         if not quiet:
-            logging.info(f"Using {device.upper()} with {cfg.infer.max_models}-model ensemble for inference.")
+            logging.info(f"Using {device.upper()} with {cfg.infer.max_models}-model ensemble.")
             if max_models is None and cfg.infer.max_models == available_models:
                 logging.info("For faster inference, use the --models option to reduce ensemble size.")
 
@@ -410,8 +410,6 @@ def _analyze_cmd(
     low_band: Optional[bool],
     quiet: bool,
 ):
-    from britekit.core import util
-
     if debug:
         util.set_logging(level=logging.DEBUG, timestamp=True)
     else:
