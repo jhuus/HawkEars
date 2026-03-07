@@ -2,6 +2,7 @@
 
 # File name starts with _ to keep it out of typeahead for API users.
 # Defer some imports to improve --help performance.
+import glob
 import logging
 import os
 from pathlib import Path
@@ -37,6 +38,8 @@ def analyze(
     label_field: Optional[str] = None,
     recurse: bool = False,
     top: bool = False,
+    low_band: Optional[bool] = None,
+    quiet: bool = False,
 ):
     """
     Run inference on audio recordings to detect and classify sounds.
@@ -70,6 +73,8 @@ def analyze(
       "alt_codes" (6-letter), or "alt_names" (scientific names).
     - recurse (bool, optional): If true, process sub-directories of the input directory.
     - top (bool, optional): If true, show the top scores for the first spectrogram, then stop.
+    - low_band (bool, optional): If specified, override the default setting to enable or disable the low-band classifier.
+    - quiet (bool): If true, suppress most console messages.
     """
 
     # defer slow imports to improve --help performance
@@ -104,7 +109,7 @@ def analyze(
 
             import importlib.util
 
-            if importlib.util.find_spec("openvino") is None:
+            if not quiet and importlib.util.find_spec("openvino") is None:
                 logging.info(
                     "*** Install OpenVINO for better performance with CPU-based inference ***"
                 )
@@ -198,13 +203,55 @@ def analyze(
         if max_models is not None:
             cfg.infer.max_models = max_models
 
+        if low_band is not None:
+            cfg.hawkears.low_band_classifier = low_band
+
         # Run inference
-        logging.info(f"Using {device.upper()} for inference")
+        if device == "cpu" and importlib.util.find_spec("openvino") is not None:
+            available_models = len(
+                glob.glob(os.path.join(cfg.misc.ckpt_folder, "*.onnx"))
+            )
+        else:
+            available_models = len(
+                glob.glob(os.path.join(cfg.misc.ckpt_folder, "*.ckpt"))
+            )
+
+        if cfg.infer.max_models is None:
+            cfg.infer.max_models = available_models
+
+        if not quiet:
+            msg = f"Using {device.upper()} with {cfg.infer.max_models} checkpoints for inference."
+            click.echo(click.style(msg, bold=True))
+            if max_models is None and cfg.infer.max_models == available_models:
+                msg = "For faster inference, use the --models option to reduce ensemble size."
+                click.echo(click.style(msg, bold=True))
+
+            if cfg.hawkears.low_band_classifier:
+                msg = (
+                    "Low-band classifier for Ruffed/Spruce Grouse detection is enabled."
+                )
+                click.echo(click.style(msg, bold=True))
+
+                if low_band is None:
+                    msg = "Disable the low-band classifier with --no-low-band for faster performance with reduced detection."
+                    click.echo(click.style(msg, bold=True))
+            else:
+                msg = "Low-band classifier for Ruffed/Spruce Grouse detection is disabled."
+                click.echo(click.style(msg, bold=True))
+
+                if low_band is None:
+                    msg = "Enable the low-band classifier with --low-band for better but slower grouse detection."
+                    click.echo(click.style(msg, bold=True))
+
         start_time = time.time()
         analyzer = Analyzer(cfg)
-        analyzer.run(input_path, output_path, rtypes, date, start_seconds, recurse, top)
-        elapsed_time = util.format_elapsed_time(start_time, time.time())
-        logging.info(f"Elapsed time = {elapsed_time}")
+        analyzer.run(
+            input_path, output_path, rtypes, date, start_seconds, recurse, top, quiet
+        )
+
+        if not quiet:
+            elapsed_time = util.format_elapsed_time(start_time, time.time())
+            logging.info(f"Elapsed time = {elapsed_time}")
     except InferenceError as e:
         logging.error(e)
 
@@ -341,6 +388,13 @@ def analyze(
     is_flag=True,
     help="If specified, turn on debug logging.",
 )
+@click.option(
+    "--low-band/--no-low-band",
+    "low_band",
+    default=None,
+    help="Enable or disable the low-band classifier.",
+)
+@click.option("--quiet", "quiet", is_flag=True, help="Suppress most console output.")
 def _analyze_cmd(
     cfg_path: str,
     input_path: str,
@@ -362,6 +416,8 @@ def _analyze_cmd(
     recurse: bool,
     top: bool,
     debug: bool,
+    low_band: Optional[bool],
+    quiet: bool,
 ):
     from britekit.core import util
 
@@ -395,4 +451,6 @@ def _analyze_cmd(
         label_field,
         recurse,
         top,
+        low_band,
+        quiet,
     )

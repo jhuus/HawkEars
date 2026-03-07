@@ -102,15 +102,17 @@ class Analyzer:
         heuristics_manager = self._load_heuristics_manager(predictor.audio)
 
         for recording_path in recording_paths:
-            logging.info(f"[Thread {thread_num}] Processing {recording_path}")
+            if not self.quiet:
+                logging.info(f"[Thread {thread_num}] Processing {recording_path}")
             frame_map = predictor.get_overlapping_scores(
                 recording_path, self.spec_increment, start_seconds
             )
 
             if frame_map is None:
-                logging.info(
-                    f"No predictions generated for {recording_path} (length = {predictor.audio.seconds():.2f} seconds)"
-                )
+                if not self.quiet:
+                    logging.info(
+                        f"No predictions generated for {recording_path} (length = {predictor.audio.seconds():.2f} seconds)"
+                    )
                 continue
 
             if heuristics_manager is not None:
@@ -299,6 +301,7 @@ class Analyzer:
         start_seconds: float = 0,
         recurse: bool = False,
         top: bool = False,
+        quiet: bool = False,
     ):
         """
         Run inference.
@@ -315,6 +318,7 @@ class Analyzer:
         For example, '71' and '1:11' have the same meaning, and cause the first 71 seconds to be ignored. Default = 0.
         """
 
+        self.quiet = quiet
         recording_paths = self._get_recording_paths(input_path, recurse)
 
         cfg = self.cfg.hawkears
