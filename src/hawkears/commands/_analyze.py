@@ -185,7 +185,7 @@ def analyze(
             )
             if max_models is None and cfg.infer.max_models == available_models:
                 logging.info(
-                    "For faster inference, use the --models option to reduce ensemble size."
+                    "For faster performance with lower accuracy, use the --models option to reduce ensemble size (e.g. --models 6)."
                 )
 
             if cfg.hawkears.low_band_classifier:
@@ -194,7 +194,7 @@ def analyze(
                 )
                 if low_band is None:
                     logging.info(
-                        "Disable the low-band classifier with --no-low-band for faster performance with reduced detection."
+                        "For faster performance with lower detection, disable the low-band classifier with --no-low-band."
                     )
             else:
                 logging.info(
@@ -203,10 +203,10 @@ def analyze(
 
                 if low_band is None:
                     logging.info(
-                        "Enable the low-band classifier with --low-band for better but slower grouse detection."
+                        "For better but slower grouse detection, enable the low-band classifier with --low-band ."
                     )
 
-            logging.info("") # blank line before progress bar
+            logging.info("")  # blank line before progress bar
 
         start_time = time.time()
         analyzer = Analyzer(cfg)
