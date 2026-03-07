@@ -394,14 +394,12 @@ class Analyzer:
             task_id = progress.add_task(
                 f"Analyzing {len(recording_paths)} recording(s)...", total=total_size
             )
-            progress_ctx = progress
         else:
             file_sizes = {}
             progress = None
             task_id = None
-            progress_ctx = nullcontext()
 
-        with progress_ctx:
+        with progress if progress is not None else nullcontext():
             if num_threads == 1:
                 self._process_recordings(
                     recording_paths,
