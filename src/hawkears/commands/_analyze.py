@@ -7,16 +7,15 @@ import logging
 import os
 from pathlib import Path
 import time
-from typing import cast, Optional
+from typing import Optional
 
 import click
-from omegaconf import OmegaConf, DictConfig
 
 from britekit.core.exceptions import InferenceError
 from britekit.core import util
 from britekit.core.util import cli_help_from_doc
 
-from hawkears.core.config import HawkEarsBaseConfig
+from hawkears.core.config_loader import get_config
 
 
 def analyze(
@@ -82,55 +81,16 @@ def analyze(
     from hawkears.core.analyzer import Analyzer
 
     try:
-        # Get config, merging default.yaml if it exists
-        cfg = OmegaConf.structured(HawkEarsBaseConfig())
-        default_yaml_path = os.path.join("yaml", "default.yaml")
-        if os.path.exists(default_yaml_path):
-            yaml_cfg = cast(DictConfig, OmegaConf.load(default_yaml_path))
-            cfg = cast(
-                HawkEarsBaseConfig, OmegaConf.merge(cfg, OmegaConf.create(yaml_cfg))
-            )
-        else:
-            logging.error(f"Error: {default_yaml_path} not found.")
-            return
+        cfg = get_config(cfg_path)
 
         device = util.get_device()
         if device == "cpu":
-            # Apply CPU-specific config overrides
-            cpu_yaml_path = os.path.join("yaml", "default-cpu.yaml")
-            if os.path.exists(cpu_yaml_path):
-                yaml_cfg = cast(DictConfig, OmegaConf.load(cpu_yaml_path))
-                cfg = cast(
-                    HawkEarsBaseConfig, OmegaConf.merge(cfg, OmegaConf.create(yaml_cfg))
-                )
-            else:
-                logging.error(f"Error: {cpu_yaml_path} not found.")
-                return
-
             import importlib.util
 
             if not quiet and importlib.util.find_spec("openvino") is None:
                 logging.info(
                     "*** Install OpenVINO for better performance with CPU-based inference ***"
                 )
-        elif device == "mps":
-            # Apply MPS-specific config overrides for Apple Metal processors
-            mps_yaml_path = os.path.join("yaml", "default-mps.yaml")
-            if os.path.exists(mps_yaml_path):
-                yaml_cfg = cast(DictConfig, OmegaConf.load(mps_yaml_path))
-                cfg = cast(
-                    HawkEarsBaseConfig, OmegaConf.merge(cfg, OmegaConf.create(yaml_cfg))
-                )
-            else:
-                logging.error(f"Error: {mps_yaml_path} not found.")
-                return
-
-        # Override with config specified in parameters last
-        if cfg_path is not None:
-            yaml_cfg = cast(DictConfig, OmegaConf.load(cfg_path))
-            cfg = cast(
-                HawkEarsBaseConfig, OmegaConf.merge(cfg, OmegaConf.create(yaml_cfg))
-            )
 
         # Process parameters
         rtypes = rtype.split("+")
@@ -220,19 +180,33 @@ def analyze(
             cfg.infer.max_models = available_models
 
         if not quiet:
-            logging.info(f"Using {device.upper()} with {cfg.infer.max_models}-model ensemble.")
+            logging.info(
+                f"Using {device.upper()} with {cfg.infer.max_models}-model ensemble."
+            )
             if max_models is None and cfg.infer.max_models == available_models:
-                logging.info("For faster inference, use the --models option to reduce ensemble size.")
+                logging.info(
+                    "For faster inference, use the --models option to reduce ensemble size."
+                )
 
             if cfg.hawkears.low_band_classifier:
-                logging.info("Low-band classifier for Ruffed/Spruce Grouse detection is enabled.")
+                logging.info(
+                    "Low-band classifier for Ruffed/Spruce Grouse detection is enabled."
+                )
                 if low_band is None:
-                    logging.info("Disable the low-band classifier with --no-low-band for faster performance with reduced detection.")
+                    logging.info(
+                        "Disable the low-band classifier with --no-low-band for faster performance with reduced detection."
+                    )
             else:
-                logging.info("Low-band classifier for Ruffed/Spruce Grouse detection is disabled.")
+                logging.info(
+                    "Low-band classifier for Ruffed/Spruce Grouse detection is disabled."
+                )
 
                 if low_band is None:
-                    logging.info("Enable the low-band classifier with --low-band for better but slower grouse detection.")
+                    logging.info(
+                        "Enable the low-band classifier with --low-band for better but slower grouse detection."
+                    )
+
+            logging.info("") # blank line before progress bar
 
         start_time = time.time()
         analyzer = Analyzer(cfg)
@@ -242,7 +216,7 @@ def analyze(
 
         if not quiet:
             elapsed_time = util.format_elapsed_time(start_time, time.time())
-            logging.info(f"Elapsed time = {elapsed_time}")
+            logging.info(f"\nElapsed time = {elapsed_time}")
     except InferenceError as e:
         logging.error(e)
 
