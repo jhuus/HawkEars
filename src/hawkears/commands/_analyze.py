@@ -220,7 +220,7 @@ def analyze(
             cfg.infer.max_models = available_models
 
         if not quiet:
-            msg = f"Using {device.upper()} with {cfg.infer.max_models} checkpoints for inference."
+            msg = f"Using {device.upper()} with {cfg.infer.max_models}-model ensemble for inference."
             click.echo(click.style(msg, bold=True))
             if max_models is None and cfg.infer.max_models == available_models:
                 msg = "For faster inference, use the --models option to reduce ensemble size."
