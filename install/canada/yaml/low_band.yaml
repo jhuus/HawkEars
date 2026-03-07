@@ -15,5 +15,6 @@ infer:
   segment_len: null
   scaling_coefficient: 1.0
   scaling_intercept: 0.7 # increase intercept to lower scores
+  max_models: 2
 misc:
   ckpt_folder: "data/ckpt-low-band"
