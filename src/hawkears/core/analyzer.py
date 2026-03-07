@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from contextlib import nullcontext
 import importlib
 import logging
 import os
@@ -87,6 +88,9 @@ class Analyzer:
         start_seconds,
         thread_num,
         top=False,
+        progress=None,
+        task_id=None,
+        file_sizes=None,
     ):
         """
         This runs on its own thread and processes all recordings in the given list.
@@ -97,19 +101,24 @@ class Analyzer:
         - start_seconds (float): Where to start processing each recording, in seconds from start.
         - thread_num (int): Thread number
         - top (bool): If true, show the top scores for the first spectrogram, then return.
+        - progress (rich.progress.Progress, optional): Progress bar instance for status updates.
+        - task_id: Task ID for the progress bar.
+        - file_sizes (dict, optional): Mapping of recording_path to file size in bytes.
         """
         predictor = Predictor(self.cfg.misc.ckpt_folder, cfg=self.cfg)
         heuristics_manager = self._load_heuristics_manager(predictor.audio)
 
         for recording_path in recording_paths:
-            if not self.quiet:
+            if progress is None and not self.quiet:
                 logging.info(f"[Thread {thread_num}] Processing {recording_path}")
             frame_map = predictor.get_overlapping_scores(
                 recording_path, self.spec_increment, start_seconds
             )
 
             if frame_map is None:
-                if not self.quiet:
+                if progress is not None:
+                    progress.advance(task_id, file_sizes.get(recording_path, 0))
+                elif not self.quiet:
                     logging.info(
                         f"No predictions generated for {recording_path} (length = {predictor.audio.seconds():.2f} seconds)"
                     )
@@ -165,6 +174,9 @@ class Analyzer:
                     Path(output_path) / f"{recording_stem}.HawkEars.selection.table.txt"
                 )
                 self._save_raven_table(dataframe, file_path, recording_name)
+
+            if progress is not None:
+                progress.advance(task_id, file_sizes.get(recording_path, 0))
 
             if top:
                 break
@@ -360,34 +372,70 @@ class Analyzer:
 
         self.dataframes = []
         num_threads = min(self.cfg.infer.num_threads, len(recording_paths))
-        if num_threads == 1:
-            self._process_recordings(
-                recording_paths,
-                output_path,
-                start_seconds,
-                1,
-                top,
-            )
-        else:
-            recordings_per_thread = self._split_list(recording_paths, num_threads)
-            threads = []
-            for i in range(num_threads):
-                thread = threading.Thread(
-                    target=self._process_recordings,
-                    args=(
-                        recordings_per_thread[i],
-                        output_path,
-                        start_seconds,
-                        i + 1,
-                        top,
-                    ),
-                )
-                thread.start()
-                threads.append(thread)
 
-            for thread in threads:
-                # thread exceptions should be handled in caller
-                thread.join()
+        if not self.quiet and not logging.getLogger().isEnabledFor(logging.DEBUG):
+            from rich.progress import (
+                BarColumn,
+                Progress,
+                TextColumn,
+                TimeElapsedColumn,
+                TimeRemainingColumn,
+            )
+
+            file_sizes = {path: os.path.getsize(path) for path in recording_paths}
+            total_size = sum(file_sizes.values())
+            progress = Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+            )
+            task_id = progress.add_task(
+                f"Analyzing {len(recording_paths)} recording(s)...", total=total_size
+            )
+            progress_ctx = progress
+        else:
+            file_sizes = {}
+            progress = None
+            task_id = None
+            progress_ctx = nullcontext()
+
+        with progress_ctx:
+            if num_threads == 1:
+                self._process_recordings(
+                    recording_paths,
+                    output_path,
+                    start_seconds,
+                    1,
+                    top,
+                    progress,
+                    task_id,
+                    file_sizes,
+                )
+            else:
+                recordings_per_thread = self._split_list(recording_paths, num_threads)
+                threads = []
+                for i in range(num_threads):
+                    thread = threading.Thread(
+                        target=self._process_recordings,
+                        args=(
+                            recordings_per_thread[i],
+                            output_path,
+                            start_seconds,
+                            i + 1,
+                            top,
+                            progress,
+                            task_id,
+                            file_sizes,
+                        ),
+                    )
+                    thread.start()
+                    threads.append(thread)
+
+                for thread in threads:
+                    # thread exceptions should be handled in caller
+                    thread.join()
 
         if self.do_csv:
             # create combined dataframe from all threads

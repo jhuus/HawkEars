@@ -220,28 +220,19 @@ def analyze(
             cfg.infer.max_models = available_models
 
         if not quiet:
-            msg = f"Using {device.upper()} with {cfg.infer.max_models}-model ensemble for inference."
-            click.echo(click.style(msg, bold=True))
+            logging.info(f"Using {device.upper()} with {cfg.infer.max_models}-model ensemble for inference.")
             if max_models is None and cfg.infer.max_models == available_models:
-                msg = "For faster inference, use the --models option to reduce ensemble size."
-                click.echo(click.style(msg, bold=True))
+                logging.info("For faster inference, use the --models option to reduce ensemble size.")
 
             if cfg.hawkears.low_band_classifier:
-                msg = (
-                    "Low-band classifier for Ruffed/Spruce Grouse detection is enabled."
-                )
-                click.echo(click.style(msg, bold=True))
-
+                logging.info("Low-band classifier for Ruffed/Spruce Grouse detection is enabled.")
                 if low_band is None:
-                    msg = "Disable the low-band classifier with --no-low-band for faster performance with reduced detection."
-                    click.echo(click.style(msg, bold=True))
+                    logging.info("Disable the low-band classifier with --no-low-band for faster performance with reduced detection.")
             else:
-                msg = "Low-band classifier for Ruffed/Spruce Grouse detection is disabled."
-                click.echo(click.style(msg, bold=True))
+                logging.info("Low-band classifier for Ruffed/Spruce Grouse detection is disabled.")
 
                 if low_band is None:
-                    msg = "Enable the low-band classifier with --low-band for better but slower grouse detection."
-                    click.echo(click.style(msg, bold=True))
+                    logging.info("Enable the low-band classifier with --low-band for better but slower grouse detection.")
 
         start_time = time.time()
         analyzer = Analyzer(cfg)
@@ -424,7 +415,7 @@ def _analyze_cmd(
     if debug:
         util.set_logging(level=logging.DEBUG, timestamp=True)
     else:
-        util.set_logging(level=logging.INFO, timestamp=True)
+        util.set_logging(level=logging.INFO, timestamp=False)
 
     if start_seconds_str:
         start_seconds = util.get_seconds_from_time_string(start_seconds_str)
