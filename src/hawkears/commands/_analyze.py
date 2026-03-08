@@ -181,7 +181,7 @@ def analyze(
 
         if not quiet:
             logging.info(
-                f"Using {device.upper()} with {cfg.infer.max_models}-model ensemble."
+                f"Using {device.upper()} with {cfg.infer.max_models}-model ensemble and {cfg.infer.num_threads} threads."
             )
             if max_models is None and cfg.infer.max_models == available_models:
                 logging.info(
