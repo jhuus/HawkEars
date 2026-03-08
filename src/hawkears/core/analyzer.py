@@ -108,11 +108,36 @@ class Analyzer:
         predictor = Predictor(self.cfg.misc.ckpt_folder, cfg=self.cfg)
         heuristics_manager = self._load_heuristics_manager(predictor.audio)
 
+        # Initial_start_times is a list of seed values for the spectrogram start times.
+        # For example, suppose initial_start_times = [0, .5, 1.0]. Then model 1 uses
+        # [0, 3, 6, ...], model 2 uses [.5, 3.5, 6.5, ...], model 3 uses [1, 4, 7, ...].
+        # After that it wraps using a modulus operator, so model 4 has the same
+        # start_times as model 1 etc.
+        end_offset = start_seconds + self.cfg.audio.spec_duration - self.spec_increment
+        initial_start_times = util.get_range(start_seconds, end_offset, self.spec_increment)
+        if self.cfg.infer.segment_len is None:
+            segment_len = self.cfg.audio.spec_duration
+        else:
+            segment_len = self.cfg.infer.segment_len
+
+            # I tried setting special initial_start_times here, but it didn't help in my test.
+            # The idea was to reduce overlap in order to reduce FPs due to scores bleeding into
+            # adjacent segments. It did that, but it increased ordinary FPs due to misidentification.
+            '''
+            initial_start_times = [
+                start_seconds,
+                start_seconds + 0.25,
+                start_seconds + 0.5,
+                start_seconds + (self.cfg.audio.spec_duration - 0.5),
+                start_seconds + (self.cfg.audio.spec_duration - 0.25),
+            ]
+            '''
+
         for recording_path in recording_paths:
             if progress is None and not self.quiet:
                 logging.info(f"[Thread {thread_num}] Processing {recording_path}")
             frame_map = predictor.get_overlapping_scores(
-                recording_path, self.spec_increment, start_seconds
+                recording_path, segment_len, initial_start_times
             )
 
             if frame_map is None:
