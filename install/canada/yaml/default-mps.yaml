@@ -4,6 +4,6 @@
 audio:
   choose_channel: true
 infer:
-  max_models: 2
+  max_models: 4
 hawkears:
-  low_band_classifier: false
+  low_band_classifier: true
