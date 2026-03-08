@@ -9,6 +9,7 @@ from hawkears.core.occurrence_manager import OccurrenceManager
 from hawkears.heuristics.base import HeuristicsManager
 from hawkears.heuristics.canada.boost_scores import BoostScoreHeuristics
 from hawkears.heuristics.canada.low_band import LowBandHeuristics
+from hawkears.heuristics.canada.lower_scores import LowerScoreHeuristics
 from hawkears.heuristics.canada.soundalike import SoundAlikeHeuristics
 
 from typing import Optional, Protocol
@@ -44,6 +45,7 @@ class CanadaHeuristicsManager(HeuristicsManager):
             LowBandHeuristics(cfg, class_mgr, occur_mgr, audio, self.device),
             SoundAlikeHeuristics(cfg, class_mgr, occur_mgr, audio, self.device),
             BoostScoreHeuristics(cfg, class_mgr, occur_mgr, audio, self.device),
+            LowerScoreHeuristics(cfg, class_mgr, occur_mgr, audio, self.device),
         ]
 
     def process_recording(
