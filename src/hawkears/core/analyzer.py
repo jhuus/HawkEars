@@ -30,19 +30,6 @@ class Analyzer:
         self.rarities_dataframes: list = []
         self.class_mgr = ClassManager(cfg)
 
-        # Each model processes non-overlapping spectrograms, but at staggered offsets.
-        # Set self.spec_increment to define the increment between models.
-        # For example, if spec_increment = 0.5, model 1 processes offsets [0, 3, 6, ...],
-        # model 2 processes [0.5, 3.5, 6.5, ...].
-        # This is modified slightly to ensure all models also process offset 0.
-        self.spec_increment = 0.5
-        if self.cfg.infer.max_models is not None:
-            assert self.cfg.infer.max_models >= 1
-            if self.cfg.infer.max_models == 3:
-                self.spec_increment = 1.0
-            elif self.cfg.infer.max_models == 2:
-                self.spec_increment = 1.5
-
     def _load_heuristics_manager(self, audio):
         """
         Load a HeuristicsManager subclass, if one was specified.
@@ -105,7 +92,7 @@ class Analyzer:
         - task_id: Task ID for the progress bar.
         - file_sizes (dict, optional): Mapping of recording_path to file size in bytes.
         """
-        predictor = Predictor(self.cfg.misc.ckpt_folder, cfg=self.cfg)
+        predictor = Predictor(self.cfg.misc.ckpt_folder, cfg=self.cfg, quantile=0.8)
         heuristics_manager = self._load_heuristics_manager(predictor.audio)
 
         # Initial_start_times is a list of seed values for the spectrogram start times.
@@ -113,25 +100,51 @@ class Analyzer:
         # [0, 3, 6, ...], model 2 uses [.5, 3.5, 6.5, ...], model 3 uses [1, 4, 7, ...].
         # After that it wraps using a modulus operator, so model 4 has the same
         # start_times as model 1 etc.
-        end_offset = start_seconds + self.cfg.audio.spec_duration - self.spec_increment
-        initial_start_times = util.get_range(start_seconds, end_offset, self.spec_increment)
+        end_offset = start_seconds + self.cfg.audio.spec_duration - 0.5
+        initial_start_times = util.get_range(start_seconds, end_offset, 0.5)
+
+        if self.cfg.infer.max_models > 10:
+            pass  # use the default initial_start_times from above
+        elif self.cfg.infer.max_models == 10:
+            # space out the last 3
+            initial_start_times.extend(
+                [start_seconds, start_seconds + 1, start_seconds + 2]
+            )
+        elif self.cfg.infer.max_models == 9:
+            # space out the last 3
+            initial_start_times.extend(
+                [start_seconds, start_seconds + 1, start_seconds + 2]
+            )
+        elif self.cfg.infer.max_models == 8:
+            # space out the last 2
+            initial_start_times.extend([start_seconds, start_seconds + 1.5])
+        elif self.cfg.infer.max_models == 4:
+            initial_start_times = [
+                start_seconds,
+                start_seconds + 0.75,
+                start_seconds + 1.5,
+                start_seconds + 2.25,
+            ]
+        elif self.cfg.infer.max_models == 3:
+            initial_start_times = [start_seconds, start_seconds + 1, start_seconds + 2]
+        elif self.cfg.infer.max_models == 2:
+            initial_start_times = [start_seconds, start_seconds + 1.5]
+        elif self.cfg.infer.max_models == 1:
+            initial_start_times = [start_seconds]
+
+        # Remove any that go past end of recording
+        for i in range(1, len(initial_start_times), 1):
+            if initial_start_times[i] > end_offset:
+                initial_start_times = initial_start_times[:i]
+                break
+
         if self.cfg.infer.segment_len is None:
             segment_len = self.cfg.audio.spec_duration
         else:
+            # I tried setting special initial_start_times for this case, to reduce bleeding of
+            # scores into adjacent segments. It did that, but it also increased other FPs, so the
+            # net result was slightly negative.
             segment_len = self.cfg.infer.segment_len
-
-            # I tried setting special initial_start_times here, but it didn't help in my test.
-            # The idea was to reduce overlap in order to reduce FPs due to scores bleeding into
-            # adjacent segments. It did that, but it increased ordinary FPs due to misidentification.
-            '''
-            initial_start_times = [
-                start_seconds,
-                start_seconds + 0.25,
-                start_seconds + 0.5,
-                start_seconds + (self.cfg.audio.spec_duration - 0.5),
-                start_seconds + (self.cfg.audio.spec_duration - 0.25),
-            ]
-            '''
 
         for recording_path in recording_paths:
             if progress is None and not self.quiet:
