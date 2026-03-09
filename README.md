@@ -48,7 +48,7 @@ In Windows environments, you then need to uninstall and reinstall PyTorch:
 pip uninstall -y torch torchvision torchaudio
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 ```
-Note that cu126 refers to CUDA 12.6.\
+Note that cu126 refers to CUDA 12.6.
 
 Once HawkEars is installed, initialize a working environment using the `init` command:
 ```
