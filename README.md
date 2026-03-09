@@ -261,7 +261,7 @@ HawkEars 2.0 is a complete rewrite based on [BriteKit](https://github.com/jhuus/
 * API
 
 ### Accuracy
-As an example of the accuracy improvement in 2.0, here are area-under-curve precision/recall scores from a test with 2300 annotations for 120 species:
+As an example of the accuracy improvement in 2.0, here are precision/recall area-under-curve scores from a test with 2300 annotations for 120 species:
 
 | Software | PR-AUC |
 |----------|----------|
