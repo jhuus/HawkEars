@@ -48,7 +48,7 @@ To run analysis (aka inference), type:
 hawkears analyze -i <input path> -o <output path> <additional options>
 ```
 
-Available options are listed [here](#command-line-options), and you can view them by typing:
+Available options are listed [below](#command-line-options), and you can view them by typing:
 
 ```
 hawkears analyze --help
@@ -60,7 +60,7 @@ The input path can be a directory or a reference to a single audio file, but the
 hawkears analyze -i recordings
 ```
 
-This will analyze the recording(s) included in the recordings directory. The default output format is Audacity. So this example will generate a label file that you can view by opening the recording in Audacity, clicking File / Import / Labels and selecting the generated label file. Audacity should then look something like this:
+This will analyze the Sample.mp3 recording included in the recordings directory. The default output format is Audacity. So this example will generate a label file that you can view by opening the recording in Audacity, clicking File / Import / Labels and selecting the generated label file. Audacity should then look something like this:
 
 ![](images/audacity-labels.png)
 
@@ -76,9 +76,7 @@ By default, labels are generated for birds only. This is because amphibians, mam
 
 ### Location and Date Processing
 
-When possible, you should provide locations and dates to the analyze command. In the simplest case this will filter out bird species that are "too rare" at that location/date. They are considered too rare if their occurrence value falls below the value specified in the [min_occurrence](TBD) config parameter. In some cases, HawkEars uses location and date values to identify a species. For example, if the neural networks identify an Eastern Towhee on the west coast of Canada, HawkEars will switch the ID to Spotted Towhee, since they sound very similar and Eastern Towhee is not found there. There are several ways to provide the location and date, as described in the [Command-line Options](#command-line-options) section.
-
-Where available, bird species occurrence values are from [eBird Status and Trends](https://science.ebird.org/en/status-and-trends). If not available there, they are from barcharts in the eBird Explore interface.
+When possible, you should provide locations and dates to the analyze command. In the simplest case this will filter out bird species that are "too rare" at that location/date. They are considered too rare if their occurrence value falls below the value specified in the min_occurrence config parameter. In some cases, HawkEars uses location and date values to identify a species. For example, if the neural networks identify an Eastern Towhee on the west coast of Canada, HawkEars will switch the ID to Spotted Towhee, since they sound very similar and Eastern Towhee is not found there. There are several ways to provide the location and date, as described in the [Command-line Options](#command-line-options) section.
 
 ## Command-line Options
 The analyze command has the following options (only --input is required):
@@ -136,16 +134,44 @@ The following are "flag" options, which are used with no corresponding parameter
     * If specified, disable the low-band classier used to detect low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats.
 
 ## Configuration
-HawkEars is based on [BriteKit](https://github.com/jhuus/BriteKit/) and extends its [YAML](https://yaml.org/)-based configuration system. The analyze command reads default parameters from yaml/default.yaml. Any parameters in the audio, infer or misc groups override corresponding BriteKit defaults. The hawkears groups contains HawkEars-specific parameters. In a Linux or Windows environment, if no GPU is detected, analyze then reads yaml/default-CPU.yaml to apply additional overrides. In a Mac environment it reads yaml/default-MPS.yaml and applies those overrides.
+HawkEars is based on [BriteKit](https://github.com/jhuus/BriteKit/) and extends its [YAML](https://yaml.org/)-based configuration system. The analyze command reads default parameters from yaml/default.yaml. In a Linux or Windows environment, if no GPU is detected, analyze then reads yaml/default-cpu.yaml to apply additional overrides. In a Mac environment it reads yaml/default-mps.yaml and applies those overrides.
+
+Any parameters in the audio, infer or misc groups override corresponding BriteKit defaults. The hawkears groups contains HawkEars-specific parameters.
 
 For settings in the audio, infer and misc sections, refer to the [BriteKit documentation](https://github.com/jhuus/BriteKit/blob/master/config-reference.md). The HawkEars-specific settings are in a hawkears section, which contains the following:
 
-TBD
+* `filelist`
+    * Default value for the --filelist option. CSV file with filename, latitude, longitude, recording_date.
+* `date`
+    * Default value for the --date option. YYYY-MM-DD or "file" to extract from file names.
+* `latitude`
+    * Default value for the --latitude option.
+* `longitude`
+    * Default value for the --longitude option.
+* `region`
+    * Default value for the --region option. eBird county code or prefix, e.g. CA-ON=Ontario, CA-ON-OT=Ottawa.
+* `min_occurrence`
+    * Ignore species if occurrence less than this for location/week. Default = .0002.
+* `lower_min_if_confirmed`
+    * Default = true. Controls an inference heuristic that Ignore species if occurrence less than this for location/week. Default = .0002.
+* `include_list`
+    * Default value for the --include option.
+* `exclude_list`
+    * Default value for the --exclude option.
+* `save_rarities`
+    * If true, create a rarities output directory and save labels for low-occurrence classes. Default = false.
+* `low_band_classifier`
+    * If true, use the low-band classifier in addition to the main classifier. The low-band classifier detects low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats Default = false.
 
+You should not make changes to any of the default YAML files described above. To apply your own overrides, create a file such as yaml/settings.yaml. Then in the analyze command specify `--config yaml/settings.yaml`. For example, you could use a custom YAML file like this so you do not have to set these options at the command-line every time:
 
-We recommend that you not make changes to any of the default YAML files described above. To apply your own overrides, create a file such as yaml/settings.yaml. Then in the analyze command specify `--config yaml/settings.yaml`. For example, you could use a custom YAML file like this to do X:
+```
+hawkears:
+  latitude: 45.4321
+  longitude: -80.0000
+  date: file
+```
 
-TBD
 
 ## API
 The HawkEars API allows you to call the analyze command from Python. When using the API, you can update configuration parameters like this:
