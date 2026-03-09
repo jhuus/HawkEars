@@ -92,6 +92,13 @@ def analyze(
                     "*** Install OpenVINO for better performance with CPU-based inference ***"
                 )
 
+        # Check in case they forgot to run "hawkears init" after install
+        if not os.path.exists(cfg.misc.ckpt_folder):
+            logging.error(
+                "Model checkpoint files not found. Run 'hawkears init' to initialize environment."
+            )
+            return
+
         # Process parameters
         rtypes = rtype.split("+")
         for val in rtypes:
