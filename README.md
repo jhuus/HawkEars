@@ -192,7 +192,7 @@ he.commands.analyze(
 )
 ```
 
-The analyze command is as follows:
+The analyze function is as follows:
 
 ```python
 analyze(
