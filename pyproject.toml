@@ -30,7 +30,7 @@ dependencies = [
   "onnx>=1.18,<2.0",
   "pandas>=2.0,<2.3",
   "polars>=1.30,<2.0",
-  "britekit>=1.0.6",
+  "britekit>=1.0.8",
   "omegaconf>=2.3,<2.4",
 ]
 
