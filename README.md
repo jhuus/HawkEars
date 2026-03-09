@@ -1,7 +1,7 @@
 ![](images/HawkEars-Logo_Horiz_Descriptor_Full-Colour.png)
 
 ## Introduction
-HawkEars is a desktop program that scans audio recordings for bird or amphibian sounds and generates label files formatted for [Audacity](https://www.audacityteam.org/), [Raven](https://www.ravensoundsoftware.com/) or as a CSV file. This repository includes the source code and trained models for a list of 360 bird and 15 amphibian species found in Canada and the northern United States. The complete list is found [here](https://github.com/jhuus/HawkEars/tree/main/install/canada/data/classes.csv). The repository does not include the raw data or spectrograms used to train the model.
+HawkEars is a desktop program that scans audio recordings for bird or amphibian sounds and generates label files formatted for [Audacity](https://www.audacityteam.org/), [Raven](https://www.ravensoundsoftware.com/) or as a CSV file. This repository includes the source code and trained models for a list of 360 bird and 15 amphibian species found in Canada and the northern United States. The complete list is found [here](https://github.com/jhuus/HawkEars/blob/main/install/canada/data/classes.csv). The repository does not include the raw data or spectrograms used to train the model.
 
 If you use HawkEars for your acoustic analyses and research, please cite as:
 ```
