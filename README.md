@@ -249,7 +249,7 @@ Parameters are:
 - `quiet (bool)`: If true, suppress most console messages.
 
 ## What's New in HawkEars 2.0
-HawkEars 2.0 is a complete rewrite based on BriteKit, and it has improvements in many areas, including:
+HawkEars 2.0 is a complete rewrite based on [BriteKit](https://github.com/jhuus/BriteKit/), and it has improvements in many areas, including:
 
 * Accuracy
 * Label alignment and granularity
