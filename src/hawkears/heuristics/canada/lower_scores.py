@@ -45,7 +45,7 @@ class LowerScoreHeuristics:
         }
 
         self.class_indexes = []
-        self.class_codes = [] # useful for debugging
+        self.class_codes = []  # useful for debugging
         self.base_values = []
         for code in code_dict:
             info = self.class_mgr.class_info_by_code(code)
@@ -70,5 +70,5 @@ class LowerScoreHeuristics:
         for i, index in enumerate(self.class_indexes):
             scores = frame_map[:, index]
             base_value = self.base_values[i]
-            exponent = (base_value + (1 - scores) ** 3.0)
-            frame_map[:, index] = scores ** exponent
+            exponent = base_value + (1 - scores) ** 3.0
+            frame_map[:, index] = scores**exponent
