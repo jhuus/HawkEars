@@ -20,8 +20,10 @@ except Exception:
         __version__ = "0.0.0"
 
 from hawkears import commands
+from hawkears.core.config_loader import get_config
 
 __all__ = [
     "__version__",
     "commands",
+    "get_config",
 ]
