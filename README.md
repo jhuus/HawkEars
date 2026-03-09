@@ -292,7 +292,7 @@ This example shows HawkEars 2.0 labels on top, with HawkEars 1.0 output on the b
 Like BirdNET, HawkEars 1.0 never created labels shorter than 3 seconds, and all labels were multiples of 1.5 seconds in length, aligned on 1.5 second boundaries by default. HawkEars 2.0 creates labels in increments of 1/4 second, aligned on 1/4 second boundaries. They are not perfectly aligned, but most of the time the alignment is quite good, as shown above.
 
 ### New Species
-HawkEars 2.0 adds support for the following new species:
+HawkEars 2.0 adds support for the following species:
 
 * Amphibians
     * Great Basin Spadefoot
