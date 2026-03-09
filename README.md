@@ -60,9 +60,7 @@ The input path can be a directory or a reference to a single audio file, but the
 hawkears analyze -i recordings
 ```
 
-This will analyze the Sample.mp3 recording included in the recordings directory. The default output format is Audacity. So this example will generate a label file that you can view by opening the recording in Audacity, clicking File / Import / Labels and selecting the generated label file. Audacity should then look something like this:
-
-![](images/audacity-labels.png)
+This will analyze the recording(s) included in the recordings directory. The default output format is Audacity. So this example will generate a label file that you can view by opening the recording in Audacity, clicking File / Import / Labels and selecting the generated label file.
 
 ### Output Format
 
@@ -132,6 +130,8 @@ The following are "flag" options, which are used with no corresponding parameter
     * If specified, enable the low-band classier used to detect low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats.
 * `--no-low-band`
     * If specified, disable the low-band classier used to detect low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats.
+* `--quiet`
+    * If specified, suppress most console output.
 
 ## Configuration
 HawkEars is based on [BriteKit](https://github.com/jhuus/BriteKit/) and extends its [YAML](https://yaml.org/)-based configuration system. The analyze command reads default parameters from yaml/default.yaml. In a Linux or Windows environment, if no GPU is detected, analyze then reads yaml/default-cpu.yaml to apply additional overrides. In a Mac environment it reads yaml/default-mps.yaml and applies those overrides.
@@ -172,15 +172,24 @@ hawkears:
   date: file
 ```
 
-
 ## API
-The HawkEars API allows you to call the analyze command from Python. When using the API, you can update configuration parameters like this:
+The HawkEars API allows you to call the analyze command from Python like this:
 
 ```
+import logging
+import britekit as bk
 import hawkears as he
+
+print(f"HawkEars version={he.__version__}")
 cfg = he.get_config()
 cfg.infer.max_models = 3
 
+bk.util.set_logging(level=logging.INFO, timestamp=False)
+he.commands.analyze(
+    input_path="my_input_dir",
+    output_path="my_output_dir",
+    quiet=True,
+)
 ```
 
 The analyze command is as follows:
@@ -204,10 +213,11 @@ analyze(
     segment_len: Optional[float] = None,
     label_field: Optional[str] = None,
     recurse: bool = False,
-    top: bool = False
+    top: bool = False,
+    low_band: Optional[bool] = None,
+    quiet: bool = False,
 )
 ```
-
     Run inference on audio recordings to detect and classify sounds. The output can be saved as Audacity labels,
     CSV files, or Raven selection tables.
 
@@ -236,9 +246,36 @@ analyze(
       "alt_codes" (6-letter), or "alt_names" (scientific names).
     - recurse (bool, optional): If true, process sub-directories of the input directory.
     - top (bool, optional): If true, show the top scores for the first spectrogram, then stop.
+    - low_band (bool, optional): If specified, override the default setting to enable or disable the low-band classifier.
+    - quiet (bool): If true, suppress most console messages.
 
 ## What's New in HawkEars 2.0
-As noted above, HawkEars 2.0 is a complete rewrite based on BriteKit. Differences with 1.0 a
+HawkEars 2.0 is a complete rewrite based on BriteKit, and it has improvements in many areas, including:
+
+* Accuracy
+* Label alignment and granularity
+* New species
+* New features
+* Ease of installation and use
+* Configurability
+* Speed in CPU and Mac environments
+* API
+
+### Accuracy
+As an example of the accuracy improvement in 2.0, here are area-under-curve precision/recall scores from a test with 2300 annotations for 120 species:
+
+| Software | PR-AUC |
+|----------|----------|
+| BirdNET  | .4818 |
+| HawkEars 1.0 | .6941 |
+| HawkEars 2.0 | .8034 |
+
+### Label Alignment and Granularity
+This example shows HawkEars 2.0 labels on top, with HawkEars 1.0 output on the bottom:
+
+![](images/label_alignment.png)
+
+Like BirdNET, HawkEars 1.0 never created labels shorter than 3 seconds, and all labels were multiples of 1.5 seconds in length, aligned on 1.5 second boundaries by default. HawkEars 2.0 creates labels in increments of 1/4 second, aligned on 1/4 second boundaries. They are not perfectly aligned, but most of the time the alignment is quite good, as shown above.
 
 ## User Feedback
 If you have any problems during installation or usage, please post an issue here. We would also appreciate any enhancement requests or examples of false positives or false negatives, which can also be posted as issues, or in an email to jhuus at gmail dot com.
