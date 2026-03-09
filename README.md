@@ -17,7 +17,7 @@ doi = {https://doi.org/10.1016/j.ecoinf.2025.103122},
 }
 ```
 
-This repository contains HawkEars 2.x. Because HawkEars 2.0 was a complete rewrite, using all new code based on [BriteKit](https://github.com/jhuus/BriteKit/), we used a brand new github repository. HawkEars 1.0, which is described in the paper referenced above, is still available [here](https://github.com/jhuus/HawkEars1/). A comparison of HawkEars 1.0 and 2.0 is provided here.
+This repository contains HawkEars 2.0 and later versions. Because version 2.0 was a complete rewrite, using all new code based on [BriteKit](https://github.com/jhuus/BriteKit/), we used a brand new github repository. HawkEars 1.0, which is described in the paper referenced above, is still available [here](https://github.com/jhuus/HawkEars1/). A comparison of HawkEars 1.0 and 2.0 is provided [below](#whats-new-in-hawkears-20).
 
 ## Installation
 
@@ -39,7 +39,7 @@ Once HawkEars is installed, initialize a working environment using the `init` co
 ```
 hawkears init
 ```
-This creates and populates several directories under the current working directory. Use the --dest option to specify an alternative location.
+This creates and populates several directories under the current working directory, and downloads the model checkpoint files. Use the --dest option to specify an alternative location.
 ## Analyzing Field Recordings
 ### Overview
 To run analysis (aka inference), type:
@@ -48,7 +48,7 @@ To run analysis (aka inference), type:
 hawkears analyze -i <input path> -o <output path> <additional options>
 ```
 
-Available options are listed [here](TBD), and you can view them by typing:
+Available options are listed [here](#command-line-options), and you can view them by typing:
 
 ```
 hawkears analyze --help
