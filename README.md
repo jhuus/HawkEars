@@ -81,8 +81,27 @@ When possible, you should provide locations and dates to the analyze command. In
 Where available, bird species occurrence values are from [eBird Status and Trends](https://science.ebird.org/en/status-and-trends). If not available there, they are from barcharts in the eBird Explore interface.
 
 ## Command-line Options
-TBD
+The analyze command has the following options (only --input is required):
 
+* `--input <directory or file name>`
+    * Path to input directory or recording.
+    * May be abbreviated to -i.
+* `--output <directory>`
+    * Path to output directory. Defaults to input directory.
+    * May be abbreviated to -o.
+* `--min_score <value>`
+    * Exclude output labels with scores lower than this. Defaults to 0.7.
+    * May be abbreviated to -m.
+* `--cfg <YAML file>`
+    * Path to YAML file defining config overrides.
+* `--rtype <YAML file>`
+    * Output format type. Options are "audacity", "csv", or "raven". Default="audacity". To get multiple output formats, specify "audacity+csv" for example. Only the first three characters are needed, so you could specify "aud+csv+rav" to get all three output formats.
+* `--include <test file>`
+    * Path to text file listing common names of classes to include. If specified, exclude all other classes.
+* `--exclude <test file>`
+    * Path to text file listing common names of classes to exclude. If specified, include all other species. Review the default file in data/exclude.txt, and be sure to specify classes such as Noise and Other, which should always be excluded.
+* `--start <seconds>`
+    * Specify this if you do want analysis to start somewhere other than the start of the recording. For example, specify "--start 10" to start 10 seconds into the recording.
 * `--filelist <CSV file>`
     * In the CSV file, provide four columns: filename, latitude, longitude and recording_date, where the latter is in YYYY-MM-DD format.
 * `--region <code>`
@@ -93,7 +112,28 @@ TBD
     * The longitude. This requires that latitude and date are also specified, and that region is not specified.
 * `--date <argument>`
     * The argument can be a date in YYYY-MM-DD format, or the word "file". If the latter is specified, HawkEars will get dates from the file names, where the date can occur anywhere in the file name in YYYY-MM-DD or YYYYMMDD format.
+* `--threads <value>`
+    * Number of recordings that will be processed at the same time. Defaults to 3.
+* `--seg <seconds>`
+    * By default, output labels are variable length. Specify a value here if you want fixed-length output labels.
+* `--models <value>`
+    * HawkEars analysis uses an ensemble of up to 12 main models (neural networks). Specify a smaller value here for faster performance but slightly reduced accuracy. With a GPU, the default is 12. Otherwise the default is 3.
+* `--label <value>`
+    * Field used to identify species in output labels.
+    * Valid values are "codes" (4-letter banding codes, the default), "names" (common names), "alt_codes" (6-letter banding codes) and "alt_names" (scientific names).
 
+The following are "flag" options, which are used with no corresponding parameter:
+
+* `--recurse`
+    * If specified, process sub-directories of the input directory.
+* `--top`
+    * If specified, show the top scores for the first spectrogram, then stop.
+* `--debug`
+    * If specified, turn on debug logging.
+* `--low-band`
+    * If specified, enable the low-band classier used to detect low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats.
+* `--no-low-band`
+    * If specified, disable the low-band classier used to detect low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats.
 
 ## Configuration
 HawkEars is based on [BriteKit](https://github.com/jhuus/BriteKit/) and extends its [YAML](https://yaml.org/)-based configuration system. The analyze command reads default parameters from yaml/default.yaml. Any parameters in the audio, infer or misc groups override corresponding BriteKit defaults. The hawkears groups contains HawkEars-specific parameters. In a Linux or Windows environment, if no GPU is detected, analyze then reads yaml/default-CPU.yaml to apply additional overrides. In a Mac environment it reads yaml/default-MPS.yaml and applies those overrides.
@@ -113,7 +153,8 @@ The HawkEars API allows you to call the analyze command from Python. When using 
 ```
 import hawkears as he
 cfg = he.get_config()
-cfg.infer.min_occurrence = .001 # ignore species if occurrence less than this for location/week
+cfg.infer.max_models = 3
+
 ```
 
 The analyze command is as follows:
