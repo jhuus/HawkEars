@@ -1,5 +1,17 @@
 ![](images/HawkEars-Logo_Horiz_Descriptor_Full-Colour.png)
 
+## Contents
+
+- [Introduction](#introduction)
+- [License](#license)
+- [Installation](#installation)
+- [Analyzing Recordings](#analyzing-field-recordings)
+- [Command-line Options](#command-line-options)
+- [Configuration](#configuration)
+- [API](#api)
+- [What's New in HawkEars 2.0](#whats-new-in-hawkears-20)
+- [User Feedback](#user-feedback)
+
 ## Introduction
 HawkEars is a desktop program that scans audio recordings for bird or amphibian sounds and generates label files formatted for [Audacity](https://www.audacityteam.org/), [Raven](https://www.ravensoundsoftware.com/) or as a CSV file. This repository includes the source code and trained models for a list of 360 bird and 15 amphibian species found in Canada and the northern United States. The complete list is found [here](https://github.com/jhuus/HawkEars/blob/main/install/canada/data/classes.csv). The repository does not include the raw data or spectrograms used to train the model.
 
@@ -18,6 +30,9 @@ doi = {https://doi.org/10.1016/j.ecoinf.2025.103122},
 ```
 
 This repository contains HawkEars 2.0 and later versions. Because version 2.0 was a complete rewrite, using all new code based on [BriteKit](https://github.com/jhuus/BriteKit/), we used a new github repository. HawkEars 1.0, which is described in the paper referenced above, is still available [here](https://github.com/jhuus/HawkEars1/). A comparison of HawkEars 1.0 and 2.0 is provided [below](#whats-new-in-hawkears-20).
+
+## License
+HawkEars is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
 
 ## Installation
 
@@ -40,7 +55,7 @@ Once HawkEars is installed, initialize a working environment using the `init` co
 hawkears init
 ```
 This creates and populates several directories under the current working directory, and downloads the model checkpoint files. Use the --dest option to specify an alternative location.
-## Analyzing Field Recordings
+## Analyzing Recordings
 ### Overview
 To run analysis (aka inference), type:
 
