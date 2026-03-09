@@ -266,7 +266,7 @@ As an example of the accuracy improvement in 2.0, here are area-under-curve prec
 | Software | PR-AUC |
 |----------|----------|
 | BirdNET  | .4818 |
-| HawkEars 1.0 | .6941 |The n
+| HawkEars 1.0 | .6941 |
 | HawkEars 2.0 | .8034 |
 
 ### Label Alignment and Granularity
