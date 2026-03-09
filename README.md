@@ -256,9 +256,9 @@ HawkEars 2.0 is a complete rewrite based on BriteKit, and it has improvements in
 * Label alignment and granularity
 * New species
 * New features
-* Ease of installation and use
+* Ease of installation
 * Configurability
-* Speed in CPU and Mac environments
+* Control of inference speed
 * API
 
 ### Accuracy
@@ -267,7 +267,7 @@ As an example of the accuracy improvement in 2.0, here are area-under-curve prec
 | Software | PR-AUC |
 |----------|----------|
 | BirdNET  | .4818 |
-| HawkEars 1.0 | .6941 |
+| HawkEars 1.0 | .6941 |The n
 | HawkEars 2.0 | .8034 |
 
 ### Label Alignment and Granularity
@@ -276,6 +276,79 @@ This example shows HawkEars 2.0 labels on top, with HawkEars 1.0 output on the b
 ![](images/label_alignment.png)
 
 Like BirdNET, HawkEars 1.0 never created labels shorter than 3 seconds, and all labels were multiples of 1.5 seconds in length, aligned on 1.5 second boundaries by default. HawkEars 2.0 creates labels in increments of 1/4 second, aligned on 1/4 second boundaries. They are not perfectly aligned, but most of the time the alignment is quite good, as shown above.
+
+### New Species
+HawkEars 2.0 adds support for the following new species:
+
+* Amphibians
+    * Great Basin Spadefoot
+    * Pacific Chorus Frog
+* Eastern birds
+    * Bicknell’s Thrush (similar to Gray-cheeked Thrush, so location and date are important for identification)
+    * Worm-eating Warbler
+* Western birds
+    * Ancient Murrelet
+    * Barrow's Goldeneye (very similar to Common Goldeneye, so location and date are crucial)
+    * Black Swift
+    * Black-footed Albatross
+    * Cassin's Auklet
+    * Gray-headed Chickadee
+    * Harlequin Duck
+    * Hudsonian Godwit
+    * Hutton's Vireo
+    * Lark Bunting
+    * Lewis’s Woodpecker
+    * Pacific Loon
+    * Pigeon Guillemot
+    * Pink-footed Shearwater
+    * Rhinoceros Auklet
+    * Sage Thrasher
+    * Spotted Owl
+    * Surfbird
+    * Tufted Puffin
+    * Wandering Tattler
+    * Western Screech-Owl
+    * White-headed 	Woodpecker
+    * White-tailed Ptarmigan
+    * Williamson’s Sapsucker
+
+### New Features
+New features include:
+
+* Ability to specify which species to include in the output, which is often easier than specifying which to exclude.
+* Ability to output 6-letter species codes or scientific names (or the 4-letter codes or common names already supported in 1.0)
+* Ability to save in Raven format
+
+### Ease of Installation
+The installation process is greatly simplified, as described [above](#installation).
+
+### Configurability
+System-wide defaults can now be specified in YAML files, as described [above](#configuration).
+
+### Control of Inference Speed
+HawkEars 2.0 uses two model ensembles, with 12 models for the main ensemble and 2 for the low-band classifier. Using the --models option, you can specify the number of models to use in the main ensemble, from 1 to 12. Here are the PR-AUC scores for a test with 2300 annotations and 120 species:
+
+| Software | # Models | PR-AUC |
+|----------|----------|
+| BirdNET  || .4818 |
+| HawkEars 1.0 || .6941 |
+| HawkEars 2.0 | 1 | .6816 |
+| HawkEars 2.0 | 2 | .7543 |
+| HawkEars 2.0 | 3 | .7726 |
+| HawkEars 2.0 | 4 | .7784 |
+| HawkEars 2.0 | 5 | .7788 |
+| HawkEars 2.0 | 6 | .7794 |
+| HawkEars 2.0 | 7 | .7821 |
+| HawkEars 2.0 | 8 | .7933 |
+| HawkEars 2.0 | 9 | .7969 |
+| HawkEars 2.0 | 10 | .7978 |
+| HawkEars 2.0 | 11 | .8030 |
+| HawkEars 2.0 | 12 | .8034 |
+
+In a GPU environment the default is 12, but in CPU and Mac environments the default is 3, which greatly improves runtime at a cost of slightly lower accuracy.
+
+### API
+HawkEars 1.0 did not have an API, but 2.0 does. Details are [here](#api).
 
 ## User Feedback
 If you have any problems during installation or usage, please post an issue here. We would also appreciate any enhancement requests or examples of false positives or false negatives, which can also be posted as issues, or in an email to jhuus at gmail dot com.
