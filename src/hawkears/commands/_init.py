@@ -113,7 +113,7 @@ def _download_and_unzip(url: str, extract_dir: Path) -> None:
 
 @click.command(
     name="init",
-    short_help="Create default directory structure including sample files.",
+    short_help="Create default directory structure including sample files, and download and install model checkpoint files.",
     help=util.cli_help_from_doc(init.__doc__),
 )
 @click.option(
