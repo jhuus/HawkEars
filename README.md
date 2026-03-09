@@ -217,6 +217,7 @@ analyze(
     low_band: Optional[bool] = None,
     quiet: bool = False,
 )
+```
 
 Parameters are as follows:
 ```
