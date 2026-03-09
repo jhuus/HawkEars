@@ -316,8 +316,8 @@ HawkEars 2.0 adds support for the following new species:
 New features include:
 
 * Ability to specify which species to include in the output, which is often easier than specifying which to exclude.
-* Ability to output 6-letter species codes or scientific names (or the 4-letter codes or common names already supported in 1.0)
-* Ability to save in Raven format
+* Ability to output 6-letter species codes or scientific names (or the 4-letter codes or common names already supported in 1.0).
+* Ability to save in Raven format.
 
 ### Ease of Installation
 The installation process is greatly simplified, as described [above](#installation).
@@ -329,9 +329,9 @@ System-wide defaults can now be specified in YAML files, as described [above](#c
 HawkEars 2.0 uses two model ensembles, with 12 models for the main ensemble and 2 for the low-band classifier. Using the --models option, you can specify the number of models to use in the main ensemble, from 1 to 12. Here are the PR-AUC scores for a test with 2300 annotations and 120 species:
 
 | Software | # Models | PR-AUC |
-|----------|----------|
-| BirdNET  || .4818 |
-| HawkEars 1.0 || .6941 |
+|----------|----------|--------|
+| BirdNET  | | .4818 |
+| HawkEars 1.0 | | .6941 |
 | HawkEars 2.0 | 1 | .6816 |
 | HawkEars 2.0 | 2 | .7543 |
 | HawkEars 2.0 | 3 | .7726 |
