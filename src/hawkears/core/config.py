@@ -30,19 +30,6 @@ class HawkEarsConfig:
         0.0002  # ignore species if occurrence less than this for location/week
     )
 
-    # Parameters to control an inference heuristic.
-    # If lower_min_if_confirmed is true, count the number of seconds for a class in a recording,
-    # where score >= min_score + raise_min_to_confirm * (1 - min_score).
-    # If seconds >= confirmed_if_seconds, the class is assumed to be present, so scan again,
-    # lowering the min_score by multiplying it by lower_min_factor.
-    lower_min_if_confirmed: bool = True
-    # To be confirmed, score must be >= min_score + this * (1 - min_score)
-    raise_min_to_confirm: float = 0.5
-    # Need at least this many confirmed seconds >= raised threshold
-    confirmed_if_seconds: float = 8.0
-    # If so, include all labels with score >= this * min_score
-    lower_min_factor: float = 0.6
-
     # These dicts allow names/codes to be updated without retraining
     map_names: Optional[dict] = None  # Map old class names to new names
     map_codes: Optional[dict] = None  # Map old class codes to new codes
