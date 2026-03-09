@@ -2,6 +2,8 @@
 
 # File name starts with _ to keep it out of typeahead for API users
 import logging
+import tempfile
+import urllib.request
 from pathlib import Path
 from importlib.resources import files as pkg_files
 from importlib.abc import Traversable
@@ -11,6 +13,7 @@ import zipfile
 import click
 
 from britekit.core import util
+from hawkears.core.config import HawkEarsConfig
 
 
 def _iter_traversable_files(
@@ -86,6 +89,26 @@ def init(dest: Optional[Path] = None) -> None:
         f"\nDone. Copied: {copied}, Unzipped: {unzipped}, "
         f"Skipped: {skipped}, Dest: {dest}"
     )
+
+    # Download and extract model zips
+    cfg = HawkEarsConfig()
+    _download_and_unzip(cfg.main_models_url, dest / "data" / "ckpt")
+    _download_and_unzip(cfg.low_band_models_url, dest / "data" / "ckpt-low-band")
+
+
+def _download_and_unzip(url: str, extract_dir: Path) -> None:
+    """Download a zip file from url and extract its contents into extract_dir."""
+    extract_dir.mkdir(parents=True, exist_ok=True)
+    logging.info(f"Downloading {url} ...")
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        urllib.request.urlretrieve(url, tmp_path)
+        with zipfile.ZipFile(tmp_path, "r") as zf:
+            zf.extractall(extract_dir)
+        logging.info(f"Extracted to {extract_dir}")
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 @click.command(
