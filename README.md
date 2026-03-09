@@ -5,7 +5,7 @@
 - [Introduction](#introduction)
 - [License](#license)
 - [Installation](#installation)
-- [Analyzing Recordings](#analyzing-field-recordings)
+- [Analyzing Recordings](#analyzing-recordings)
 - [Command-line Options](#command-line-options)
 - [Configuration](#configuration)
 - [API](#api)
