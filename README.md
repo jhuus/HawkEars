@@ -217,11 +217,9 @@ analyze(
     low_band: Optional[bool] = None,
     quiet: bool = False,
 )
-```
-    Run inference on audio recordings to detect and classify sounds. The output can be saved as Audacity labels,
-    CSV files, or Raven selection tables.
 
-    Args:
+Parameters are as follows:
+```
     - cfg_path (str, optional): Path to YAML configuration file defining model and inference settings.
     - input_path (str): Path to input audio file or directory containing audio files.
     - output_path (str): Path to output directory where results will be saved.
@@ -345,7 +343,7 @@ HawkEars 2.0 uses two model ensembles, with 12 models for the main ensemble and 
 | HawkEars 2.0 | 11 | .8030 |
 | HawkEars 2.0 | 12 | .8034 |
 
-In a GPU environment the default is 12, but in CPU and Mac environments the default is 3, which greatly improves runtime at a cost of slightly lower accuracy.
+In a GPU environment the default is 12, but in CPU and Mac environments the default is 3, which greatly reduces runtime at a cost of slightly lower accuracy.
 
 ### API
 HawkEars 1.0 did not have an API, but 2.0 does. Details are [here](#api).
