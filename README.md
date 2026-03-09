@@ -220,33 +220,33 @@ analyze(
 ```
 
 Parameters are as follows:
-```
-    - cfg_path (str, optional): Path to YAML configuration file defining model and inference settings.
-    - input_path (str): Path to input audio file or directory containing audio files.
-    - output_path (str): Path to output directory where results will be saved.
-    - rtype (str, optional): Output format type. Use "audacity", "csv", or "raven", or combine
-      with "+" (e.g., "audacity+csv"). Only first three characters needed. Default="audacity".
-    - date (str, optional): Date as yyyymmdd, mmdd, or 'file'. Specifying 'file' extracts the date from the file name.
-    - region (str, optional): eBird region code, e.g. 'CA-AB' for Alberta. Use as an alternative to latitude/longitude.
-    - lat (float, optional): Latitude.
-    - lon (float, optional): Longitude.
-    - filelist (str, optional): Path to CSV file containing input file names, latitudes and longitudes
-      (or region codes) and recording dates.
-    - include (str, optional): Path to text file listing species to include. If specified,
-      exclude all other species. Defaults to value in config file.
-    - exclude (str, optional): Path to text file listing species to exclude.
-      Defaults to value in config file.
-    - start_seconds (float, optional): Where to start processing each recording, in seconds. Default=0.
-    - min_score (float, optional): Confidence threshold. Predictions below this value are excluded.
-    - num_threads (int, optional): Number of threads to use for processing.
-    - segment_len (float, optional): Fixed segment length in seconds. If specified, labels are
-      fixed-length; otherwise they are variable-length.
-    - label_field (str, optional): Type of label to output: "codes" (4-letter), "names" (common names),
-      "alt_codes" (6-letter), or "alt_names" (scientific names).
-    - recurse (bool, optional): If true, process sub-directories of the input directory.
-    - top (bool, optional): If true, show the top scores for the first spectrogram, then stop.
-    - low_band (bool, optional): If specified, override the default setting to enable or disable the low-band classifier.
-    - quiet (bool): If true, suppress most console messages.
+
+- cfg_path (str, optional): Path to YAML configuration file defining model and inference settings.
+- input_path (str): Path to input audio file or directory containing audio files.
+- output_path (str): Path to output directory where results will be saved.
+- rtype (str, optional): Output format type. Use "audacity", "csv", or "raven", or combine
+    with "+" (e.g., "audacity+csv"). Only first three characters needed. Default="audacity".
+- date (str, optional): Date as yyyymmdd, mmdd, or 'file'. Specifying 'file' extracts the date from the file name.
+- region (str, optional): eBird region code, e.g. 'CA-AB' for Alberta. Use as an alternative to latitude/longitude.
+- lat (float, optional): Latitude.
+- lon (float, optional): Longitude.
+- filelist (str, optional): Path to CSV file containing input file names, latitudes and longitudes
+    (or region codes) and recording dates.
+- include (str, optional): Path to text file listing species to include. If specified,
+    exclude all other species. Defaults to value in config file.
+- exclude (str, optional): Path to text file listing species to exclude.
+    Defaults to value in config file.
+- start_seconds (float, optional): Where to start processing each recording, in seconds. Default=0.
+- min_score (float, optional): Confidence threshold. Predictions below this value are excluded.
+- num_threads (int, optional): Number of threads to use for processing.
+- segment_len (float, optional): Fixed segment length in seconds. If specified, labels are
+    fixed-length; otherwise they are variable-length.
+- label_field (str, optional): Type of label to output: "codes" (4-letter), "names" (common names),
+    "alt_codes" (6-letter), or "alt_names" (scientific names).
+- recurse (bool, optional): If true, process sub-directories of the input directory.
+- top (bool, optional): If true, show the top scores for the first spectrogram, then stop.
+- low_band (bool, optional): If specified, override the default setting to enable or disable the low-band classifier.
+- quiet (bool): If true, suppress most console messages.
 
 ## What's New in HawkEars 2.0
 HawkEars 2.0 is a complete rewrite based on BriteKit, and it has improvements in many areas, including:
