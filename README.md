@@ -192,7 +192,7 @@ he.commands.analyze(
 )
 ```
 
-The analyze function is as follows:
+The analyze function is:
 
 ```python
 analyze(
@@ -219,7 +219,7 @@ analyze(
 )
 ```
 
-Parameters are as follows:
+Parameters are:
 
 - `cfg_path (str, optional)`: Path to YAML configuration file defining model and inference settings.
 - `input_path (str)`: Path to input audio file or directory containing audio files.
