@@ -59,8 +59,8 @@ class HawkEarsConfig:
 
     low_band_classifier: bool = True  # if true, include low-band classifier
 
-    main_models_url = "https://github.com/jhuus/HawkEars2/releases/download/models-2.0.0/main-models-2.0.0.zip"
-    low_band_models_url = "https://github.com/jhuus/HawkEars2/releases/download/models-2.0.0/low-band-models-2.0.0.zip"
+    main_models_url = "https://github.com/jhuus/HawkEars/releases/download/models-2.0.0/main-models-2.0.0.zip"
+    low_band_models_url = "https://github.com/jhuus/HawkEars/releases/download/models-2.0.0/low-band-models-2.0.0.zip"
 
 
 @dataclass
