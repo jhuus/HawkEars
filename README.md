@@ -346,6 +346,8 @@ HawkEars 2.0 uses two model ensembles, with 12 models for the main ensemble and 
 
 In a GPU environment the default is 12, but in CPU and Mac environments the default is 3, which greatly reduces runtime at a cost of slightly lower accuracy.
 
+The first 6 models are about twice as fast as the last 6, so adding models affects speed more once you pass 6.
+
 ### API
 HawkEars 1.0 did not have an API, but 2.0 does. Details are [here](#api).
 
