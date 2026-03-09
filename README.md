@@ -178,7 +178,7 @@ For settings in the audio, infer and misc sections, refer to the [BriteKit docum
 * `low_band_classifier`
     * If true, use the low-band classifier in addition to the main classifier. The low-band classifier detects low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats Default = false.
 
-You should not make changes to any of the default YAML files described above. To apply your own overrides, create a file such as yaml/settings.yaml. Then in the analyze command specify `--config yaml/settings.yaml`. For example, you could use a custom YAML file like this so you do not have to set these options at the command-line every time:
+You should not make changes to any of the default YAML files described above. To apply your own overrides, create a file such as yaml/settings.yaml. Then in the analyze command specify `--cfg yaml/settings.yaml`. For example, you could use a custom YAML file like this so you do not have to set these options at the command-line every time:
 
 ```
 hawkears:
