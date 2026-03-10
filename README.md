@@ -93,6 +93,10 @@ By default, labels are generated for birds only. This is because amphibians, mam
 
 When possible, you should provide locations and dates to the analyze command. In the simplest case this will filter out bird species that are "too rare" at that location/date. They are considered too rare if their occurrence value falls below the value specified in the min_occurrence config parameter. In some cases, HawkEars uses location and date values to identify a species. For example, if the neural networks identify an Eastern Towhee on the west coast of Canada, HawkEars will switch the ID to Spotted Towhee, since they sound very similar and Eastern Towhee is not found there. There are several ways to provide the location and date, as described [below](#command-line-options).
 
+### Specifying Ensemble Size
+
+The --models option lets you set the number of models in the main ensemble. This is described in more detail [below](#control-of-inference-speed).
+
 ## Summarizing Analysis Output
 
 After running inference, use the following command to generate summary reports:
@@ -197,7 +201,10 @@ For settings in the audio, infer and misc sections, refer to the [BriteKit docum
 You should not make changes to any of the default YAML files described above. To apply your own overrides, create a file such as yaml/settings.yaml. Then in the analyze command specify `--cfg yaml/settings.yaml`. For example, you could use a custom YAML file like this so you do not have to set these options at the command-line every time:
 
 ```
+infer:
+  max_models: 9
 hawkears:
+  low_band_classifier: false
   latitude: 45.4321
   longitude: -80.0000
   date: file
