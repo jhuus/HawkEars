@@ -6,11 +6,25 @@
 - [License](#license)
 - [Installation](#installation)
 - [Analyzing Recordings](#analyzing-recordings)
+  - [Overview](#overview)
+  - [Output Format](#output-format)
+  - [Including or Excluding Species](#including-or-excluding-species)
+  - [Location and Date Processing](#location-and-date-processing)
+  - [Specifying Ensemble Size](#specifying-ensemble-size)
+  - [Enabling or Disabling the Low-band Classifier](#enabling-or-disabling-the-low-band-classifier)
 - [Summarizing Analysis Output](#summarizing-analysis-output)
 - [Command-line Options](#command-line-options)
 - [Configuration](#configuration)
 - [API](#api)
 - [What's New in HawkEars 2.0](#whats-new-in-hawkears-20)
+  - [Accuracy](#accuracy)
+  - [Label Alignment and Granularity](#label-alignment-and-granularity)
+  - [New Species](#new-species)
+  - [New Features](#new-features)
+  - [Ease of Installation](#ease-of-installation)
+  - [Configurability](#configurability)
+  - [Control of Inference Speed](#control-of-inference-speed)
+  - [API](#api-1)
 - [User Feedback](#user-feedback)
 
 ## Introduction
@@ -97,6 +111,10 @@ When possible, you should provide locations and dates to the analyze command. In
 
 The --models option lets you set the number of models in the main ensemble. This is described in more detail [below](#control-of-inference-speed).
 
+### Enabling or Disabling the Low-band Classifier
+
+HawkEars uses a separate classifier to identify low-frequency Ruffed Grouse and Spruce Grouse sounds. If you aren't interested in those, you can make inference run a little faster by specifying `--no-low-band` to disable the low-band classifier. If you are running with no GPU, and not on a Mac, the low-band classifier is disabled by default. In that case you can enable it by specifying `--low-band`.
+
 ## Summarizing Analysis Output
 
 After running inference, use the following command to generate summary reports:
@@ -180,7 +198,7 @@ For settings in the audio, infer and misc sections, refer to the [BriteKit docum
 * `filelist`
     * Default value for the --filelist option. CSV file with filename, latitude, longitude, recording_date.
 * `date`
-    * Default value for the --date option. YYYY-MM-DD or "file" to extract from file names.
+    * Default value for the --date option. YYYYMMDD, MMDD or "file" to extract from file names.
 * `latitude`
     * Default value for the --latitude option.
 * `longitude`
@@ -264,7 +282,7 @@ Parameters are:
 - `output_path (str)`: Path to output directory where results will be saved.
 - `rtype (str, optional)`: Output format type. Use "audacity", "csv", or "raven", or combine
     with "+" (e.g., "audacity+csv"). Only first three characters needed. Default="audacity".
-- `date (str, optional)`: Date as yyyymmdd, mmdd, or 'file'. Specifying 'file' extracts the date from the file name.
+- `date (str, optional)`: Date as YYYYMMDD, MMDD, or 'file'. Specifying 'file' extracts the date from the file name.
 - `region (str, optional)`: eBird region code, e.g. 'CA-AB' for Alberta. Use as an alternative to latitude/longitude.
 - `lat (float, optional)`: Latitude.
 - `lon (float, optional)`: Longitude.
@@ -385,7 +403,7 @@ HawkEars 2.0 uses two model ensembles, with 12 models for the main ensemble and 
 
 In a GPU environment the default is 12, but in CPU and Mac environments the default is 3, which greatly reduces runtime at a cost of slightly lower accuracy.
 
-The first 6 models are about twice as fast as the last 6, so adding models affects speed more once you pass 6.
+The first 6 models each run about twice as fast as the last 6, so each additional model beyond 6 has a larger impact on runtime.
 
 ### API
 HawkEars 1.0 did not have an API, but 2.0 does. Details are [here](#api).
