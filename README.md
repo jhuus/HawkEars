@@ -6,6 +6,7 @@
 - [License](#license)
 - [Installation](#installation)
 - [Analyzing Recordings](#analyzing-recordings)
+- [Summarizing Analysis Output](#summarizing-analysis-output)
 - [Command-line Options](#command-line-options)
 - [Configuration](#configuration)
 - [API](#api)
@@ -90,6 +91,22 @@ By default, labels are generated for birds only. This is because amphibians, mam
 ### Location and Date Processing
 
 When possible, you should provide locations and dates to the analyze command. In the simplest case this will filter out bird species that are "too rare" at that location/date. They are considered too rare if their occurrence value falls below the value specified in the min_occurrence config parameter. In some cases, HawkEars uses location and date values to identify a species. For example, if the neural networks identify an Eastern Towhee on the west coast of Canada, HawkEars will switch the ID to Spotted Towhee, since they sound very similar and Eastern Towhee is not found there. There are several ways to provide the location and date, as described in the next section.
+
+## Summarizing Analysis Output
+
+After running inference, use the following command to generate summary reports:
+
+```
+britekit rpt-labels --labels <label directory> --output <output directory> --min_score <threshold>
+```
+
+Specifying --min_score is optional, and ignores labels with lower scores. The output directory will contain three files:
+
+* `classes.csv` with a `class` column and a `seconds` column, showing the number of seconds per class (species).
+* `recordings.csv` with a `recording` column and a `classes` column, showing a list of classes (species) per recording.
+* `details.csv` with a `recording` column and a column per class, showing the number of seconds per class per recording.
+
+To use this command, the label directory must include either CSV or Audacity output.
 
 ## Command-line Options
 The analyze command has the following options (only --input is required):
@@ -332,6 +349,7 @@ New features include:
 * Ability to specify which species to include in the output, which is often easier than specifying which to exclude.
 * Ability to output 6-letter species codes or scientific names (or the 4-letter codes or common names already supported in 1.0).
 * Ability to save in Raven format.
+* A progress indicator that indicates percent complete and estimated time remaining.
 
 ### Ease of Installation
 The installation process is greatly simplified, as described [above](#installation).
