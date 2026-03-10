@@ -38,9 +38,9 @@ dependencies = [
 hawkears = "hawkears.cli:cli"
 
 [project.urls]
-Documentation = "https://github.com/jhuus/HawkEars2#readme"
-Issues = "https://github.com/jhuus/HawkEars2/issues"
-Source = "https://github.com/jhuus/HawkEars2"
+Documentation = "https://github.com/jhuus/HawkEars#readme"
+Issues = "https://github.com/jhuus/HawkEars/issues"
+Source = "https://github.com/jhuus/HawkEars"
 
 [tool.hatch.version]
 path = "src/hawkears/__about__.py"
