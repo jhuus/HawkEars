@@ -30,7 +30,7 @@ doi = {https://doi.org/10.1016/j.ecoinf.2025.103122},
 }
 ```
 
-This repository contains HawkEars 2.0 and later versions. Because version 2.0 was a complete rewrite, using all new code based on [BriteKit](https://github.com/jhuus/BriteKit/), we used a new github repository. HawkEars 1.0, which is described in the paper referenced above, is still available [here](https://github.com/jhuus/HawkEars1/). A comparison of HawkEars 1.0 and 2.0 is provided [below](#whats-new-in-hawkears-20).
+This repository contains HawkEars 2.0 and later versions. Because version 2.0 was a complete rewrite, using all new code based on [BriteKit](https://github.com/jhuus/BriteKit/), we used a new GitHub repository. HawkEars 1.0, which is described in the paper referenced above, is still available [here](https://github.com/jhuus/HawkEars1/). A comparison of HawkEars 1.0 and 2.0 is provided [below](#whats-new-in-hawkears-20).
 
 ## License
 HawkEars is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
@@ -56,6 +56,7 @@ Once HawkEars is installed, initialize a working environment using the `init` co
 hawkears init
 ```
 This creates and populates several directories under the current working directory, and downloads the model checkpoint files. Use the --dest option to specify an alternative location.
+
 ## Analyzing Recordings
 ### Overview
 To run analysis (aka inference), type:
@@ -82,7 +83,7 @@ This will analyze the recording(s) included in the recordings directory. The def
 
 The --rtype option lets you specify Audacity, Raven, CSV or a combination. For example, to get Raven and CSV output, specify "--rtype raven+csv".
 
-By default, species are identified using [4-letter banding codes](https://www.birdpop.org/pages/birdSpeciesCodes.php), but common names can be shown instead using the "--label names" option. You can also specify "--label alt-names" for scientific names and "--label alt-codes" for 6-letter codes. The numeric suffix on each label is a score or prediction, which is similar to a probability.
+By default, species are identified using [4-letter banding codes](https://www.birdpop.org/pages/birdSpeciesCodes.php), but common names can be shown instead using the "--label names" option. You can also specify "--label alt-names" for scientific names and "--label alt-codes" for 6-letter codes. The numeric suffix on each label is a score, which is similar to a probability.
 
 ### Including or Excluding Species
 
@@ -90,7 +91,7 @@ By default, labels are generated for birds only. This is because amphibians, mam
 
 ### Location and Date Processing
 
-When possible, you should provide locations and dates to the analyze command. In the simplest case this will filter out bird species that are "too rare" at that location/date. They are considered too rare if their occurrence value falls below the value specified in the min_occurrence config parameter. In some cases, HawkEars uses location and date values to identify a species. For example, if the neural networks identify an Eastern Towhee on the west coast of Canada, HawkEars will switch the ID to Spotted Towhee, since they sound very similar and Eastern Towhee is not found there. There are several ways to provide the location and date, as described in the next section.
+When possible, you should provide locations and dates to the analyze command. In the simplest case this will filter out bird species that are "too rare" at that location/date. They are considered too rare if their occurrence value falls below the value specified in the min_occurrence config parameter. In some cases, HawkEars uses location and date values to identify a species. For example, if the neural networks identify an Eastern Towhee on the west coast of Canada, HawkEars will switch the ID to Spotted Towhee, since they sound very similar and Eastern Towhee is not found there. There are several ways to provide the location and date, as described [below](#command-line-options).
 
 ## Summarizing Analysis Output
 
@@ -122,14 +123,14 @@ The analyze command has the following options (only --input is required):
     * May be abbreviated to -m.
 * `--cfg <YAML file>`
     * Path to YAML file defining config overrides.
-* `--rtype <YAML file>`
+* `--rtype <format type>`
     * Output format type. Options are "audacity", "csv", or "raven". Default="audacity". To get multiple output formats, specify "audacity+csv" for example. Only the first three characters are needed, so you could specify "aud+csv+rav" to get all three output formats.
-* `--include <test file>`
+* `--include <text file>`
     * Path to text file listing common names of classes to include. If specified, exclude all other classes.
-* `--exclude <test file>`
+* `--exclude <text file>`
     * Path to text file listing common names of classes to exclude. If specified, include all other species. Review the default file in data/exclude.txt, and be sure to specify classes such as Noise and Other, which should always be excluded.
 * `--start <seconds>`
-    * Specify this if you do want analysis to start somewhere other than the start of the recording. For example, specify "--start 10" to start 10 seconds into the recording.
+    * Specify this if you want analysis to start somewhere other than the start of the recording. For example, specify "--start 10" to start 10 seconds into the recording.
 * `--filelist <CSV file>`
     * In the CSV file, provide four columns: filename, latitude, longitude and recording_date, where the latter is in YYYY-MM-DD format.
 * `--region <code>`
@@ -139,7 +140,7 @@ The analyze command has the following options (only --input is required):
 * `--lon <value>`
     * The longitude. This requires that latitude and date are also specified, and that region is not specified.
 * `--date <argument>`
-    * The argument can be a date in YYYY-MM-DD format, or the word "file". If the latter is specified, HawkEars will get dates from the file names, where the date can occur anywhere in the file name in YYYY-MM-DD or YYYYMMDD format.
+    * The argument can be a date in YYYYMMDD or MMDD format, or the word "file". If the latter is specified, HawkEars will get dates from the file names, where the date can occur anywhere in the file name in YYYY-MM-DD or YYYYMMDD format.
 * `--threads <value>`
     * Number of recordings that will be processed at the same time. Defaults to 3.
 * `--seg <seconds>`
@@ -159,16 +160,16 @@ The following are "flag" options, which are used with no corresponding parameter
 * `--debug`
     * If specified, turn on debug logging.
 * `--low-band`
-    * If specified, enable the low-band classier used to detect low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats.
+    * If specified, enable the low-band classifier used to detect low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats.
 * `--no-low-band`
-    * If specified, disable the low-band classier used to detect low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats.
+    * If specified, disable the low-band classifier used to detect low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats.
 * `--quiet`
     * If specified, suppress most console output.
 
 ## Configuration
 HawkEars is based on [BriteKit](https://github.com/jhuus/BriteKit/) and extends its [YAML](https://yaml.org/)-based configuration system. The analyze command reads default parameters from yaml/default.yaml. In a Linux or Windows environment, if no GPU is detected, analyze then reads yaml/default-cpu.yaml to apply additional overrides. In a Mac environment it reads yaml/default-mps.yaml and applies those overrides.
 
-Any parameters in the audio, infer or misc groups override corresponding BriteKit defaults. The hawkears groups contains HawkEars-specific parameters.
+Any parameters in the audio, infer or misc groups override corresponding BriteKit defaults. The hawkears group contains HawkEars-specific parameters.
 
 For settings in the audio, infer and misc sections, refer to the [BriteKit documentation](https://github.com/jhuus/BriteKit/blob/master/config-reference.md). The HawkEars-specific settings are in a hawkears section, which contains the following:
 
@@ -181,11 +182,9 @@ For settings in the audio, infer and misc sections, refer to the [BriteKit docum
 * `longitude`
     * Default value for the --longitude option.
 * `region`
-    * Default value for the --region option. eBird county code or prefix, e.g. CA-ON=Ontario, CA-ON-OT=Ottawa.
+    * Default value for the --region option. eBird county code or prefix, e.g. CA-ON (Ontario) or CA-ON-OT (Ottawa).
 * `min_occurrence`
     * Ignore species if occurrence less than this for location/week. Default = .0002.
-* `lower_min_if_confirmed`
-    * Default = true. Controls an inference heuristic that Ignore species if occurrence less than this for location/week. Default = .0002.
 * `include_list`
     * Default value for the --include option.
 * `exclude_list`
@@ -193,7 +192,7 @@ For settings in the audio, infer and misc sections, refer to the [BriteKit docum
 * `save_rarities`
     * If true, create a rarities output directory and save labels for low-occurrence classes. Default = false.
 * `low_band_classifier`
-    * If true, use the low-band classifier in addition to the main classifier. The low-band classifier detects low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats Default = false.
+    * If true, use the low-band classifier in addition to the main classifier. The low-band classifier detects low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats. Default = false.
 
 You should not make changes to any of the default YAML files described above. To apply your own overrides, create a file such as yaml/settings.yaml. Then in the analyze command specify `--cfg yaml/settings.yaml`. For example, you could use a custom YAML file like this so you do not have to set these options at the command-line every time:
 
@@ -339,7 +338,7 @@ HawkEars 2.0 adds support for the following species:
     * Tufted Puffin
     * Wandering Tattler
     * Western Screech-Owl
-    * White-headed 	Woodpecker
+    * White-headed Woodpecker
     * White-tailed Ptarmigan
     * Williamson’s Sapsucker
 
@@ -349,7 +348,7 @@ New features include:
 * Ability to specify which species to include in the output, which is often easier than specifying which to exclude.
 * Ability to output 6-letter species codes or scientific names (or the 4-letter codes or common names already supported in 1.0).
 * Ability to save in Raven format.
-* A progress indicator that indicates percent complete and estimated time remaining.
+* A progress indicator showing percent complete and estimated time remaining.
 
 ### Ease of Installation
 The installation process is greatly simplified, as described [above](#installation).
