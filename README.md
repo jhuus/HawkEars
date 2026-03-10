@@ -117,7 +117,7 @@ HawkEars uses a separate classifier to identify low-frequency Ruffed Grouse and 
 
 ## Summarizing Analysis Output
 
-After running inference, use the following command to generate summary reports:
+Installing HawkEars installs many dependencies, including BriteKit. After running inference, you can use the following BriteKit command to generate summary reports:
 
 ```
 britekit rpt-labels --labels <label directory> --output <output directory> --min_score <threshold>
@@ -171,7 +171,7 @@ The analyze command has the following options (only --input is required):
     * HawkEars analysis uses an ensemble of up to 12 main models (neural networks). Specify a smaller value here for faster performance but slightly reduced accuracy. With a GPU, the default is 12. Otherwise the default is 3.
 * `--label <value>`
     * Field used to identify species in output labels.
-    * Valid values are "codes" (4-letter banding codes, the default), "names" (common names), "alt_codes" (6-letter banding codes) and "alt_names" (scientific names).
+    * Valid values are "codes" (4-letter banding codes, the default), "names" (common names), "alt-codes" (6-letter banding codes) and "alt-names" (scientific names).
 
 The following are "flag" options, which are used with no corresponding parameter:
 
@@ -298,7 +298,7 @@ Parameters are:
 - `segment_len (float, optional)`: Fixed segment length in seconds. If specified, labels are
     fixed-length; otherwise they are variable-length.
 - `label_field (str, optional)`: Type of label to output: "codes" (4-letter), "names" (common names),
-    "alt_codes" (6-letter), or "alt_names" (scientific names).
+    "alt-codes" (6-letter), or "alt-names" (scientific names).
 - `recurse (bool, optional)`: If true, process sub-directories of the input directory.
 - `top (bool, optional)`: If true, show the top scores for the first spectrogram, then stop.
 - `low_band (bool, optional)`: If specified, override the default setting to enable or disable the low-band classifier.
