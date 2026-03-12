@@ -49,7 +49,7 @@ class LowerScoreHeuristics:
         self.base_values = []
         for code in code_dict:
             info = self.class_mgr.class_info_by_code(code)
-            if not info.include:
+            if info is None or not info.include:
                 continue  # omitted from output anyway
 
             self.class_indexes.append(info.index)
