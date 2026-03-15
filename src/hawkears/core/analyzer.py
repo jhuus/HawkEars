@@ -473,7 +473,7 @@ class Analyzer:
                     # thread exceptions should be handled in caller
                     thread.join()
 
-        if self.do_csv:
+        if self.do_csv and self.dataframes is not None and len(self.dataframes) > 0:
             # create combined dataframe from all threads
             df = pl.concat(
                 [pl.from_pandas(d) for d in self.dataframes], how="vertical_relaxed"
