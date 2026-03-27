@@ -73,7 +73,7 @@ class ClassManager:
             if alt_name is not None:
                 self.alt_name_dict[alt_name] = info
             if alt_code is not None:
-                self.alt_code_dict[alt_name] = info
+                self.alt_code_dict[alt_code] = info
 
             self.index_dict[i] = info
             self._all_classes.append(info)
