@@ -138,14 +138,7 @@ class Analyzer:
                 initial_start_times = initial_start_times[:i]
                 break
 
-        if self.cfg.infer.segment_len is None:
-            segment_len = self.cfg.audio.spec_duration
-        else:
-            # I tried setting special initial_start_times for this case, to reduce bleeding of
-            # scores into adjacent segments. It did that, but it also increased other FPs, so the
-            # net result was slightly negative.
-            segment_len = self.cfg.infer.segment_len
-
+        segment_len = self.cfg.audio.spec_duration
         for recording_path in recording_paths:
             if progress is None and not self.quiet:
                 logging.info(f"[Thread {thread_num}] Processing {recording_path}")
