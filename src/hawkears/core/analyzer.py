@@ -404,7 +404,7 @@ class Analyzer:
         self.dataframes = []
         num_threads = min(self.cfg.infer.num_threads, len(recording_paths))
 
-        if not self.quiet and not logging.getLogger().isEnabledFor(logging.DEBUG):
+        if not top and not self.quiet and not logging.getLogger().isEnabledFor(logging.DEBUG):
             from rich.progress import (
                 BarColumn,
                 Progress,
