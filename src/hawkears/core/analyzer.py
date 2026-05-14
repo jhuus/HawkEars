@@ -138,12 +138,11 @@ class Analyzer:
                 initial_start_times = initial_start_times[:i]
                 break
 
-        segment_len = self.cfg.audio.spec_duration
         for recording_path in recording_paths:
             if progress is None and not self.quiet:
                 logging.info(f"[Thread {thread_num}] Processing {recording_path}")
             frame_map = predictor.get_overlapping_scores(
-                recording_path, segment_len, initial_start_times
+                recording_path, initial_start_times
             )
 
             if frame_map is None:
