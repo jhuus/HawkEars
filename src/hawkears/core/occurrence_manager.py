@@ -102,7 +102,7 @@ class OccurrenceManager:
 
         if "region" not in df and ("latitude" not in df or "longitude" not in df):
             raise Exception(
-                "No locations are specified in {self.cfg.hawkears.filelist}"
+                f"No locations are specified in {self.cfg.hawkears.filelist}"
             )
 
         self.file_info = {}
@@ -151,10 +151,9 @@ class OccurrenceManager:
         else:
             county = self.provider.find_county(cfg.latitude, cfg.longitude)
             if county is None:
-                logging.error(
+                raise ValueError(
                     f"No eBird county found for latitude={cfg.latitude}, longitude={cfg.longitude}."
                 )
-                quit()
 
             region = county.code
 

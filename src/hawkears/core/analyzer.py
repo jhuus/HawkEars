@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 import importlib
 import logging
@@ -28,6 +29,7 @@ class Analyzer:
         self.cfg = cfg
         self.dataframes: list = []
         self.rarities_dataframes: list = []
+        self._dataframes_lock = threading.Lock()
         self.class_mgr = ClassManager(cfg)
 
     def _load_heuristics_manager(self, audio):
@@ -36,8 +38,7 @@ class Analyzer:
         """
         class_path = self.cfg.hawkears.heuristics_manager
         if class_path is None:
-            self.heuristics_manager = None
-            return
+            return None
 
         module_path, class_name = class_path.rsplit(".", 1)
 
@@ -47,8 +48,7 @@ class Analyzer:
         if not issubclass(cls, HeuristicsManager):
             raise TypeError(f"{class_path} must subclass HeuristicsManager")
 
-        heuristics_manager = cls(self.cfg, self.class_mgr, self.occur_mgr, audio)
-        return heuristics_manager
+        return cls(self.cfg, self.class_mgr, self.occur_mgr, audio)
 
     @staticmethod
     def _split_list(input_list, n):
@@ -176,8 +176,7 @@ class Analyzer:
 
                 if rarities_frame_map is not None:
                     rarities_dir = str(Path(output_path) / "rarities")
-                    if not os.path.exists(rarities_dir):
-                        os.makedirs(rarities_dir)
+                    os.makedirs(rarities_dir, exist_ok=True)
 
                     file_path = str(Path(rarities_dir) / f"{recording_stem}_scores.txt")
                     self._save_audacity_labels(
@@ -188,13 +187,15 @@ class Analyzer:
                 dataframe = predictor.get_dataframe(
                     None, frame_map, None, recording_stem
                 )
-                self.dataframes.append(dataframe)
-
-                if rarities_frame_map is not None:
-                    dataframe = predictor.get_dataframe(
-                        None, rarities_frame_map, None, recording_stem
-                    )
-                    self.rarities_dataframes.append(dataframe)
+                rarities_df = (
+                    predictor.get_dataframe(None, rarities_frame_map, None, recording_stem)
+                    if rarities_frame_map is not None
+                    else None
+                )
+                with self._dataframes_lock:
+                    self.dataframes.append(dataframe)
+                    if rarities_df is not None:
+                        self.rarities_dataframes.append(rarities_df)
 
             if self.do_raven:
                 dataframe = predictor.get_dataframe(
@@ -255,17 +256,8 @@ class Analyzer:
         write_empty_file: bool = True,
     ) -> None:
         """
-        Given an array of raw scores, convert to Audacity labels and save in the given file.
-
-        Args:
-        - scores (np.ndarray): Segment-level scores of shape (num_spectrograms, num_species).
-        - frame_map (np.ndarray, optional): Frame-level scores of shape (num_frames, num_species).
-            If provided, uses frame-level labels; otherwise uses segment-level labels.
-        - start_times (list[float]): Start time in seconds for each spectrogram.
-        - file_path (str): Output path for the Audacity label file.
-
-        Returns:
-            None: Writes the labels directly to the specified file.
+        Convert frame-level scores to Audacity labels and write to file_path.
+        Skips writing if write_empty_file is False and there are no detections.
         """
         try:
             labels = predictor.get_frame_labels(frame_map)
@@ -357,7 +349,6 @@ class Analyzer:
         - start_seconds (float): Where to start processing each recording, in seconds.
         - recurse (bool): If specified, process sub-directories of the input directory.
         - top (bool): If true, show the top scores for the first spectrogram, then stop.
-        For example, '71' and '1:11' have the same meaning, and cause the first 71 seconds to be ignored. Default = 0.
         """
 
         self.quiet = quiet
@@ -401,6 +392,7 @@ class Analyzer:
             )
 
         self.dataframes = []
+        self.rarities_dataframes = []
         num_threads = min(self.cfg.infer.num_threads, len(recording_paths))
 
         if not top and not self.quiet and not logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -429,6 +421,7 @@ class Analyzer:
             progress = None
             task_id = None
 
+        futures = []
         with progress if progress is not None else nullcontext():
             if num_threads == 1:
                 self._process_recordings(
@@ -441,13 +434,12 @@ class Analyzer:
                     task_id,
                     file_sizes,
                 )
-            else:
+            elif num_threads > 1:
                 recordings_per_thread = self._split_list(recording_paths, num_threads)
-                threads = []
-                for i in range(num_threads):
-                    thread = threading.Thread(
-                        target=self._process_recordings,
-                        args=(
+                with ThreadPoolExecutor(max_workers=num_threads) as executor:
+                    futures = [
+                        executor.submit(
+                            self._process_recordings,
                             recordings_per_thread[i],
                             output_path,
                             start_seconds,
@@ -456,14 +448,12 @@ class Analyzer:
                             progress,
                             task_id,
                             file_sizes,
-                        ),
-                    )
-                    thread.start()
-                    threads.append(thread)
+                        )
+                        for i in range(num_threads)
+                    ]
 
-                for thread in threads:
-                    # thread exceptions should be handled in caller
-                    thread.join()
+        for future in futures:
+            future.result()
 
         if self.do_csv and self.dataframes is not None and len(self.dataframes) > 0:
             # create combined dataframe from all threads
