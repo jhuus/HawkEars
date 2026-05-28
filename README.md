@@ -76,7 +76,7 @@ This creates and populates several directories under the current working directo
 To run analysis (aka inference), type:
 
 ```
-hawkears analyze -i <input path> -o <output path> <additional options>
+hawkears analyze <input path> -o <output path> <additional options>
 ```
 
 Available options are listed [below](#command-line-options), and you can view them by typing:
@@ -88,7 +88,7 @@ hawkears analyze --help
 The input path can be a directory or a reference to a single audio file, but the output path must be a directory, where the output files will be stored. If no output directory is specified, output will be saved in the input directory. As a quick first test, try:
 
 ```
-hawkears analyze -i recordings
+hawkears analyze recordings
 ```
 
 This will analyze the recording(s) included in the recordings directory. The default output format is Audacity. So this example will generate a label file that you can view by opening the recording in Audacity, clicking File / Import / Labels and selecting the generated label file.
@@ -136,7 +136,7 @@ The analyze command has the following options (only --input is required):
 
 * `--input <directory or file name>`
     * Path to input directory or recording.
-    * May be abbreviated to -i.
+    * May be abbreviated to -i. The -i or --input can also be omitted, as in "hawkears analyze input -o output".
 * `--output <directory>`
     * Path to output directory. Defaults to input directory.
     * May be abbreviated to -o.
