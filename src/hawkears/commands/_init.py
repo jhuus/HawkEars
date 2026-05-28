@@ -105,7 +105,22 @@ def _download_and_unzip(url: str, extract_dir: Path) -> None:
     try:
         urllib.request.urlretrieve(url, tmp_path)
         with zipfile.ZipFile(tmp_path, "r") as zf:
-            zf.extractall(extract_dir)
+            # Strip a single common top-level directory if all members share one
+            names = zf.namelist()
+            top_dirs = {n.split("/")[0] for n in names}
+            strip_prefix = (top_dirs.pop() + "/") if len(top_dirs) == 1 else ""
+            for member in zf.infolist():
+                rel = member.filename
+                if strip_prefix and rel.startswith(strip_prefix):
+                    rel = rel[len(strip_prefix):]
+                if not rel:
+                    continue
+                out_path = extract_dir / rel
+                if member.is_dir():
+                    out_path.mkdir(parents=True, exist_ok=True)
+                else:
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    out_path.write_bytes(zf.read(member.filename))
         logging.info(f"Extracted to {extract_dir}")
     finally:
         tmp_path.unlink(missing_ok=True)
