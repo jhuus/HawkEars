@@ -10,11 +10,11 @@ audio:
   use_spec_cache: true
 infer:
   min_score: 0.7
-  audio_power: 0.74
+  audio_power: 0.7
   segment_len: null
   label_field: "codes"
   scaling_coefficient: 1.0
-  scaling_intercept: 0.5
+  scaling_intercept: 1.1
 hawkears:
   heuristics_manager: "hawkears.heuristics.canada.main.CanadaHeuristicsManager"
   save_rarities: true
