@@ -2,6 +2,7 @@
 
 # File name starts with _ to keep it out of typeahead for API users
 import logging
+import shutil
 import tempfile
 import urllib.request
 from pathlib import Path
@@ -98,6 +99,8 @@ def init(dest: Optional[Path] = None) -> None:
 
 def _download_and_unzip(url: str, extract_dir: Path) -> None:
     """Download a zip file from url and extract its contents into extract_dir."""
+    if extract_dir.exists():
+        shutil.rmtree(extract_dir)
     extract_dir.mkdir(parents=True, exist_ok=True)
     logging.info(f"Downloading {url} ...")
     with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
