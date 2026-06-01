@@ -141,9 +141,13 @@ class Analyzer:
         for recording_path in recording_paths:
             if progress is None and not self.quiet:
                 logging.info(f"[Thread {thread_num}] Processing {recording_path}")
-            frame_map = predictor.get_overlapping_scores(
-                recording_path, initial_start_times
-            )
+
+            if top:
+                _, frame_map, _ = predictor.get_recording_scores(recording_path)
+            else:
+                frame_map = predictor.get_overlapping_scores(
+                    recording_path, initial_start_times
+                )
 
             if frame_map is None:
                 if progress is not None:
@@ -163,7 +167,8 @@ class Analyzer:
                 predictor.audio.set_config(self.cfg, resample=False)
 
             if top:
-                predictor.show_scores(None, frame_map)
+                start_frame = int(start_seconds * predictor.cfg.train.sed_fps)
+                predictor.show_scores(None, frame_map[start_frame:])
 
             # update scores before output
             recording_name = Path(recording_path).name
