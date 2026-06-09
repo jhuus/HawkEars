@@ -248,11 +248,13 @@ class SoundAlikeHeuristics:
                     # gives the number of soundalike frames above the threshold
                     # within frame distance of that location.
                     window = 2 * defn.frame_distance + 1
-                    soundalike_count = np.convolve(
+                    n = len(soundalike_high)
+                    full_count = np.convolve(
                         soundalike_high.astype(np.float64),
                         np.ones(window),
-                        mode="same",
+                        mode="full",
                     )
+                    soundalike_count = full_count[defn.frame_distance : defn.frame_distance + n]
 
                     # soundalike_mask will be True for every entry where there
                     # are "too many" soundalike frames above the
