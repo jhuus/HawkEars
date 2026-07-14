@@ -92,7 +92,7 @@ class Analyzer:
         - task_id: Task ID for the progress bar.
         - file_sizes (dict, optional): Mapping of recording_path to file size in bytes.
         """
-        predictor = Predictor(self.cfg.misc.ckpt_folder, cfg=self.cfg, quantile=0.8)
+        predictor = Predictor(self.cfg.misc.ckpt_folder, cfg=self.cfg)
         heuristics_manager = self._load_heuristics_manager(predictor.audio)
 
         # Initial_start_times is a list of seed values for the spectrogram start times.
