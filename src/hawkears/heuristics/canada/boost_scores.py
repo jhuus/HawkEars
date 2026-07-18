@@ -25,13 +25,13 @@ class BoostScoreHeuristics:
         # Consider a class confirmed if min_frames > min_score.
         # Should review min_score after final ensemble calibration.
         self.min_frames = 24
-        self.min_score = 0.9
+        self.min_score = 0.85
 
         # Only boost scores that are higher than boost_above.
         # Boost them by raising to exponent.
         # Smaller exponents boost more, and lowering exponent
         # below .4 scores better in tests, but seems risky.
-        self.boost_above = 0.4
+        self.boost_above = 0.35
         self.exponent = 0.4
 
         # Don't boost these classes (common false positives)
