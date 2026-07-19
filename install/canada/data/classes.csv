@@ -76,6 +76,7 @@ Brown Thrasher,BRTH,Toxostoma rufum,brnthr
 Brown-headed Cowbird,BHCO,Molothrus ater,bnhcow
 Bufflehead,BUFF,Bucephala albeola,buffle
 Bullock's Oriole,BUOR,Icterus bullockii,bulori
+Burrowing Owl,BUOW,Athene cunicularia,burowl
 Bushtit,BUSH,Psaltriparus minimus,bushti
 California Gull,CAGU,Larus californicus,calgul
 California Quail,CAQU,Callipepla californica,calqua
@@ -135,6 +136,7 @@ European Starling,EUST,Sturnus vulgaris,eursta
 Evening Grosbeak,EVGR,Hesperiphona vespertina,evegro
 Field Sparrow,FISP,Spizella pusilla,fiespa
 Fish Crow,FICR,Corvus ossifragus,fiscro
+Flammulated Owl,FLOW,Psiloscops flammeolus,flaowl
 Forster's Tern,FOTE,Sterna forsteri,forter
 Fox Sparrow,FOSP,Passerella iliaca,foxspa
 Franklin's Gull,FRGU,Leucophaeus pipixcan,fragul
@@ -150,6 +152,7 @@ Gray Flycatcher,GRFL,Empidonax wrightii,gryfly
 Gray Partridge,GRAP,Perdix perdix,grypar
 Gray Treefrog,FROG-GRTR,Hyla versicolor,FROG-GRTR
 Gray-cheeked Thrush,GCTH,Catharus minimus,gycthr
+Gray-crowned Rosy-Finch,GCRF,Leucosticte tephrocotis,gcrfin
 Gray-headed Chickadee,GHCH,Poecile cinctus,gyhchi
 Great Basin Spadefoot,TOAD-GBSP,Spea intermontana,TOAD-GBSP
 Great Black-backed Gull,GBBG,Larus marinus,gbbgul
@@ -170,6 +173,7 @@ Harlequin Duck,HADU,Histrionicus histrionicus,harduc
 Harris's Sparrow,HASP,Zonotrichia querula,harspa
 Henslow's Sparrow,HESP,Centronyx henslowii,henspa
 Hermit Thrush,HETH,Catharus guttatus,herthr
+Hermit Warbler,HEWA,Setophaga occidentalis,herwar
 Herring Gull,HERG,Larus smithsonianus,hergul
 Hooded Merganser,HOME,Lophodytes cucullatus,hoomer
 Hooded Warbler,HOWA,Setophaga citrina,hoowar
@@ -177,7 +181,6 @@ Horned Grebe,HOGR,Podiceps auritus,horgre
 Horned Lark,HOLA,Eremophila alpestris,horlar
 House Finch,HOFI,Haemorhous mexicanus,houfin
 House Sparrow,HOSP,Passer domesticus,houspa
-House Wren,HOWR,Troglodytes aedon,houwre
 Hudsonian Godwit,HUGO,Limosa haemastica,hudgod
 Hutton's Vireo,HUVI,Vireo huttoni,hutvir
 Indigo Bunting,INBU,Passerina cyanea,indbun
@@ -223,6 +226,7 @@ Northern Cardinal,NOCA,Cardinalis cardinalis,norcar
 Northern Flicker,NOFL,Colaptes auratus,norfli
 Northern Harrier,NOHA,Circus hudsonius,norhar2
 Northern Hawk Owl,NHOW,Surnia ulula,nohowl
+Northern House Wren,NHWR,Troglodytes aedon,houwre
 Northern Leopard Frog,FROG-LEOP,Lithobates pipiens,
 Northern Parula,NOPA,Setophaga americana,norpar
 Northern Pintail,NOPI,Anas acuta,norpin
@@ -232,6 +236,7 @@ Northern Saw-whet Owl,NSWO,Aegolius acadicus,nswowl
 Northern Shoveler,NSHO,Spatula clypeata,norsho
 Northern Shrike,NSHR,Lanius borealis,norshr4
 Northern Waterthrush,NOWA,Parkesia noveboracensis,norwat
+Northern Yellow Warbler,YEWA,Setophaga aestiva/petechia,yelwar
 Olive-sided Flycatcher,OSFL,Contopus cooperi,olsfly
 Orange-crowned Warbler,OCWA,Leiothlypis celata,orcwar
 Orchard Oriole,OROR,Icterus spurius,orcori
@@ -258,6 +263,7 @@ Prairie Warbler,PRAW,Setophaga discolor,prawar
 Prothonotary Warbler,PROW,Protonotaria citrea,prowar
 Purple Finch,PUFI,Haemorhous purpureus,purfin
 Purple Martin,PUMA,Progne subis,purmar
+Pygmy Nuthatch,PYNU,Sitta pygmaea,pygnut
 Red Crossbill,RECR,Loxia curvirostra,redcro
 Red-bellied Woodpecker,RBWO,Melanerpes carolinus,rebwoo
 Red-breasted Nuthatch,RBNU,Sitta canadensis,rebnut
@@ -341,6 +347,7 @@ Violet-green Swallow,VGSW,Tachycineta thalassina,vigswa
 Virginia Rail,VIRA,Rallus limicola,virrai
 Wandering Tattler,WATA,Tringa incana,wantat1
 Warbling Vireo,WAVI,Vireo gilvus/swainsoni,warvir
+Western Bluebird,WEBL,Sialia mexicana,wesblu
 Western Flycatcher,WEFL,Empidonax difficilis,wesfly
 Western Grebe,WEGR,Aechmophorus occidentalis,wesgre
 Western Kingbird,WEKI,Tyrannus verticalis,weskin
@@ -372,7 +379,6 @@ Wood Frog,FROG-WOOD,Lithobates sylvaticus,FROG-WOOD
 Wood Thrush,WOTH,Hylocichla mustelina,woothr
 Worm-eating Warbler,WEWA,Helmitheros vermivorum,woewar1
 Yellow Rail,YERA,Coturnicops noveboracensis,yelrai
-Yellow Warbler,YEWA,Setophaga aestiva/petechia,yelwar
 Yellow-bellied Flycatcher,YBFL,Empidonax flaviventris,yebfly
 Yellow-bellied Sapsucker,YBSA,Sphyrapicus varius,yebsap
 Yellow-billed Cuckoo,YBCU,Coccyzus americanus,yebcuc
