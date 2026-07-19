@@ -16,19 +16,10 @@
 - [Command-line Options](#command-line-options)
 - [Configuration](#configuration)
 - [API](#api)
-- [What's New in HawkEars 2.0](#whats-new-in-hawkears-20)
-  - [Accuracy](#accuracy)
-  - [Label Alignment and Granularity](#label-alignment-and-granularity)
-  - [New Species](#new-species)
-  - [New Features](#new-features)
-  - [Ease of Installation](#ease-of-installation)
-  - [Configurability](#configurability)
-  - [Control of Inference Speed](#control-of-inference-speed)
-  - [API](#api-1)
 - [User Feedback](#user-feedback)
 
 ## Introduction
-HawkEars is a desktop program that scans audio recordings for bird or amphibian sounds and generates label files formatted for [Audacity](https://www.audacityteam.org/), [Raven](https://www.ravensoundsoftware.com/) or as a CSV file. This repository includes the source code and trained models for a list of 360 bird and 15 amphibian species found in Canada and the northern United States. The complete list is found [here](https://github.com/jhuus/HawkEars/blob/main/install/canada/data/classes.csv). The repository does not include the raw data or spectrograms used to train the model.
+HawkEars is a desktop program that scans audio recordings for bird or amphibian sounds and generates label files formatted for [Audacity](https://www.audacityteam.org/), [Raven](https://www.ravensoundsoftware.com/) or as a CSV file. This repository includes the source code and trained models for a list of 360 bird and 15 amphibian species found in Canada and the northern United States. The complete class list is found [here](https://github.com/jhuus/HawkEars/blob/main/install/canada/data/classes.csv). The repository does not include the raw data or spectrograms used to train the model.
 
 If you use HawkEars for your acoustic analyses and research, please cite as:
 ```
@@ -44,7 +35,7 @@ doi = {https://doi.org/10.1016/j.ecoinf.2025.103122},
 }
 ```
 
-This repository contains HawkEars 2.0 and later versions. Because version 2.0 was a complete rewrite, using all new code based on [BriteKit](https://github.com/jhuus/BriteKit/), we used a new GitHub repository. HawkEars 1.0, which is described in the paper referenced above, is still available [here](https://github.com/jhuus/HawkEars1/). A comparison of HawkEars 1.0 and 2.0 is provided [below](#whats-new-in-hawkears-20).
+This repository contains HawkEars 2.0 and later versions. Because version 2.0 was a complete rewrite, using all new code based on [BriteKit](https://github.com/jhuus/BriteKit/), we used a new GitHub repository. HawkEars 1.0, which is described in the paper referenced above, is still available [here](https://github.com/jhuus/HawkEars1/).
 
 ## License
 HawkEars is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
@@ -168,7 +159,7 @@ The analyze command has the following options (only --input is required):
 * `--seg <seconds>`
     * By default, output labels are variable length. Specify a value here if you want fixed-length output labels.
 * `--models <value>`
-    * HawkEars analysis uses an ensemble of up to 12 main models (neural networks). Specify a smaller value here for faster performance but slightly reduced accuracy. With a GPU, the default is 12. Otherwise the default is 3.
+    * HawkEars analysis uses an ensemble of up to 9 main models (neural networks). Specify a smaller value here for faster performance but slightly reduced accuracy. With a GPU, the default is 9. Otherwise the default is 3.
 * `--label <value>`
     * Field used to identify species in output labels.
     * Valid values are "codes" (4-letter banding codes, the default), "names" (common names), "alt-codes" (6-letter banding codes) and "alt-names" (scientific names).
@@ -220,7 +211,7 @@ You should not make changes to any of the default YAML files described above. To
 
 ```
 infer:
-  max_models: 9
+  max_models: 6
 hawkears:
   low_band_classifier: false
   latitude: 45.4321
@@ -304,109 +295,5 @@ Parameters are:
 - `low_band (bool, optional)`: If specified, override the default setting to enable or disable the low-band classifier.
 - `quiet (bool)`: If true, suppress most console messages.
 
-## What's New in HawkEars 2.0
-HawkEars 2.0 is a complete rewrite based on [BriteKit](https://github.com/jhuus/BriteKit/), and it has improvements in many areas, including:
-
-* Accuracy
-* Label alignment and granularity
-* New species
-* New features
-* Ease of installation
-* Configurability
-* Control of inference speed
-* API
-
-### Accuracy
-As an example of the accuracy improvement in 2.0, here are precision/recall area-under-curve scores from a test with 2300 annotations for 120 species:
-
-| Software | PR-AUC |
-|----------|----------|
-| BirdNET  | .4818 |
-| HawkEars 1.0 | .6941 |
-| HawkEars 2.0 | .8034 |
-
-### Label Alignment and Granularity
-This example shows HawkEars 2.0 labels on top, with HawkEars 1.0 output on the bottom:
-
-![](images/label_alignment.png)
-
-Like BirdNET, HawkEars 1.0 never created labels shorter than 3 seconds, and all labels were multiples of 1.5 seconds in length, aligned on 1.5 second boundaries by default. HawkEars 2.0 creates labels in increments of 1/4 second, aligned on 1/4 second boundaries. They are not perfectly aligned, but most of the time the alignment is quite good, as shown above.
-
-### New Species
-HawkEars 2.0 adds support for the following species:
-
-* Amphibians
-    * Great Basin Spadefoot
-    * Pacific Chorus Frog
-* Eastern birds
-    * Bicknell’s Thrush (similar to Gray-cheeked Thrush, so location and date are important for identification)
-    * Worm-eating Warbler
-* Western birds
-    * Ancient Murrelet
-    * Barrow's Goldeneye (very similar to Common Goldeneye, so location and date are crucial)
-    * Black Swift
-    * Black-footed Albatross
-    * Cassin's Auklet
-    * Gray-headed Chickadee
-    * Harlequin Duck
-    * Hudsonian Godwit
-    * Hutton's Vireo
-    * Lark Bunting
-    * Lewis’s Woodpecker
-    * Pacific Loon
-    * Pigeon Guillemot
-    * Pink-footed Shearwater
-    * Rhinoceros Auklet
-    * Sage Thrasher
-    * Spotted Owl
-    * Surfbird
-    * Tufted Puffin
-    * Wandering Tattler
-    * Western Screech-Owl
-    * White-headed Woodpecker
-    * White-tailed Ptarmigan
-    * Williamson’s Sapsucker
-
-### New Features
-New features include:
-
-* Ability to specify which species to include in the output, which is often easier than specifying which to exclude.
-* Ability to output 6-letter species codes or scientific names (or the 4-letter codes or common names already supported in 1.0).
-* Ability to save in Raven format.
-* A progress indicator showing percent complete and estimated time remaining.
-
-### Ease of Installation
-The installation process is greatly simplified, as described [above](#installation).
-
-### Configurability
-System-wide defaults can now be specified in YAML files, as described [above](#configuration).
-
-### Control of Inference Speed
-HawkEars 2.0 uses two model ensembles, with 12 models for the main ensemble and 2 for the low-band classifier. Using the --models option, you can specify the number of models to use in the main ensemble, from 1 to 12. Here are the PR-AUC scores for a test with 2300 annotations and 120 species:
-
-| Software | # Models | PR-AUC |
-|----------|----------|--------|
-| BirdNET  | | .4818 |
-| HawkEars 1.0 | | .6941 |
-| HawkEars 2.0 | 1 | .6816 |
-| HawkEars 2.0 | 2 | .7543 |
-| HawkEars 2.0 | 3 | .7726 |
-| HawkEars 2.0 | 4 | .7784 |
-| HawkEars 2.0 | 5 | .7788 |
-| HawkEars 2.0 | 6 | .7794 |
-| HawkEars 2.0 | 7 | .7821 |
-| HawkEars 2.0 | 8 | .7933 |
-| HawkEars 2.0 | 9 | .7969 |
-| HawkEars 2.0 | 10 | .7978 |
-| HawkEars 2.0 | 11 | .8030 |
-| HawkEars 2.0 | 12 | .8034 |
-
-In a GPU environment the default is 12, but in CPU and Mac environments the default is 3, which greatly reduces runtime at a cost of slightly lower accuracy.
-
-The first 6 models each run about twice as fast as the last 6, so each additional model beyond 6 has a larger impact on runtime.
-
-### API
-HawkEars 1.0 did not have an API, but 2.0 does. Details are [here](#api).
-
 ## User Feedback
-If you have any problems during installation or usage, please post an issue here. We would also appreciate any enhancement requests or examples of false positives or false negatives, which can also be posted as issues, or in an email to jhuus at gmail dot com.
+If you have any problems during installation or usage, please post an issue here. We would also appreciate any enhancement requests or examples of false positives or false negatives, which can also be posted as issues, or in an email to jhuus1 at gmail dot com.
