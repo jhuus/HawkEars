@@ -2,6 +2,7 @@
 
 import glob
 import os
+from typing import Collection, Optional
 
 from britekit import util as bk_util
 from britekit import load_from_checkpoint
@@ -11,7 +12,9 @@ from hawkears.core.config import HawkEarsBaseConfig
 
 
 class ClassManager:
-    def __init__(self, cfg: HawkEarsBaseConfig):
+    def __init__(
+        self, cfg: HawkEarsBaseConfig, include_names: Optional[Collection[str]] = None
+    ):
         """
         Process class names from the trained models and from the include and exclude lists,
         and create a list of ClassInfo objects, a dict from prediction index to ClassInfo,
@@ -20,7 +23,9 @@ class ClassManager:
         self.cfg = cfg
 
         try:
-            if cfg.hawkears.include_list is None:
+            if include_names is not None:
+                self.include_set = set(include_names)
+            elif cfg.hawkears.include_list is None:
                 self.include_set = None
             else:
                 self.include_set = set(

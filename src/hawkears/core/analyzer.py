@@ -7,7 +7,7 @@ import logging
 import os
 from pathlib import Path
 import threading
-from typing import Optional
+from typing import Callable, Collection, Optional
 
 import polars as pl
 
@@ -16,8 +16,28 @@ from britekit import Predictor
 
 from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.class_manager import ClassManager
+from hawkears.core.analysis_result import (
+    AnalysisProgress,
+    AnalysisResult,
+    InferenceDetection,
+)
 from hawkears.core.occurrence_manager import OccurrenceManager
 from hawkears.heuristics.base import HeuristicsManager
+
+
+def find_recording_paths(input_path: str, recurse: bool = False) -> list[str]:
+    """Return the audio files HawkEars would analyze for an input path."""
+    if os.path.isfile(input_path):
+        return [input_path]
+    recording_paths = util.get_audio_files(input_path)
+    if recurse:
+        for subdir in next(os.walk(input_path))[1]:
+            recording_paths.extend(
+                find_recording_paths(os.path.join(input_path, subdir), recurse=True)
+            )
+    elif not recording_paths:
+        logging.error(f'No audio recordings found in "{input_path}"')
+    return recording_paths
 
 
 class Analyzer:
@@ -25,12 +45,16 @@ class Analyzer:
     Basic inference logic using Predictor class, with multi-threading and multi-recording support.
     """
 
-    def __init__(self, cfg: HawkEarsBaseConfig):
+    def __init__(
+        self, cfg: HawkEarsBaseConfig, include_names: Collection[str] | None = None
+    ):
         self.cfg = cfg
         self.dataframes: list = []
         self.rarities_dataframes: list = []
+        self.result_dataframes: list[tuple[Path, object]] = []
         self._dataframes_lock = threading.Lock()
-        self.class_mgr = ClassManager(cfg)
+        self._progress_lock = threading.Lock()
+        self.class_mgr = ClassManager(cfg, include_names)
 
     def _load_heuristics_manager(self, audio):
         """
@@ -78,6 +102,7 @@ class Analyzer:
         progress=None,
         task_id=None,
         file_sizes=None,
+        progress_callback=None,
     ):
         """
         This runs on its own thread and processes all recordings in the given list.
@@ -156,6 +181,7 @@ class Analyzer:
                     logging.info(
                         f"No predictions generated for {recording_path} (length = {predictor.audio.seconds():.2f} seconds)"
                     )
+                self._recording_finished(recording_path, progress_callback)
                 continue
 
             if heuristics_manager is not None:
@@ -188,12 +214,17 @@ class Analyzer:
                         predictor, rarities_frame_map, file_path, False
                     )
 
-            if self.do_csv:
+            dataframe = None
+            if self.do_csv or self.do_raven or self.return_results:
                 dataframe = predictor.get_dataframe(
                     None, frame_map, None, recording_stem
                 )
+
+            if self.do_csv:
                 rarities_df = (
-                    predictor.get_dataframe(None, rarities_frame_map, None, recording_stem)
+                    predictor.get_dataframe(
+                        None, rarities_frame_map, None, recording_stem
+                    )
                     if rarities_frame_map is not None
                     else None
                 )
@@ -202,10 +233,11 @@ class Analyzer:
                     if rarities_df is not None:
                         self.rarities_dataframes.append(rarities_df)
 
+            if self.return_results:
+                with self._dataframes_lock:
+                    self.result_dataframes.append((Path(recording_path), dataframe))
+
             if self.do_raven:
-                dataframe = predictor.get_dataframe(
-                    None, frame_map, None, recording_stem
-                )
                 file_path = str(
                     Path(output_path) / f"{recording_stem}.HawkEars.selection.table.txt"
                 )
@@ -213,12 +245,26 @@ class Analyzer:
 
             if progress is not None:
                 progress.advance(task_id, file_sizes.get(recording_path, 0))
+            self._recording_finished(recording_path, progress_callback)
 
             if top:
                 break
 
         if thread_num == 1:
             predictor.save_manifest(output_path)
+
+    def _recording_finished(self, recording_path, progress_callback) -> None:
+        if progress_callback is None:
+            return
+        with self._progress_lock:
+            self._completed_recordings += 1
+            progress_callback(
+                AnalysisProgress(
+                    completed=self._completed_recordings,
+                    total=self._total_recordings,
+                    recording_path=Path(recording_path),
+                )
+            )
 
     def _update_frame_map(self, frame_map, recording_name):
         """
@@ -313,23 +359,7 @@ class Analyzer:
         raven_df.write_csv(file_path, separator="\t", float_precision=4)
 
     def _get_recording_paths(self, input_path, recurse):
-        if os.path.isfile(input_path):
-            return [input_path]
-        elif recurse:
-            recording_paths = util.get_audio_files(input_path)
-            subdirs = next(os.walk(input_path))[1]
-            for subdir in subdirs:
-                subdir_path = os.path.join(input_path, subdir)
-                recording_paths.extend(self._get_recording_paths(subdir_path, recurse))
-
-            return recording_paths
-        else:
-            recording_paths = util.get_audio_files(input_path)
-            if len(recording_paths) == 0:
-                logging.error(f'No audio recordings found in "{input_path}"')
-                return []
-
-            return recording_paths
+        return find_recording_paths(input_path, recurse)
 
     def run(
         self,
@@ -341,7 +371,10 @@ class Analyzer:
         recurse: bool = False,
         top: bool = False,
         quiet: bool = False,
-    ):
+        *,
+        return_results: bool = False,
+        progress_callback: Optional[Callable[[AnalysisProgress], None]] = None,
+    ) -> AnalysisResult | None:
         """
         Run inference.
 
@@ -354,9 +387,12 @@ class Analyzer:
         - start_seconds (float): Where to start processing each recording, in seconds.
         - recurse (bool): If specified, process sub-directories of the input directory.
         - top (bool): If true, show the top scores for the first spectrogram, then stop.
+        - return_results (bool): Return detections directly instead of relying on output files.
+        - progress_callback: Called initially and whenever a recording finishes.
         """
 
         self.quiet = quiet
+        self.return_results = return_results
         recording_paths = self._get_recording_paths(input_path, recurse)
 
         cfg = self.cfg.hawkears
@@ -398,9 +434,18 @@ class Analyzer:
 
         self.dataframes = []
         self.rarities_dataframes = []
+        self.result_dataframes = []
+        self._completed_recordings = 0
+        self._total_recordings = len(recording_paths)
+        if progress_callback is not None:
+            progress_callback(AnalysisProgress(0, self._total_recordings))
         num_threads = min(self.cfg.infer.num_threads, len(recording_paths))
 
-        if not top and not self.quiet and not logging.getLogger().isEnabledFor(logging.DEBUG):
+        if (
+            not top
+            and not self.quiet
+            and not logging.getLogger().isEnabledFor(logging.DEBUG)
+        ):
             from rich.progress import (
                 BarColumn,
                 Progress,
@@ -438,6 +483,7 @@ class Analyzer:
                     progress,
                     task_id,
                     file_sizes,
+                    progress_callback,
                 )
             elif num_threads > 1:
                 recordings_per_thread = self._split_list(recording_paths, num_threads)
@@ -453,6 +499,7 @@ class Analyzer:
                             progress,
                             task_id,
                             file_sizes,
+                            progress_callback,
                         )
                         for i in range(num_threads)
                     ]
@@ -478,3 +525,27 @@ class Analyzer:
             df.sort(["recording", "name", "start_time"]).write_csv(
                 file_path, float_precision=3
             )
+
+        if not return_results:
+            return None
+
+        detections = []
+        for recording_path, dataframe in self.result_dataframes:
+            for row in dataframe.to_dict("records"):
+                detections.append(
+                    InferenceDetection(
+                        recording_path=recording_path,
+                        species=str(row["name"]),
+                        start_time=float(row["start_time"]),
+                        end_time=float(row["end_time"]),
+                        score=float(row["score"]),
+                    )
+                )
+        detections.sort(
+            key=lambda detection: (
+                str(detection.recording_path),
+                detection.species,
+                detection.start_time,
+            )
+        )
+        return AnalysisResult(tuple(detections), len(recording_paths))

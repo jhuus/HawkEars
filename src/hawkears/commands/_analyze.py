@@ -3,11 +3,12 @@
 # File name starts with _ to keep it out of typeahead for API users.
 # Defer some imports to improve --help performance.
 import glob
+from copy import deepcopy
 import logging
 import os
 from pathlib import Path
 import time
-from typing import Optional
+from typing import Callable, Collection, Optional
 
 import click
 
@@ -16,13 +17,14 @@ from britekit.core import util
 from britekit.core.util import cli_help_from_doc
 
 from hawkears.core.config_loader import get_config
+from hawkears.core.analysis_result import AnalysisProgress, AnalysisResult
 
 
 def analyze(
     cfg_path: Optional[str] = None,
     input_path: str = "",
     output_path: str = "",
-    rtype: str = "audacity",
+    rtype: Optional[str] = "audacity",
     date: Optional[str] = None,
     region: Optional[str] = None,
     lat: Optional[float] = None,
@@ -40,7 +42,12 @@ def analyze(
     top: bool = False,
     low_band: Optional[bool] = None,
     quiet: bool = False,
-):
+    *,
+    return_results: bool = False,
+    progress_callback: Optional[Callable[[AnalysisProgress], None]] = None,
+    include_names: Optional[Collection[str]] = None,
+    raise_errors: bool = False,
+) -> AnalysisResult | None:
     """
     Run inference on audio recordings to detect and classify sounds.
 
@@ -75,13 +82,18 @@ def analyze(
     - top (bool, optional): If true, show the top scores for the first spectrogram, then stop.
     - low_band (bool, optional): If specified, override the default setting to enable or disable the low-band classifier.
     - quiet (bool): If true, suppress most console messages.
+    - return_results (bool): If true, return structured detections directly.
+    - progress_callback: Optional callback receiving progress notifications.
+    - include_names: Optional model class names to include, avoiding an include-list file.
+    - raise_errors: Re-raise inference and validation errors for application callers.
     """
 
     # defer slow imports to improve --help performance
     from hawkears.core.analyzer import Analyzer
 
     try:
-        cfg = get_config(cfg_path)
+        # API calls must not leak overrides into later runs through the cached config.
+        cfg = deepcopy(get_config(cfg_path))
 
         import importlib.util
 
@@ -94,13 +106,17 @@ def analyze(
 
         # Check in case they forgot to run "hawkears init" after install
         if not os.path.exists(cfg.misc.ckpt_folder):
-            logging.error(
-                "Model checkpoint files not found. Run 'hawkears init' to initialize environment."
+            message = (
+                "Model checkpoint files not found. Run 'hawkears init' to "
+                "initialize environment."
             )
+            if raise_errors:
+                raise InferenceError(message)
+            logging.error(message)
             return
 
         # Process parameters
-        rtypes = rtype.split("+")
+        rtypes = rtype.split("+") if rtype else []
         for val in rtypes:
             if not (
                 val.startswith("aud") or val.startswith("csv") or val.startswith("rav")
@@ -215,15 +231,27 @@ def analyze(
             logging.info("")  # blank line before progress bar
 
         start_time = time.time()
-        analyzer = Analyzer(cfg)
-        analyzer.run(
-            input_path, output_path, rtypes, date, start_seconds, recurse, top, quiet
+        analyzer = Analyzer(cfg, include_names)
+        result = analyzer.run(
+            input_path,
+            output_path,
+            rtypes,
+            date,
+            start_seconds,
+            recurse,
+            top,
+            quiet,
+            return_results=return_results,
+            progress_callback=progress_callback,
         )
 
         if not quiet:
             elapsed_time = util.format_elapsed_time(start_time, time.time())
             logging.info(f"\nElapsed time = {elapsed_time}")
+        return result
     except (InferenceError, ValueError) as e:
+        if raise_errors:
+            raise
         logging.error(e)
 
 
@@ -399,7 +427,9 @@ def _analyze_cmd(
     quiet: bool,
 ):
     if input_arg is not None and input_path is not None:
-        raise click.UsageError("INPUT_PATH cannot be specified as both a positional argument and --input.")
+        raise click.UsageError(
+            "INPUT_PATH cannot be specified as both a positional argument and --input."
+        )
     input_path = input_arg or input_path
 
     if debug:

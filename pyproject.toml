@@ -24,7 +24,7 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: CPython",
 ]
 dependencies = [
-  "britekit>=1.6.0,<1.7",
+  "britekit>=1.6.1,<1.7",
   "click>=8.1,<8.3",
   "numpy>=2.0,<2.4",
   "omegaconf>=2.3,<3.0",
@@ -32,11 +32,13 @@ dependencies = [
   "pandas>=2.0,<3.0; python_version < '3.14'",
   "pandas>=2.3.3,<3.0; python_version >= '3.14'",
   "polars>=1.30,<2.0",
+  "PySide6>=6.8,<7",
   "scipy>=1.13,<2.0"
 ]
 
 [project.scripts]
 hawkears = "hawkears.cli:cli"
+hawkears-gui = "hawkears.gui.app:main"
 
 [project.urls]
 Documentation = "https://github.com/jhuus/HawkEars#readme"

@@ -1,0 +1,58 @@
+{
+  "region_pack": {
+    "code": "canada",
+    "name": "Canada and the Northern United States",
+    "data_version": "legacy-v1"
+  },
+  "areas": [
+    {"code": "CA", "name": "Canada", "level": 0, "area_type": "country"},
+    {"code": "US", "name": "United States", "level": 0, "area_type": "country"},
+
+    {"code": "CA-AB", "parent_code": "CA", "name": "Alberta", "level": 1, "area_type": "province"},
+    {"code": "CA-BC", "parent_code": "CA", "name": "British Columbia", "level": 1, "area_type": "province"},
+    {"code": "CA-MB", "parent_code": "CA", "name": "Manitoba", "level": 1, "area_type": "province"},
+    {"code": "CA-NB", "parent_code": "CA", "name": "New Brunswick", "level": 1, "area_type": "province"},
+    {"code": "CA-NL", "parent_code": "CA", "name": "Newfoundland and Labrador", "level": 1, "area_type": "province"},
+    {"code": "CA-NS", "parent_code": "CA", "name": "Nova Scotia", "level": 1, "area_type": "province"},
+    {"code": "CA-NT", "parent_code": "CA", "name": "Northwest Territories", "level": 1, "area_type": "territory"},
+    {"code": "CA-NU", "parent_code": "CA", "name": "Nunavut", "level": 1, "area_type": "territory"},
+    {"code": "CA-ON", "parent_code": "CA", "name": "Ontario", "level": 1, "area_type": "province"},
+    {"code": "CA-PE", "parent_code": "CA", "name": "Prince Edward Island", "level": 1, "area_type": "province"},
+    {"code": "CA-QC", "parent_code": "CA", "name": "Quebec", "level": 1, "area_type": "province"},
+    {"code": "CA-SK", "parent_code": "CA", "name": "Saskatchewan", "level": 1, "area_type": "province"},
+    {"code": "CA-YT", "parent_code": "CA", "name": "Yukon", "level": 1, "area_type": "territory"},
+
+    {"code": "US-AK", "parent_code": "US", "name": "Alaska", "level": 1, "area_type": "state"},
+    {"code": "US-CT", "parent_code": "US", "name": "Connecticut", "level": 1, "area_type": "state"},
+    {"code": "US-DE", "parent_code": "US", "name": "Delaware", "level": 1, "area_type": "state"},
+    {"code": "US-IA", "parent_code": "US", "name": "Iowa", "level": 1, "area_type": "state"},
+    {"code": "US-ID", "parent_code": "US", "name": "Idaho", "level": 1, "area_type": "state"},
+    {"code": "US-IL", "parent_code": "US", "name": "Illinois", "level": 1, "area_type": "state"},
+    {"code": "US-IN", "parent_code": "US", "name": "Indiana", "level": 1, "area_type": "state"},
+    {"code": "US-MA", "parent_code": "US", "name": "Massachusetts", "level": 1, "area_type": "state"},
+    {"code": "US-MD", "parent_code": "US", "name": "Maryland", "level": 1, "area_type": "state"},
+    {"code": "US-ME", "parent_code": "US", "name": "Maine", "level": 1, "area_type": "state"},
+    {"code": "US-MI", "parent_code": "US", "name": "Michigan", "level": 1, "area_type": "state"},
+    {"code": "US-MN", "parent_code": "US", "name": "Minnesota", "level": 1, "area_type": "state"},
+    {"code": "US-MT", "parent_code": "US", "name": "Montana", "level": 1, "area_type": "state"},
+    {"code": "US-ND", "parent_code": "US", "name": "North Dakota", "level": 1, "area_type": "state"},
+    {"code": "US-NH", "parent_code": "US", "name": "New Hampshire", "level": 1, "area_type": "state"},
+    {"code": "US-NJ", "parent_code": "US", "name": "New Jersey", "level": 1, "area_type": "state"},
+    {"code": "US-NY", "parent_code": "US", "name": "New York", "level": 1, "area_type": "state"},
+    {"code": "US-OH", "parent_code": "US", "name": "Ohio", "level": 1, "area_type": "state"},
+    {"code": "US-PA", "parent_code": "US", "name": "Pennsylvania", "level": 1, "area_type": "state"},
+    {"code": "US-RI", "parent_code": "US", "name": "Rhode Island", "level": 1, "area_type": "state"},
+    {"code": "US-SD", "parent_code": "US", "name": "South Dakota", "level": 1, "area_type": "state"},
+    {"code": "US-VA", "parent_code": "US", "name": "Virginia", "level": 1, "area_type": "state"},
+    {"code": "US-VT", "parent_code": "US", "name": "Vermont", "level": 1, "area_type": "state"},
+    {"code": "US-WA", "parent_code": "US", "name": "Washington", "level": 1, "area_type": "state"},
+    {"code": "US-WI", "parent_code": "US", "name": "Wisconsin", "level": 1, "area_type": "state"},
+    {"code": "US-WV", "parent_code": "US", "name": "West Virginia", "level": 1, "area_type": "state"}
+  ],
+  "levels": [
+    {"country_code": "CA", "level": 1, "singular_name": "Province/Territory", "plural_name": "Provinces/Territories"},
+    {"country_code": "CA", "level": 2, "singular_name": "County", "plural_name": "Counties"},
+    {"country_code": "US", "level": 1, "singular_name": "State", "plural_name": "States"},
+    {"country_code": "US", "level": 2, "singular_name": "County", "plural_name": "Counties"}
+  ]
+}

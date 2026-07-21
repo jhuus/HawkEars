@@ -31,7 +31,7 @@ class OccurrenceManager:
         self.recording_paths = recording_paths
 
         self.provider = OccurrencePickleProvider(cfg.hawkears.occurrence_pickle)
-        self.class_name_set = set(self.provider.data["classes"])
+        self.class_name_set = self.provider.class_names
         self.logged_location_error = False
 
         if date is None:
