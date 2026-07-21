@@ -43,8 +43,10 @@ def analyze(
     low_band: Optional[bool] = None,
     quiet: bool = False,
     *,
+    max_label_length: Optional[float] = None,
     return_results: bool = False,
     progress_callback: Optional[Callable[[AnalysisProgress], None]] = None,
+    cancellation_callback: Optional[Callable[[], bool]] = None,
     include_names: Optional[Collection[str]] = None,
     raise_errors: bool = False,
 ) -> AnalysisResult | None:
@@ -83,7 +85,11 @@ def analyze(
     - low_band (bool, optional): If specified, override the default setting to enable or disable the low-band classifier.
     - quiet (bool): If true, suppress most console messages.
     - return_results (bool): If true, return structured detections directly.
+    - max_label_length: Maximum length in seconds for variable-duration labels.
+      Longer labels are split into consecutive labels without discarding coverage.
     - progress_callback: Optional callback receiving progress notifications.
+    - cancellation_callback: Optional callback checked between recordings. Return true
+      to stop the analysis after recordings already in progress finish.
     - include_names: Optional model class names to include, avoiding an include-list file.
     - raise_errors: Re-raise inference and validation errors for application callers.
     """
@@ -182,6 +188,22 @@ def analyze(
         if segment_len is not None:
             cfg.infer.segment_len = segment_len
 
+        if max_label_length is not None:
+            cfg.hawkears.max_label_length = max_label_length
+
+        if (
+            cfg.hawkears.max_label_length is not None
+            and cfg.hawkears.max_label_length <= 0
+        ):
+            raise ValueError("max_label_length must be greater than zero.")
+        if (
+            cfg.infer.segment_len is not None
+            and cfg.hawkears.max_label_length is not None
+        ):
+            raise ValueError(
+                "max_label_length can only be used with variable-length labels."
+            )
+
         if max_models is not None:
             cfg.infer.max_models = max_models
 
@@ -243,6 +265,7 @@ def analyze(
             quiet,
             return_results=return_results,
             progress_callback=progress_callback,
+            cancellation_callback=cancellation_callback,
         )
 
         if not quiet:
@@ -362,6 +385,11 @@ def analyze(
     help="Optional segment length in seconds. If specified, labels are fixed-length. Otherwise they are variable-length.",
 )
 @click.option(
+    "--max-label-length",
+    type=click.FloatRange(min=0.0, min_open=True),
+    help="Maximum variable label length in seconds. Longer labels are split without gaps.",
+)
+@click.option(
     "--models",
     "max_models",
     type=click.IntRange(1, 12),
@@ -418,6 +446,7 @@ def _analyze_cmd(
     min_score: Optional[float],
     num_threads: Optional[int],
     segment_len: Optional[float],
+    max_label_length: Optional[float],
     max_models: Optional[int],
     label_field: Optional[str],
     recurse: bool,
@@ -464,4 +493,5 @@ def _analyze_cmd(
         top,
         low_band,
         quiet,
+        max_label_length=max_label_length,
     )

@@ -6,7 +6,7 @@ from typing import Mapping, Optional, Sequence
 
 from hawkears.gui.database.connection import transaction
 from hawkears.gui.database.connection import connect
-from hawkears.gui.database.records import AnalysisRunSummary
+from hawkears.gui.database.records import AnalysisRunSummary, SpeciesProcessingSummary
 
 
 class AnalysisRepository:
@@ -118,6 +118,63 @@ class AnalysisRepository:
                     GROUP BY analysis_run.id
                     ORDER BY analysis_run.id DESC
                     """)
+            ]
+        finally:
+            connection.close()
+
+    def species_processing_summary(self, run_id: int) -> list[SpeciesProcessingSummary]:
+        """Summarize analyzed and detected recordings for every target species.
+
+        Detection membership uses the original classifier species rather than a
+        later review correction. This reports what HawkEars produced during the
+        run while preserving corrections for separate accuracy reporting.
+        """
+        connection = connect(self.database_path, readonly=True)
+        try:
+            return [
+                SpeciesProcessingSummary(
+                    species_name=row["species_name"],
+                    recordings_analyzed=row["recordings_analyzed"],
+                    recordings_detected=row["recordings_detected"],
+                    detection_count=row["detection_count"],
+                    detection_seconds=row["detection_seconds"],
+                )
+                for row in connection.execute(
+                    """
+                    SELECT species.common_name AS species_name,
+                           count(DISTINCT CASE
+                               WHEN analysis_item.status = 'completed'
+                               THEN analysis_item.recording_id END
+                           ) AS recordings_analyzed,
+                           count(DISTINCT CASE
+                               WHEN analysis_item.status = 'completed'
+                                AND original.id IS NOT NULL
+                               THEN analysis_item.recording_id END
+                           ) AS recordings_detected,
+                           count(CASE WHEN analysis_item.status = 'completed'
+                               THEN original.id END) AS detection_count,
+                           coalesce(sum(CASE
+                               WHEN analysis_item.status = 'completed'
+                               THEN original.end_ms - original.start_ms
+                               ELSE 0 END), 0) / 1000.0 AS detection_seconds
+                    FROM analysis_run_species
+                    JOIN species
+                      ON species.id = analysis_run_species.species_id
+                    LEFT JOIN analysis_item
+                      ON analysis_item.analysis_run_id =
+                         analysis_run_species.analysis_run_id
+                    LEFT JOIN detection
+                      ON detection.analysis_item_id = analysis_item.id
+                    LEFT JOIN detection_revision AS original
+                      ON original.detection_id = detection.id
+                     AND original.revision_number = 1
+                     AND original.species_id = analysis_run_species.species_id
+                    WHERE analysis_run_species.analysis_run_id = ?
+                    GROUP BY species.id
+                    ORDER BY species.common_name COLLATE NOCASE
+                    """,
+                    (run_id,),
+                )
             ]
         finally:
             connection.close()

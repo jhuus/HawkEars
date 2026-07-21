@@ -103,6 +103,7 @@ class Analyzer:
         task_id=None,
         file_sizes=None,
         progress_callback=None,
+        cancellation_callback=None,
     ):
         """
         This runs on its own thread and processes all recordings in the given list.
@@ -164,6 +165,8 @@ class Analyzer:
                 break
 
         for recording_path in recording_paths:
+            if cancellation_callback is not None and cancellation_callback():
+                break
             if progress is None and not self.quiet:
                 logging.info(f"[Thread {thread_num}] Processing {recording_path}")
 
@@ -219,6 +222,7 @@ class Analyzer:
                 dataframe = predictor.get_dataframe(
                     None, frame_map, None, recording_stem
                 )
+                dataframe = self._split_long_dataframe_labels(dataframe)
 
             if self.do_csv:
                 rarities_df = (
@@ -228,6 +232,8 @@ class Analyzer:
                     if rarities_frame_map is not None
                     else None
                 )
+                if rarities_df is not None:
+                    rarities_df = self._split_long_dataframe_labels(rarities_df)
                 with self._dataframes_lock:
                     self.dataframes.append(dataframe)
                     if rarities_df is not None:
@@ -311,7 +317,7 @@ class Analyzer:
         Skips writing if write_empty_file is False and there are no detections.
         """
         try:
-            labels = predictor.get_frame_labels(frame_map)
+            labels = self._split_long_labels(predictor.get_frame_labels(frame_map))
 
             # Check if there is any output
             if not write_empty_file:
@@ -330,6 +336,47 @@ class Analyzer:
                         out_file.write(text)
         except (IOError, OSError) as e:
             raise Exception(f"Failed to write Audacity labels to {file_path}: {str(e)}")
+
+    def _split_long_labels(self, labels):
+        """Split oversized variable labels while retaining their full coverage."""
+        maximum = self.cfg.hawkears.max_label_length
+        if self.cfg.infer.segment_len is not None or maximum is None:
+            return labels
+        split = {}
+        for name, class_labels in labels.items():
+            split[name] = []
+            for label in class_labels:
+                start = label.start_time
+                while label.end_time - start > maximum:
+                    split[name].append(type(label)(label.score, start, start + maximum))
+                    start += maximum
+                if label.end_time > start:
+                    split[name].append(type(label)(label.score, start, label.end_time))
+        return split
+
+    def _split_long_dataframe_labels(self, dataframe):
+        """Apply the variable-label limit to a predictor dataframe."""
+        maximum = self.cfg.hawkears.max_label_length
+        if self.cfg.infer.segment_len is not None or maximum is None or dataframe.empty:
+            return dataframe
+        rows = []
+        for _, row in dataframe.iterrows():
+            start = float(row["start_time"])
+            end = float(row["end_time"])
+            while end - start > maximum:
+                piece = row.copy()
+                piece["start_time"] = start
+                piece["end_time"] = start + maximum
+                rows.append(piece)
+                start += maximum
+            if end > start:
+                piece = row.copy()
+                piece["start_time"] = start
+                piece["end_time"] = end
+                rows.append(piece)
+        import pandas as pd
+
+        return pd.DataFrame(rows, columns=dataframe.columns).reset_index(drop=True)
 
     def _save_raven_table(self, dataframe, file_path: str, recording_name: str) -> None:
         """
@@ -374,6 +421,7 @@ class Analyzer:
         *,
         return_results: bool = False,
         progress_callback: Optional[Callable[[AnalysisProgress], None]] = None,
+        cancellation_callback: Optional[Callable[[], bool]] = None,
     ) -> AnalysisResult | None:
         """
         Run inference.
@@ -389,6 +437,8 @@ class Analyzer:
         - top (bool): If true, show the top scores for the first spectrogram, then stop.
         - return_results (bool): Return detections directly instead of relying on output files.
         - progress_callback: Called initially and whenever a recording finishes.
+        - cancellation_callback: Checked before starting each recording. Returning true
+          stops scheduling further work after active recordings finish.
         """
 
         self.quiet = quiet
@@ -484,6 +534,7 @@ class Analyzer:
                     task_id,
                     file_sizes,
                     progress_callback,
+                    cancellation_callback,
                 )
             elif num_threads > 1:
                 recordings_per_thread = self._split_list(recording_paths, num_threads)
@@ -500,6 +551,7 @@ class Analyzer:
                             task_id,
                             file_sizes,
                             progress_callback,
+                            cancellation_callback,
                         )
                         for i in range(num_threads)
                     ]

@@ -10,7 +10,9 @@ from hawkears.gui.database.records import (
     DetectionResult,
     DetectionRevision,
     DetectionSource,
+    ReportSummary,
     ReviewVerdict,
+    SpeciesReport,
 )
 
 _UNCHANGED = object()
@@ -455,6 +457,76 @@ class DetectionRepository:
                 )
                 for row in connection.execute(query, parameters)
             ]
+        finally:
+            connection.close()
+
+    def report_summary(self, run_id: Optional[int] = None) -> ReportSummary:
+        """Return review and annotation totals, grouped by current species."""
+        connection = connect(self.database_path, readonly=True)
+        try:
+            query = """
+                SELECT species.common_name AS species_name,
+                       count(detection.id) AS detection_count,
+                       sum(current.end_ms - current.start_ms) / 1000.0
+                           AS detection_seconds,
+                       count(review.id) AS reviewed_count,
+                       sum(CASE WHEN review.verdict = 'correct' THEN 1 ELSE 0 END)
+                           AS correct_count,
+                       sum(CASE WHEN review.verdict = 'incorrect' THEN 1 ELSE 0 END)
+                           AS incorrect_count,
+                       sum(CASE WHEN review.verdict = 'uncertain' THEN 1 ELSE 0 END)
+                           AS uncertain_count,
+                       sum(CASE WHEN original.species_id != current.species_id
+                           THEN 1 ELSE 0 END) AS correction_count,
+                       coalesce(sum(additional.annotation_count), 0)
+                           AS additional_annotation_count
+                FROM detection
+                JOIN detection_revision AS current
+                  ON current.id = detection.current_revision_id
+                JOIN detection_revision AS original
+                  ON original.detection_id = detection.id
+                 AND original.revision_number = 1
+                JOIN species ON species.id = current.species_id
+                LEFT JOIN review ON review.detection_id = detection.id
+                LEFT JOIN analysis_item
+                  ON analysis_item.id = detection.analysis_item_id
+                LEFT JOIN (
+                    SELECT detection_id, count(*) AS annotation_count
+                    FROM detection_additional_species
+                    GROUP BY detection_id
+                ) AS additional ON additional.detection_id = detection.id
+            """
+            parameters: tuple[object, ...] = ()
+            if run_id is not None:
+                query += " WHERE analysis_item.analysis_run_id = ?"
+                parameters = (run_id,)
+            query += " GROUP BY species.id ORDER BY species.common_name COLLATE NOCASE"
+            species = tuple(
+                SpeciesReport(
+                    species_name=row["species_name"],
+                    detection_count=row["detection_count"],
+                    detection_seconds=row["detection_seconds"],
+                    reviewed_count=row["reviewed_count"],
+                    correct_count=row["correct_count"],
+                    incorrect_count=row["incorrect_count"],
+                    uncertain_count=row["uncertain_count"],
+                    correction_count=row["correction_count"],
+                    additional_annotation_count=row["additional_annotation_count"],
+                )
+                for row in connection.execute(query, parameters)
+            )
+            return ReportSummary(
+                detection_count=sum(item.detection_count for item in species),
+                reviewed_count=sum(item.reviewed_count for item in species),
+                correct_count=sum(item.correct_count for item in species),
+                incorrect_count=sum(item.incorrect_count for item in species),
+                uncertain_count=sum(item.uncertain_count for item in species),
+                correction_count=sum(item.correction_count for item in species),
+                additional_annotation_count=sum(
+                    item.additional_annotation_count for item in species
+                ),
+                species=species,
+            )
         finally:
             connection.close()
 

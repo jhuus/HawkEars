@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Mapping
 
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QCoreApplication, QDate
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -37,41 +37,51 @@ def location_summary(
             latitude = float(settings["latitude"])
             longitude = float(settings["longitude"])
         except (KeyError, TypeError, ValueError):
-            return "Global coordinates are incomplete"
+            return QCoreApplication.translate(
+                "LocationDialog", "Global coordinates are incomplete"
+            )
         area = catalog.find_area(latitude, longitude) if catalog is not None else None
         suffix = f" · {area.name} ({area.code})" if area else ""
-        summary = f"Global coordinates: {latitude:.5f}, {longitude:.5f}{suffix}"
+        summary = QCoreApplication.translate(
+            "LocationDialog", "Global coordinates: %1, %2%3"
+        )
+        summary = (
+            summary.replace("%1", f"{latitude:.5f}")
+            .replace("%2", f"{longitude:.5f}")
+            .replace("%3", suffix)
+        )
         return summary + _date_summary(settings)
     if mode == "region":
         code = str(settings.get("region_code", ""))
         area = catalog.area(code) if catalog is not None and code else None
-        summary = (
-            f"eBird region: {area.name} ({code})" if area else f"eBird region: {code}"
-        )
+        display = f"{area.name} ({code})" if area else code
+        summary = QCoreApplication.translate(
+            "LocationDialog", "eBird region: %1"
+        ).replace("%1", display)
         return summary + _date_summary(settings)
     if mode == "filelist":
         path = Path(str(settings.get("path", "")))
-        return f"Per-recording locations: {path.name or 'file not selected'}"
-    return "No location filtering"
+        filename = path.name or QCoreApplication.translate(
+            "LocationDialog", "file not selected"
+        )
+        return QCoreApplication.translate(
+            "LocationDialog", "Per-recording locations: %1"
+        ).replace("%1", filename)
+    return QCoreApplication.translate("LocationDialog", "No location filtering")
 
 
 def _date_summary(settings: Mapping[str, object]) -> str:
     date_mode = settings.get("date_mode", "none")
     if date_mode == "specific" and settings.get("date"):
-        return f" · {settings['date']}"
+        return QCoreApplication.translate("LocationDialog", " · %1").replace(
+            "%1", str(settings["date"])
+        )
     if date_mode == "filename":
-        return " · date from file name"
+        return QCoreApplication.translate("LocationDialog", " · date from file name")
     return ""
 
 
 class LocationDialog(QDialog):
-    MODES = (
-        ("No location filtering", "none"),
-        ("Global latitude and longitude", "coordinates"),
-        ("eBird region", "region"),
-        ("Per-recording file list", "filelist"),
-    )
-
     def __init__(
         self,
         catalog: LocationCatalog,
@@ -81,7 +91,7 @@ class LocationDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Analysis location")
+        self.setWindowTitle(self.tr("Analysis location"))
         self.resize(540, 350)
         self.catalog = catalog
         self.browse_directory = browse_directory or Path.cwd()
@@ -89,17 +99,21 @@ class LocationDialog(QDialog):
 
         layout = QVBoxLayout(self)
         intro = QLabel(
-            "Location enables geographic occurrence filtering and heuristics. "
-            "Choose one source for this project's analysis runs."
+            self.tr(
+                "Location enables geographic occurrence filtering and heuristics. "
+                "Choose one source for this project's analysis runs."
+            )
         )
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
         source_form = QFormLayout()
         self.mode = QComboBox()
-        for label, value in self.MODES:
-            self.mode.addItem(label, value)
-        source_form.addRow("Location source", self.mode)
+        self.mode.addItem(self.tr("No location filtering"), "none")
+        self.mode.addItem(self.tr("Global latitude and longitude"), "coordinates")
+        self.mode.addItem(self.tr("eBird region"), "region")
+        self.mode.addItem(self.tr("Per-recording file list"), "filelist")
+        source_form.addRow(self.tr("Location source"), self.mode)
         layout.addLayout(source_form)
 
         self.pages = QStackedWidget()
@@ -113,11 +127,11 @@ class LocationDialog(QDialog):
         date_form = QFormLayout(self.date_panel)
         date_form.setContentsMargins(0, 0, 0, 0)
         self.date_mode = QComboBox()
-        self.date_mode.addItem("No date filtering", "none")
-        self.date_mode.addItem("Specific date", "specific")
-        self.date_mode.addItem("Get date from file name", "filename")
-        date_form.addRow("Recording date", self.date_mode)
-        self.date_label = QLabel("Specific date")
+        self.date_mode.addItem(self.tr("No date filtering"), "none")
+        self.date_mode.addItem(self.tr("Specific date"), "specific")
+        self.date_mode.addItem(self.tr("Get date from file name"), "filename")
+        date_form.addRow(self.tr("Recording date"), self.date_mode)
+        self.date_label = QLabel(self.tr("Specific date"))
         self.date = QDateEdit()
         self.date.setCalendarPopup(True)
         self.date.setDisplayFormat("yyyy-MM-dd")
@@ -137,12 +151,13 @@ class LocationDialog(QDialog):
         self.date_mode.currentIndexChanged.connect(self._update_date_controls)
         self._load_initial(initial or {})
 
-    @staticmethod
-    def _none_page() -> QWidget:
+    def _none_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
         text = QLabel(
-            "HawkEars will not filter species using geographic occurrence data."
+            self.tr(
+                "HawkEars will not filter species using geographic occurrence data."
+            )
         )
         text.setWordWrap(True)
         text.setObjectName("muted")
@@ -161,11 +176,11 @@ class LocationDialog(QDialog):
         self.longitude.setRange(-180, 180)
         self.longitude.setDecimals(6)
         self.longitude.setSingleStep(0.01)
-        form.addRow("Latitude", self.latitude)
-        form.addRow("Longitude", self.longitude)
+        form.addRow(self.tr("Latitude"), self.latitude)
+        form.addRow(self.tr("Longitude"), self.longitude)
         self.coordinate_region = QLabel()
         self.coordinate_region.setWordWrap(True)
-        form.addRow("Detected county", self.coordinate_region)
+        form.addRow(self.tr("Detected county"), self.coordinate_region)
         self.latitude.valueChanged.connect(self._update_coordinate_region)
         self.longitude.valueChanged.connect(self._update_coordinate_region)
         self._update_coordinate_region()
@@ -178,11 +193,11 @@ class LocationDialog(QDialog):
         for country in self.catalog.roots():
             self.country.addItem(country.name, country.id)
         self.country.currentIndexChanged.connect(self._country_changed)
-        self.region_form.addRow("Country", self.country)
+        self.region_form.addRow(self.tr("Country"), self.country)
 
         self.level_rows: list[tuple[QLabel, QComboBox]] = []
         for index in range(self.catalog.max_level()):
-            label = QLabel("Administrative area")
+            label = QLabel(self.tr("Administrative area"))
             combo = QComboBox()
             combo.currentIndexChanged.connect(
                 lambda selected, level_index=index: self._level_changed(level_index)
@@ -196,15 +211,17 @@ class LocationDialog(QDialog):
         page = QWidget()
         layout = QVBoxLayout(page)
         explanation = QLabel(
-            "Select a HawkEars file list with four columns: filename, latitude, "
-            "longitude, and recording_date."
+            self.tr(
+                "Select a HawkEars file list with four columns: filename, latitude, "
+                "longitude, and recording_date."
+            )
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
         row = QHBoxLayout()
         self.filelist = QLineEdit()
-        self.filelist.setPlaceholderText("CSV file")
-        browse = QPushButton("Browse…")
+        self.filelist.setPlaceholderText(self.tr("CSV file"))
+        browse = QPushButton(self.tr("Browse…"))
         browse.clicked.connect(self._browse_filelist)
         row.addWidget(self.filelist, 1)
         row.addWidget(browse)
@@ -291,7 +308,9 @@ class LocationDialog(QDialog):
                 combo.hide()
                 continue
 
-            label.setText(level_names.get(children[0].level, "Administrative area"))
+            label.setText(
+                level_names.get(children[0].level, self.tr("Administrative area"))
+            )
             label.show()
             combo.blockSignals(True)
             combo.clear()
@@ -326,9 +345,9 @@ class LocationDialog(QDialog):
     def _browse_filelist(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Select HawkEars file list",
+            self.tr("Select HawkEars file list"),
             str(self.browse_directory),
-            "CSV files (*.csv);;All files (*)",
+            self.tr("CSV files (*.csv);;All files (*)"),
         )
         if path:
             self.filelist.setText(path)
@@ -340,7 +359,7 @@ class LocationDialog(QDialog):
         area = self._coordinate_area()
         if area is None:
             self.coordinate_region.setText(
-                "No supported eBird county contains these coordinates."
+                self.tr("No supported eBird county contains these coordinates.")
             )
             self.coordinate_region.setStyleSheet("color: #a33a32;")
         else:
@@ -353,21 +372,25 @@ class LocationDialog(QDialog):
             self._selected_area is None or not self._selected_area.selectable
         ):
             QMessageBox.warning(
-                self, "Select a region", "Select the region used for analysis."
+                self,
+                self.tr("Select a region"),
+                self.tr("Select the region used for analysis."),
             )
             return
         if mode == "coordinates" and self._coordinate_area() is None:
             QMessageBox.warning(
                 self,
-                "Location not found",
-                "No supported eBird county contains these coordinates.",
+                self.tr("Location not found"),
+                self.tr("No supported eBird county contains these coordinates."),
             )
             return
         if mode == "filelist":
             path = Path(self.filelist.text()).expanduser()
             if not path.is_file():
                 QMessageBox.warning(
-                    self, "Select a file list", "Select an existing CSV file."
+                    self,
+                    self.tr("Select a file list"),
+                    self.tr("Select an existing CSV file."),
                 )
                 return
         self.accept()

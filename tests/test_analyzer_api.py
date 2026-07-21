@@ -44,8 +44,11 @@ def test_analyzer_returns_structured_results_and_progress(tmp_path: Path):
         task_id,
         file_sizes,
         progress_callback,
+        cancellation_callback,
     ):
         for recording_path in recording_paths:
+            if cancellation_callback is not None and cancellation_callback():
+                break
             dataframe = pd.DataFrame(
                 [
                     {
@@ -82,3 +85,32 @@ def test_analyzer_returns_structured_results_and_progress(tmp_path: Path):
     assert result.detections[0].species == "Marsh Wren"
     assert result.detections[0].start_time == 2.5
     assert [item.percent_complete for item in progress] == [0.0, 50.0, 100.0]
+
+
+def test_variable_labels_are_split_without_losing_coverage():
+    analyzer = Analyzer.__new__(Analyzer)
+    analyzer.cfg = SimpleNamespace(
+        hawkears=SimpleNamespace(max_label_length=3.0),
+        infer=SimpleNamespace(segment_len=None),
+    )
+    dataframe = pd.DataFrame(
+        [
+            {
+                "recording": "night",
+                "name": "Eastern Whip-poor-will",
+                "start_time": 1.0,
+                "end_time": 10.5,
+                "score": 0.9,
+            }
+        ]
+    )
+
+    split = analyzer._split_long_dataframe_labels(dataframe)
+
+    assert list(zip(split.start_time, split.end_time)) == [
+        (1.0, 4.0),
+        (4.0, 7.0),
+        (7.0, 10.0),
+        (10.0, 10.5),
+    ]
+    assert set(split.score) == {0.9}

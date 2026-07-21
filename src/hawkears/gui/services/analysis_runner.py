@@ -1,6 +1,7 @@
 """Background inference and project persistence for the GUI."""
 
 from pathlib import Path
+import threading
 from typing import Mapping, Sequence
 
 from PySide6.QtCore import QObject, Signal, Slot
@@ -16,6 +17,7 @@ from hawkears.gui.database.records import Species
 class AnalysisRunner(QObject):
     progress_changed = Signal(float, str)
     completed = Signal(int, int)
+    cancelled = Signal(int, int)
     failed = Signal(str)
 
     def __init__(
@@ -33,6 +35,12 @@ class AnalysisRunner(QObject):
         self.species = list(species)
         self.settings = dict(settings)
         self.run_id: int | None = None
+        self._cancel_requested = threading.Event()
+        self._completed_paths: set[Path] = set()
+
+    def cancel(self) -> None:
+        """Request a thread-safe stop between recordings."""
+        self._cancel_requested.set()
 
     @Slot()
     def run(self) -> None:
@@ -63,9 +71,7 @@ class AnalysisRunner(QObject):
             date = self._date_value(location)
             result = analyze(
                 input_path=str(self.recording_directory),
-                output_path=str(
-                    self.database_path.parent / "analysis" / str(self.run_id)
-                ),
+                output_path=str(self.output_directory(self.run_id)),
                 rtype=None,
                 date=date,
                 region=(
@@ -91,12 +97,16 @@ class AnalysisRunner(QObject):
                 min_score=float(self.settings.get("min_score", 0.6)),
                 num_threads=int(self.settings.get("num_threads", 3)),
                 segment_len=self._optional_float(self.settings.get("segment_len")),
+                max_label_length=self._optional_float(
+                    self.settings.get("max_label_length")
+                ),
                 max_models=int(self.settings.get("max_models", 9)),
                 label_field="names",
                 recurse=self.recurse,
                 quiet=True,
                 return_results=True,
                 progress_callback=self._report_progress,
+                cancellation_callback=self._cancel_requested.is_set,
                 include_names=[
                     item.class_name or item.common_name for item in self.species
                 ],
@@ -128,10 +138,26 @@ class AnalysisRunner(QObject):
                     )
                 )
             count = database.detections.create_inferred_many(rows)
-            for item_id in item_ids.values():
-                database.analysis.set_item_status(item_id, "completed")
-            database.analysis.set_run_status(self.run_id, "completed")
-            self.completed.emit(self.run_id, count)
+            was_cancelled = self._cancel_requested.is_set() and len(
+                self._completed_paths
+            ) < len(paths)
+            for recording in recordings:
+                database.analysis.set_item_status(
+                    item_ids[recording.id],
+                    (
+                        "completed"
+                        if not was_cancelled
+                        or recording.resolved_path(self.database_path)
+                        in self._completed_paths
+                        else "cancelled"
+                    ),
+                )
+            if was_cancelled:
+                database.analysis.set_run_status(self.run_id, "cancelled")
+                self.cancelled.emit(self.run_id, count)
+            else:
+                database.analysis.set_run_status(self.run_id, "completed")
+                self.completed.emit(self.run_id, count)
         except Exception as error:
             if self.run_id is not None:
                 try:
@@ -150,10 +176,21 @@ class AnalysisRunner(QObject):
             return str(location.get("date"))
         return None
 
+    def output_directory(self, run_id: int) -> Path:
+        """Return the project-specific artifact directory for an analysis run."""
+        return (
+            self.database_path.parent
+            / self.database_path.stem
+            / "analysis"
+            / str(run_id)
+        )
+
     @staticmethod
     def _optional_float(value: object) -> float | None:
         return float(value) if value is not None else None
 
     def _report_progress(self, progress: AnalysisProgress) -> None:
         recording = progress.recording_path.name if progress.recording_path else ""
+        if progress.recording_path is not None:
+            self._completed_paths.add(progress.recording_path.resolve())
         self.progress_changed.emit(progress.percent_complete, recording)

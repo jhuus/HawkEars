@@ -26,7 +26,10 @@ def test_analysis_runner_persists_direct_results(tmp_path: Path, monkeypatch):
         lambda input_path, recurse: [str(recording)],
     )
 
+    analyze_arguments = {}
+
     def fake_analyze(**kwargs):
+        analyze_arguments.update(kwargs)
         callback = kwargs["progress_callback"]
         callback(AnalysisProgress(0, 1))
         callback(AnalysisProgress(1, 1, recording))
@@ -49,6 +52,9 @@ def test_analysis_runner_persists_direct_results(tmp_path: Path, monkeypatch):
     runner.run()
 
     assert completed == [(1, 1)]
+    assert Path(analyze_arguments["output_path"]) == (
+        tmp_path / "survey" / "analysis" / "1"
+    )
     connection = connect(project_path, readonly=True)
     try:
         assert (
@@ -76,3 +82,45 @@ def test_analysis_runner_maps_date_options():
         AnalysisRunner._date_value({"date_mode": "specific", "date": "2026-05-18"})
         == "2026-05-18"
     )
+
+
+def test_analysis_runner_cancels_without_leaving_running_items(
+    tmp_path: Path, monkeypatch
+):
+    project_path = tmp_path / "survey.hawkears"
+    database = ProjectDatabase.create(project_path, "Survey")
+    species = database.species.add("Marsh Wren", class_name="Marsh Wren")
+    recordings = [tmp_path / "one.wav", tmp_path / "two.wav"]
+    for recording in recordings:
+        recording.touch()
+    monkeypatch.setattr(
+        analysis_runner,
+        "find_recording_paths",
+        lambda input_path, recurse: [str(path) for path in recordings],
+    )
+    monkeypatch.setattr(
+        analysis_runner,
+        "analyze",
+        lambda **kwargs: AnalysisResult((), len(recordings)),
+    )
+    runner = AnalysisRunner(project_path, tmp_path, False, [species], {})
+    cancelled = []
+    runner.cancelled.connect(lambda run_id, count: cancelled.append((run_id, count)))
+
+    runner.cancel()
+    runner.run()
+
+    assert cancelled == [(1, 0)]
+    connection = connect(project_path, readonly=True)
+    try:
+        assert (
+            connection.execute(
+                "SELECT status FROM analysis_run WHERE id = 1"
+            ).fetchone()[0]
+            == "cancelled"
+        )
+        assert {
+            row[0] for row in connection.execute("SELECT status FROM analysis_item")
+        } == {"cancelled"}
+    finally:
+        connection.close()

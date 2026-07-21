@@ -69,6 +69,8 @@ format = "black src tests"
 lint = "ruff check src tests"
 typecheck = "mypy src tests"
 check = "black --check src tests && ruff check src tests && mypy src tests"
+translations = "pyside6-lupdate -extensions py src/hawkears/gui/app.py src/hawkears/gui/ui -ts {args:src/hawkears/gui/translations/hawkears.ts}"
+translations-compile = "pyside6-lrelease src/hawkears/gui/translations/*.ts"
 
 [tool.hatch.build]
 include = ["src"]

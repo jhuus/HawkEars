@@ -200,6 +200,11 @@ def test_manual_detection_preserves_revision_history(tmp_path: Path):
         2,
         3,
     ]
+    report = database.detections.report_summary()
+    assert report.detection_count == 1
+    assert report.correction_count == 1
+    assert report.species[0].species_name == "Marsh Wren"
+    assert report.species[0].needs_review_count == 1
 
 
 def test_detection_validation_is_transactional(tmp_path: Path):
@@ -301,10 +306,25 @@ def test_analysis_import_and_review_provenance(tmp_path: Path):
     assert raw["raw_species"] == "Marsh Wren"
     assert json.loads(raw["raw_data_json"]) == {"source": "fixture"}
 
+    report = database.detections.report_summary()
+    assert report.detection_count == 2
+    assert report.species[0].detection_seconds == 6.0
+    assert report.reviewed_count == 1
+    assert report.correct_count == 1
+    assert report.additional_annotation_count == 1
+    assert report.species[0].needs_review_count == 1
+
+    run_report = database.detections.report_summary(run_id)
+    assert run_report.detection_count == 1
+    assert run_report.species[0].detection_seconds == 3.0
+    assert run_report.reviewed_count == 1
+    assert run_report.additional_annotation_count == 1
+
 
 def test_bulk_inference_detection_creation(tmp_path: Path):
     database = create_project(tmp_path)
     species = database.species.add("Marsh Wren")
+    undetected_species = database.species.add("Swamp Sparrow")
     recording = database.recordings.add(tmp_path / "marsh.wav")
     run_id = database.analysis.create_run(
         "2.3.0",
@@ -318,7 +338,7 @@ def test_bulk_inference_detection_creation(tmp_path: Path):
                 "date": "2026-05-18",
             }
         },
-        species_ids=[species.id],
+        species_ids=[species.id, undetected_species.id],
         recording_ids=[recording.id],
     )
     item_id = database.analysis.item_ids(run_id)[recording.id]
@@ -329,6 +349,7 @@ def test_bulk_inference_detection_creation(tmp_path: Path):
             (recording.id, item_id, species.id, 8_000, 11_000, 0.72),
         ]
     )
+    database.analysis.set_item_status(item_id, "completed")
 
     assert count == 2
     runs = database.analysis.list_runs()
@@ -340,6 +361,19 @@ def test_bulk_inference_detection_creation(tmp_path: Path):
     assert results[0].region_code == "CA-ON-OT"
     assert results[0].latitude == 45.4215
     assert results[0].review_verdict is None
+    processing = database.analysis.species_processing_summary(run_id)
+    assert [item.species_name for item in processing] == [
+        "Marsh Wren",
+        "Swamp Sparrow",
+    ]
+    assert processing[0].recordings_analyzed == 1
+    assert processing[0].recordings_detected == 1
+    assert processing[0].detection_count == 2
+    assert processing[0].detection_seconds == 6.0
+    assert processing[1].recordings_analyzed == 1
+    assert processing[1].recordings_detected == 0
+    assert processing[1].detection_seconds == 0.0
+    assert processing[1].recordings_not_detected == 1
     connection = connect(database.path, readonly=True)
     try:
         assert connection.execute("SELECT count(*) FROM detection").fetchone()[0] == 2

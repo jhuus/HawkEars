@@ -7,6 +7,7 @@ import sys
 def main() -> int:
     try:
         from PySide6.QtGui import QIcon
+        from PySide6.QtCore import QCoreApplication
         from PySide6.QtWidgets import QApplication, QMessageBox
     except ImportError:
         print(
@@ -17,6 +18,7 @@ def main() -> int:
         return 1
 
     from hawkears.gui.ui.main_window import MainWindow
+    from hawkears.gui.i18n import install_translators
     from hawkears.gui.ui.resources import brand_icon_path
     from hawkears.gui.ui.theme import STYLESHEET
     from hawkears.gui.services.class_catalog import (
@@ -28,6 +30,8 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("HawkEars")
     app.setOrganizationName("HawkEars")
+    translators = install_translators(app)
+    app._hawkears_translators = translators  # type: ignore[attr-defined]
     app.setWindowIcon(QIcon(brand_icon_path()))
     app.setStyleSheet(STYLESHEET)
 
@@ -36,9 +40,12 @@ def main() -> int:
     if not classes_path.is_file():
         QMessageBox.critical(
             None,
-            "HawkEars setup required",
-            "Root directory is not configured for HawkEars. "
-            "Run 'hawkears init' to set it up.",
+            QCoreApplication.translate("Application", "HawkEars setup required"),
+            QCoreApplication.translate(
+                "Application",
+                "Root directory is not configured for HawkEars. "
+                "Run 'hawkears init' to set it up.",
+            ),
         )
     else:
         try:
@@ -46,7 +53,9 @@ def main() -> int:
         except (OSError, ClassCatalogError) as error:
             QMessageBox.critical(
                 None,
-                "Could not load HawkEars classes",
+                QCoreApplication.translate(
+                    "Application", "Could not load HawkEars classes"
+                ),
                 str(error),
             )
 

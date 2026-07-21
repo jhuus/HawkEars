@@ -28,15 +28,15 @@ class SpeciesDialog(QDialog):
         parent=None,  # type: ignore[no-untyped-def]
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Select target species")
+        self.setWindowTitle(self.tr("Select target species"))
         self.resize(760, 620)
         self._definitions = list(definitions)
 
         layout = QVBoxLayout(self)
-        heading = QLabel("Target species")
+        heading = QLabel(self.tr("Target species"))
         heading.setObjectName("pageTitle")
         description = QLabel(
-            "Select the classes HawkEars should include in this project."
+            self.tr("Select the classes HawkEars should include in this project.")
         )
         description.setObjectName("pageSubtitle")
         description.setWordWrap(True)
@@ -45,13 +45,15 @@ class SpeciesDialog(QDialog):
 
         self.search = QLineEdit()
         self.search.setPlaceholderText(
-            "Search by common name, scientific name, or code…"
+            self.tr("Search by common name, scientific name, or code…")
         )
         self.search.textChanged.connect(self._filter_rows)
         layout.addWidget(self.search)
 
         self.table = QTableWidget(len(self._definitions), 3)
-        self.table.setHorizontalHeaderLabels(["Common name", "Scientific name", "Code"])
+        self.table.setHorizontalHeaderLabels(
+            [self.tr("Common name"), self.tr("Scientific name"), self.tr("Code")]
+        )
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
@@ -76,9 +78,9 @@ class SpeciesDialog(QDialog):
         layout.addWidget(self.table, 1)
 
         selection_row = QHBoxLayout()
-        select_visible = QPushButton("Select visible")
+        select_visible = QPushButton(self.tr("Select visible"))
         select_visible.clicked.connect(lambda: self._check_visible(Qt.Checked))
-        clear_visible = QPushButton("Clear visible")
+        clear_visible = QPushButton(self.tr("Clear visible"))
         clear_visible.clicked.connect(lambda: self._check_visible(Qt.Unchecked))
         self.selection_count = QLabel()
         self.selection_count.setObjectName("muted")
@@ -127,5 +129,5 @@ class SpeciesDialog(QDialog):
             self.table.item(row, 0).checkState() == Qt.Checked
             for row in range(self.table.rowCount())
         )
-        self.selection_count.setText(f"{count} selected")
+        self.selection_count.setText(self.tr("%n selected", None, count))
         self.buttons.button(QDialogButtonBox.Save).setEnabled(count > 0)

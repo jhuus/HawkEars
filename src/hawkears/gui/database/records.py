@@ -167,3 +167,51 @@ class AnalysisRunSummary:
     status: str
     created_at: str
     detection_count: int
+
+
+@dataclass(frozen=True)
+class SpeciesProcessingSummary:
+    """Recording coverage for one target species in an analysis run."""
+
+    species_name: str
+    recordings_analyzed: int
+    recordings_detected: int
+    detection_count: int
+    detection_seconds: float
+
+    @property
+    def recordings_not_detected(self) -> int:
+        return self.recordings_analyzed - self.recordings_detected
+
+
+@dataclass(frozen=True)
+class SpeciesReport:
+    """Review totals for detections currently assigned to one species."""
+
+    species_name: str
+    detection_count: int
+    detection_seconds: float
+    reviewed_count: int
+    correct_count: int
+    incorrect_count: int
+    uncertain_count: int
+    correction_count: int
+    additional_annotation_count: int
+
+    @property
+    def needs_review_count(self) -> int:
+        return self.detection_count - self.reviewed_count
+
+
+@dataclass(frozen=True)
+class ReportSummary:
+    """Project or analysis-run totals used by the Reports page."""
+
+    detection_count: int
+    reviewed_count: int
+    correct_count: int
+    incorrect_count: int
+    uncertain_count: int
+    correction_count: int
+    additional_annotation_count: int
+    species: tuple[SpeciesReport, ...]
