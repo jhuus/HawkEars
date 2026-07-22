@@ -45,19 +45,19 @@ def load_playback_audio(
 
 
 def colorize_spectrogram(values: np.ndarray) -> np.ndarray:
-    """Map normalized intensities to a dark earth-brown palette."""
-    # Keep background and moderate energy in the darker umber range, reserving
-    # ochre and pale sand for the strongest peaks.
+    """Map normalized intensities to a subtly warm inverted grayscale palette."""
+    # Use a warm-white background and progressively darker, faintly brown tones
+    # for stronger energy.
     intensity = np.power(np.clip(np.asarray(values, dtype=np.float32), 0, 1), 2.6)
     positions = np.array([0.0, 0.22, 0.48, 0.72, 0.9, 1.0], dtype=np.float32)
     colors = np.array(
         [
-            (24, 14, 10),
-            (55, 31, 20),
-            (91, 50, 28),
-            (137, 77, 39),
-            (190, 123, 62),
-            (245, 211, 151),
+            (245, 244, 242),
+            (211, 209, 206),
+            (166, 164, 161),
+            (113, 111, 108),
+            (57, 55, 52),
+            (10, 9, 8),
         ],
         dtype=np.float32,
     )

@@ -231,3 +231,20 @@ class ReportSummary:
     correction_count: int
     additional_annotation_count: int
     species: tuple[SpeciesReport, ...]
+
+
+@dataclass(frozen=True)
+class ValidatedReport:
+    """A predefined, exportable table derived from reviewed detections."""
+
+    report_type: str
+    columns: tuple[str, ...]
+    rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ReviewedDetectionExport:
+    """Detailed reviewed detections and their stable CSV column names."""
+
+    columns: tuple[str, ...]
+    rows: tuple[tuple[object, ...], ...]

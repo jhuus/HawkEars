@@ -406,6 +406,118 @@ def test_bulk_inference_detection_creation(tmp_path: Path):
         connection.close()
 
 
+def test_validated_reports_include_confirmed_corrections(tmp_path: Path):
+    database = create_project(tmp_path)
+    predicted = database.species.add("Alder Flycatcher")
+    corrected = database.species.add("Common Nighthawk")
+    first_recording = database.recordings.add(tmp_path / "first.mp3")
+    second_recording = database.recordings.add(tmp_path / "second.mp3")
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[predicted.id, corrected.id],
+        recording_ids=[first_recording.id, second_recording.id],
+        recording_metadata={
+            first_recording.id: {
+                "recorded_at": "2025-06-01T04:00:00",
+                "region_code": "CA-BC-CO",
+                "location_name": "Central Okanagan",
+            },
+            second_recording.id: {
+                "recorded_at": "2025-06-01T05:00:00",
+                "region_code": "CA-BC-CO",
+                "location_name": "Central Okanagan",
+            },
+        },
+    )
+    item_ids = database.analysis.item_ids(run_id)
+    accepted = database.detections.create_inferred(
+        first_recording.id,
+        item_ids[first_recording.id],
+        corrected.id,
+        2_000,
+        5_000,
+        0.91,
+    )
+    correction = database.detections.create_inferred(
+        second_recording.id,
+        item_ids[second_recording.id],
+        predicted.id,
+        8_000,
+        12_000,
+        0.74,
+    )
+    rejected = database.detections.create_inferred(
+        second_recording.id,
+        item_ids[second_recording.id],
+        predicted.id,
+        20_000,
+        22_000,
+        0.72,
+    )
+    database.detections.set_review(accepted.id, ReviewVerdict.CORRECT)
+    database.detections.revise(correction.id, species_id=corrected.id)
+    database.detections.set_review(correction.id, ReviewVerdict.INCORRECT)
+    database.detections.set_review(rejected.id, ReviewVerdict.INCORRECT)
+
+    species_report = database.detections.validated_report("species", run_id)
+    nighthawk = next(row for row in species_report.rows if row[0] == "Common Nighthawk")
+    assert nighthawk == ("Common Nighthawk", 2, 2, 0, 0, 7.0)
+
+    presence = database.detections.validated_report("recording", run_id)
+    assert len(presence.rows) == 2
+    assert {row[0] for row in presence.rows} == {"first.mp3", "second.mp3"}
+    assert {row[3] for row in presence.rows} == {"Central Okanagan"}
+
+    date_location = database.detections.validated_report("date_location", run_id)
+    assert date_location.rows == (
+        ("2025-06-01", "Central Okanagan", "Common Nighthawk", 2, 2, 7.0),
+    )
+
+    accuracy = database.detections.validated_report("score_accuracy", run_id)
+    assert sum(row[2] for row in accuracy.rows) == 3
+    assert {row[0] for row in accuracy.rows} == {"Alder Flycatcher", "Common Nighthawk"}
+
+    first = database.detections.validated_report("first_detection", run_id)
+    assert first.rows == (
+        ("Common Nighthawk", "2025-06-01", "Central Okanagan", "first.mp3", 2.0, 0.91),
+    )
+
+    all_reviews = database.detections.reviewed_detection_export(run_id=run_id)
+    assert len(all_reviews.rows) == 3
+    columns = {name: index for index, name in enumerate(all_reviews.columns)}
+    correction_row = next(
+        row for row in all_reviews.rows if row[columns["detection_id"]] == correction.id
+    )
+    assert correction_row[columns["review_outcome"]] == "accepted"
+    assert correction_row[columns["review_verdict"]] == "incorrect"
+    assert correction_row[columns["original_species"]] == "Alder Flycatcher"
+    assert correction_row[columns["current_species"]] == "Common Nighthawk"
+    assert correction_row[columns["species_corrected"]] == 1
+    assert correction_row[columns["original_start_seconds"]] == 8.0
+
+    accepted_reviews = database.detections.reviewed_detection_export(
+        run_id=run_id, outcome="accepted", species_id=corrected.id
+    )
+    assert len(accepted_reviews.rows) == 2
+    rejected_reviews = database.detections.reviewed_detection_export(
+        run_id=run_id, outcome="rejected"
+    )
+    assert [row[0] for row in rejected_reviews.rows] == [rejected.id]
+
+    queue_id = database.review_queues.create(
+        "Nighthawk export",
+        run_id,
+        corrected.id,
+        min_score=0.6,
+        max_per_recording=10,
+        min_spacing_ms=0,
+        ordering="chronological",
+    )
+    queue_reviews = database.detections.reviewed_detection_export(queue_id=queue_id)
+    assert {row[0] for row in queue_reviews.rows} == {accepted.id, correction.id}
+
+
 def test_review_queue_applies_score_spacing_and_recording_limit(tmp_path: Path):
     database = create_project(tmp_path)
     species = database.species.add("Common Nighthawk")

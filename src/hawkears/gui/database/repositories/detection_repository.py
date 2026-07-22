@@ -11,8 +11,10 @@ from hawkears.gui.database.records import (
     DetectionRevision,
     DetectionSource,
     ReportSummary,
+    ReviewedDetectionExport,
     ReviewVerdict,
     SpeciesReport,
+    ValidatedReport,
 )
 
 _UNCHANGED = object()
@@ -534,6 +536,342 @@ class DetectionRepository:
                 ),
                 species=species,
             )
+        finally:
+            connection.close()
+
+    def validated_report(
+        self, report_type: str, run_id: Optional[int] = None
+    ) -> ValidatedReport:
+        """Return one of the stable summaries derived from completed reviews.
+
+        An accepted detection is either marked correct, or marked incorrect and
+        reassigned to another species. This lets ecological presence reports
+        include confirmed corrections while accuracy reports retain the
+        originally predicted species.
+        """
+        definitions = {
+            "species": (
+                (
+                    "species",
+                    "reviewed",
+                    "accepted",
+                    "incorrect",
+                    "uncertain",
+                    "seconds",
+                ),
+                """
+                SELECT current_species AS species, count(*) AS reviewed,
+                       sum(accepted) AS accepted,
+                       sum(verdict = 'incorrect' AND corrected = 0) AS incorrect,
+                       sum(verdict = 'uncertain') AS uncertain,
+                       sum(duration_ms) / 1000.0 AS seconds
+                FROM reviewed
+                GROUP BY current_species
+                ORDER BY current_species COLLATE NOCASE
+                """,
+            ),
+            "recording": (
+                ("recording", "species", "date", "location", "detections", "seconds"),
+                """
+                SELECT recording, current_species AS species, date, location,
+                       count(*) AS detections, sum(duration_ms) / 1000.0 AS seconds
+                FROM reviewed WHERE accepted = 1
+                GROUP BY recording, current_species, date, location
+                ORDER BY recording COLLATE NOCASE, current_species COLLATE NOCASE
+                """,
+            ),
+            "date_location": (
+                ("date", "location", "species", "recordings", "detections", "seconds"),
+                """
+                SELECT date, location, current_species AS species,
+                       count(DISTINCT recording_id) AS recordings,
+                       count(*) AS detections, sum(duration_ms) / 1000.0 AS seconds
+                FROM reviewed WHERE accepted = 1
+                GROUP BY date, location, current_species
+                ORDER BY date, location COLLATE NOCASE, current_species COLLATE NOCASE
+                """,
+            ),
+            "score_accuracy": (
+                (
+                    "species",
+                    "score_range",
+                    "reviewed",
+                    "correct",
+                    "incorrect",
+                    "uncertain",
+                    "correctness_percent",
+                ),
+                """
+                SELECT original_species AS species,
+                       CASE
+                         WHEN score IS NULL THEN 'No score'
+                         WHEN score >= 1.0 THEN '1.0'
+                         ELSE printf('%.2f–%.2f',
+                              CAST(score * 10 AS INTEGER) / 10.0,
+                              CAST(score * 10 AS INTEGER) / 10.0 + 0.09)
+                       END AS score_range,
+                       count(*) AS reviewed,
+                       sum(verdict = 'correct') AS correct,
+                       sum(verdict = 'incorrect') AS incorrect,
+                       sum(verdict = 'uncertain') AS uncertain,
+                       CASE WHEN sum(verdict IN ('correct', 'incorrect')) = 0 THEN NULL
+                            ELSE 100.0 * sum(verdict = 'correct') /
+                                 sum(verdict IN ('correct', 'incorrect')) END
+                           AS correctness_percent
+                FROM reviewed
+                GROUP BY original_species,
+                         CASE WHEN score IS NULL THEN -1
+                              ELSE CAST(score * 10 AS INTEGER) END
+                ORDER BY original_species COLLATE NOCASE, score
+                """,
+            ),
+            "first_detection": (
+                ("species", "date", "location", "recording", "start_seconds", "score"),
+                """
+                SELECT current_species AS species, date, location, recording,
+                       start_ms / 1000.0 AS start_seconds, score
+                FROM (
+                    SELECT reviewed.*,
+                           row_number() OVER (
+                               PARTITION BY current_species, date
+                               ORDER BY recorded_at, recording COLLATE NOCASE, start_ms
+                           ) AS position
+                    FROM reviewed WHERE accepted = 1
+                )
+                WHERE position = 1
+                ORDER BY date, current_species COLLATE NOCASE
+                """,
+            ),
+        }
+        if report_type not in definitions:
+            raise ValueError(f"Unknown validated report type: {report_type}")
+        columns, summary_query = definitions[report_type]
+        run_filter = "" if run_id is None else "WHERE analysis_item.analysis_run_id = ?"
+        parameters: tuple[object, ...] = () if run_id is None else (run_id,)
+        query = f"""
+            WITH reviewed AS (
+                SELECT detection.id, detection.recording_id, detection.score,
+                       recording.display_name AS recording,
+                       current.start_ms,
+                       current.end_ms - current.start_ms AS duration_ms,
+                       current_species.common_name AS current_species,
+                       original_species.common_name AS original_species,
+                       review.verdict,
+                       original.species_id != current.species_id AS corrected,
+                       review.verdict = 'correct' OR (
+                           review.verdict = 'incorrect' AND
+                           original.species_id != current.species_id
+                       ) AS accepted,
+                       coalesce(
+                           analysis_item.recorded_at, recording.recorded_at,
+                           CASE WHEN json_extract(analysis_run.settings_json,
+                               '$.location.date_mode') = 'specific'
+                           THEN json_extract(analysis_run.settings_json,
+                               '$.location.date') END
+                       ) AS recorded_at,
+                       coalesce(substr(coalesce(
+                           analysis_item.recorded_at, recording.recorded_at,
+                           CASE WHEN json_extract(analysis_run.settings_json,
+                               '$.location.date_mode') = 'specific'
+                           THEN json_extract(analysis_run.settings_json,
+                               '$.location.date') END
+                       ), 1, 10), 'Unknown') AS date,
+                       coalesce(
+                           nullif(analysis_item.location_name, ''),
+                           nullif(recording.location_name, ''),
+                           nullif(analysis_item.region_code, ''),
+                           nullif(recording.region_code, ''),
+                           nullif(json_extract(analysis_run.settings_json,
+                               '$.location.region_code'), ''),
+                           CASE WHEN coalesce(
+                               analysis_item.latitude, recording.latitude,
+                               json_extract(analysis_run.settings_json,
+                                   '$.location.latitude')) IS NOT NULL
+                           THEN printf('%.5f, %.5f', coalesce(
+                               analysis_item.latitude, recording.latitude,
+                               json_extract(analysis_run.settings_json,
+                                   '$.location.latitude')), coalesce(
+                               analysis_item.longitude, recording.longitude,
+                               json_extract(analysis_run.settings_json,
+                                   '$.location.longitude'))) END,
+                           'Unknown'
+                       ) AS location
+                FROM detection
+                JOIN detection_revision AS current
+                  ON current.id = detection.current_revision_id
+                JOIN detection_revision AS original
+                  ON original.detection_id = detection.id
+                 AND original.revision_number = 1
+                JOIN species AS current_species ON current_species.id = current.species_id
+                JOIN species AS original_species ON original_species.id = original.species_id
+                JOIN recording ON recording.id = detection.recording_id
+                JOIN review ON review.detection_id = detection.id
+                LEFT JOIN analysis_item ON analysis_item.id = detection.analysis_item_id
+                LEFT JOIN analysis_run ON analysis_run.id = analysis_item.analysis_run_id
+                {run_filter}
+            )
+            {summary_query}
+        """
+        connection = connect(self.database_path, readonly=True)
+        try:
+            rows = tuple(
+                tuple(row[column] for column in columns)
+                for row in connection.execute(query, parameters)
+            )
+            return ValidatedReport(report_type, columns, rows)
+        finally:
+            connection.close()
+
+    def reviewed_detection_export(
+        self,
+        *,
+        run_id: Optional[int] = None,
+        outcome: str = "all",
+        species_id: Optional[int] = None,
+        queue_id: Optional[int] = None,
+    ) -> ReviewedDetectionExport:
+        """Return detailed reviewed detections using optional report filters."""
+        if outcome not in {"all", "accepted", "rejected"}:
+            raise ValueError(f"Unknown reviewed detection outcome: {outcome}")
+        columns = (
+            "detection_id",
+            "analysis_run_id",
+            "analysis_run_name",
+            "source",
+            "recording",
+            "recorded_at",
+            "latitude",
+            "longitude",
+            "region_code",
+            "location_name",
+            "score",
+            "review_outcome",
+            "review_verdict",
+            "review_notes",
+            "original_species",
+            "current_species",
+            "species_corrected",
+            "original_start_seconds",
+            "original_end_seconds",
+            "current_start_seconds",
+            "current_end_seconds",
+            "original_min_frequency_hz",
+            "original_max_frequency_hz",
+            "current_min_frequency_hz",
+            "current_max_frequency_hz",
+            "additional_species",
+            "review_queues",
+        )
+        conditions = []
+        parameters: list[object] = []
+        if run_id is not None:
+            conditions.append("analysis_item.analysis_run_id = ?")
+            parameters.append(run_id)
+        if species_id is not None:
+            conditions.append("current.species_id = ?")
+            parameters.append(species_id)
+        if queue_id is not None:
+            conditions.append(
+                "EXISTS (SELECT 1 FROM review_queue_item filter_queue "
+                "WHERE filter_queue.detection_id = detection.id "
+                "AND filter_queue.review_queue_id = ?)"
+            )
+            parameters.append(queue_id)
+        corrected = "original.species_id != current.species_id"
+        accepted = (
+            "(review.verdict = 'correct' OR "
+            f"(review.verdict = 'incorrect' AND {corrected}))"
+        )
+        if outcome == "accepted":
+            conditions.append(accepted)
+        elif outcome == "rejected":
+            conditions.append(f"review.verdict = 'incorrect' AND NOT ({corrected})")
+        where_clause = " AND ".join(conditions)
+        if where_clause:
+            where_clause = "AND " + where_clause
+        query = f"""
+            SELECT detection.id AS detection_id,
+                   analysis_run.id AS analysis_run_id,
+                   analysis_run.name AS analysis_run_name,
+                   detection.source,
+                   recording.display_name AS recording,
+                   coalesce(
+                       analysis_item.recorded_at, recording.recorded_at,
+                       CASE WHEN json_extract(analysis_run.settings_json,
+                           '$.location.date_mode') = 'specific'
+                       THEN json_extract(analysis_run.settings_json,
+                           '$.location.date') END
+                   ) AS recorded_at,
+                   coalesce(analysis_item.latitude, recording.latitude,
+                       json_extract(analysis_run.settings_json,
+                           '$.location.latitude')) AS latitude,
+                   coalesce(analysis_item.longitude, recording.longitude,
+                       json_extract(analysis_run.settings_json,
+                           '$.location.longitude')) AS longitude,
+                   coalesce(analysis_item.region_code, recording.region_code,
+                       json_extract(analysis_run.settings_json,
+                           '$.location.region_code')) AS region_code,
+                   coalesce(analysis_item.location_name,
+                       recording.location_name) AS location_name,
+                   detection.score,
+                   CASE WHEN {accepted} THEN 'accepted'
+                        WHEN review.verdict = 'incorrect' THEN 'rejected'
+                        ELSE 'uncertain' END AS review_outcome,
+                   review.verdict AS review_verdict,
+                   review.notes AS review_notes,
+                   original_species.common_name AS original_species,
+                   current_species.common_name AS current_species,
+                   {corrected} AS species_corrected,
+                   original.start_ms / 1000.0 AS original_start_seconds,
+                   original.end_ms / 1000.0 AS original_end_seconds,
+                   current.start_ms / 1000.0 AS current_start_seconds,
+                   current.end_ms / 1000.0 AS current_end_seconds,
+                   original.low_frequency_hz AS original_min_frequency_hz,
+                   original.high_frequency_hz AS original_max_frequency_hz,
+                   current.low_frequency_hz AS current_min_frequency_hz,
+                   current.high_frequency_hz AS current_max_frequency_hz,
+                   coalesce(additional.names, '') AS additional_species,
+                   coalesce(queues.names, '') AS review_queues
+            FROM detection
+            JOIN detection_revision AS original
+              ON original.detection_id = detection.id
+             AND original.revision_number = 1
+            JOIN detection_revision AS current
+              ON current.id = detection.current_revision_id
+            JOIN species AS original_species
+              ON original_species.id = original.species_id
+            JOIN species AS current_species
+              ON current_species.id = current.species_id
+            JOIN recording ON recording.id = detection.recording_id
+            JOIN review ON review.detection_id = detection.id
+            LEFT JOIN analysis_item ON analysis_item.id = detection.analysis_item_id
+            LEFT JOIN analysis_run ON analysis_run.id = analysis_item.analysis_run_id
+            LEFT JOIN (
+                SELECT detection_additional_species.detection_id,
+                       group_concat(species.common_name, '; ') AS names
+                FROM detection_additional_species
+                JOIN species ON species.id = detection_additional_species.species_id
+                GROUP BY detection_additional_species.detection_id
+            ) AS additional ON additional.detection_id = detection.id
+            LEFT JOIN (
+                SELECT review_queue_item.detection_id,
+                       group_concat(review_queue.name, '; ') AS names
+                FROM review_queue_item
+                JOIN review_queue
+                  ON review_queue.id = review_queue_item.review_queue_id
+                GROUP BY review_queue_item.detection_id
+            ) AS queues ON queues.detection_id = detection.id
+            WHERE 1 = 1 {where_clause}
+            ORDER BY current_species.common_name COLLATE NOCASE,
+                     recording.display_name COLLATE NOCASE, current.start_ms
+        """
+        connection = connect(self.database_path, readonly=True)
+        try:
+            rows = tuple(
+                tuple(row[column] for column in columns)
+                for row in connection.execute(query, parameters)
+            )
+            return ReviewedDetectionExport(columns, rows)
         finally:
             connection.close()
 
