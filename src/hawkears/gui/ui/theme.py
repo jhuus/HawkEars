@@ -38,6 +38,7 @@ QPushButton[nav="true"]:disabled { color: #9d7771; }
 #sectionTitle { color: #4f1612; font-size: 16px; font-weight: 650; }
 #metricValue { color: #4f1612; font-size: 25px; font-weight: 700; }
 #muted { color: #786b67; }
+QLabel:disabled { color: #a39792; }
 QFrame[card="true"] {
     background: white;
     border: 1px solid #e5dcd4;

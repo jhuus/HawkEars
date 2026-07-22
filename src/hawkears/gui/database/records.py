@@ -180,6 +180,10 @@ class ReviewQueueSummary:
     max_per_recording: int
     min_spacing_ms: int
     ordering: str
+    score_band_width: Optional[float]
+    max_per_score_band: Optional[int]
+    max_per_location_date: Optional[int]
+    review_order: str
     detection_count: int
     reviewed_count: int
     created_at: str

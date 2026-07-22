@@ -44,6 +44,41 @@ def load_playback_audio(
     return np.asarray(samples, dtype=np.float32), int(sample_rate)
 
 
+def filter_playback_audio(
+    samples: np.ndarray,
+    sample_rate: int,
+    *,
+    high_pass_hz: int = 0,
+    low_pass_hz: int = 0,
+) -> np.ndarray:
+    """Apply optional playback-only Butterworth filters."""
+    from scipy.signal import butter, sosfiltfilt
+
+    nyquist = sample_rate / 2
+    if high_pass_hz < 0 or low_pass_hz < 0:
+        raise ValueError("Playback filter cutoffs cannot be negative.")
+    if high_pass_hz and high_pass_hz >= nyquist:
+        raise ValueError("High-pass cutoff must be below the Nyquist frequency.")
+    if low_pass_hz and low_pass_hz > nyquist:
+        raise ValueError("Low-pass cutoff cannot exceed the Nyquist frequency.")
+    if high_pass_hz and low_pass_hz and high_pass_hz >= low_pass_hz:
+        raise ValueError("High-pass cutoff must be below low-pass cutoff.")
+
+    filtered = np.asarray(samples, dtype=np.float32)
+    if high_pass_hz:
+        high_pass = butter(
+            4, high_pass_hz, btype="highpass", fs=sample_rate, output="sos"
+        )
+        filtered = sosfiltfilt(high_pass, filtered, axis=0)
+    if low_pass_hz:
+        effective_low_pass_hz = min(low_pass_hz, nyquist * 0.99)
+        low_pass = butter(
+            4, effective_low_pass_hz, btype="lowpass", fs=sample_rate, output="sos"
+        )
+        filtered = sosfiltfilt(low_pass, filtered, axis=0)
+    return np.asarray(filtered, dtype=np.float32)
+
+
 def colorize_spectrogram(values: np.ndarray) -> np.ndarray:
     """Map normalized intensities to a subtly warm inverted grayscale palette."""
     # Use a warm-white background and progressively darker, faintly brown tones

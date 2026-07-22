@@ -16,6 +16,35 @@ def test_colorize_spectrogram_uses_subtly_warm_inverted_grayscale_palette():
     assert tuple(pixels[0, 2]) == (10, 9, 8)
 
 
+def test_playback_filters_attenuate_frequencies_outside_cutoffs():
+    sample_rate = 16_000
+    times = np.arange(sample_rate, dtype=np.float32) / sample_rate
+    low_tone = np.sin(2 * np.pi * 100 * times)
+    middle_tone = np.sin(2 * np.pi * 2_000 * times)
+    high_tone = np.sin(2 * np.pi * 7_000 * times)
+    samples = low_tone + middle_tone + high_tone
+
+    filtered = spectrogram.filter_playback_audio(
+        samples,
+        sample_rate,
+        high_pass_hz=500,
+        low_pass_hz=4_000,
+    )
+    magnitudes = np.abs(np.fft.rfft(filtered))
+    frequencies = np.fft.rfftfreq(len(filtered), 1 / sample_rate)
+
+    def magnitude_at(frequency: int) -> float:
+        return float(magnitudes[np.argmin(np.abs(frequencies - frequency))])
+
+    assert magnitude_at(2_000) > magnitude_at(100) * 20
+    assert magnitude_at(2_000) > magnitude_at(7_000) * 20
+
+    nyquist_filtered = spectrogram.filter_playback_audio(
+        samples, sample_rate, low_pass_hz=8_000
+    )
+    assert np.isfinite(nyquist_filtered).all()
+
+
 def test_review_spectrogram_uses_yaml_config_with_decibels(monkeypatch):
     cfg = SimpleNamespace(
         audio=SimpleNamespace(decibels=False, min_freq=200, max_freq=13_000)

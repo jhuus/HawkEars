@@ -75,7 +75,37 @@ class ReviewQueueDialog(QDialog):
         self.ordering = QComboBox()
         self.ordering.addItem(self.tr("Highest score first"), "score")
         self.ordering.addItem(self.tr("Chronological by recording"), "chronological")
-        form.addRow(self.tr("Ordering"), self.ordering)
+        self.ordering.addItem(self.tr("Evenly across score bands"), "score_stratified")
+        self.ordering.addItem(
+            self.tr("Coverage across location and date"), "location_date"
+        )
+        self.ordering.currentIndexChanged.connect(self._strategy_changed)
+        form.addRow(self.tr("Sampling strategy"), self.ordering)
+
+        self.score_band_width = QDoubleSpinBox()
+        self.score_band_width.setRange(0.01, 0.5)
+        self.score_band_width.setDecimals(2)
+        self.score_band_width.setSingleStep(0.05)
+        self.score_band_width.setValue(0.1)
+        form.addRow(self.tr("Score band width"), self.score_band_width)
+        self.score_band_width_label = form.labelForField(self.score_band_width)
+
+        self.max_per_score_band = QSpinBox()
+        self.max_per_score_band.setRange(1, 10_000)
+        self.max_per_score_band.setValue(20)
+        form.addRow(self.tr("Maximum per score band"), self.max_per_score_band)
+        self.max_per_score_band_label = form.labelForField(self.max_per_score_band)
+
+        self.max_per_location_date = QSpinBox()
+        self.max_per_location_date.setRange(1, 10_000)
+        self.max_per_location_date.setValue(10)
+        form.addRow(
+            self.tr("Maximum per location and date"), self.max_per_location_date
+        )
+        self.max_per_location_date_label = form.labelForField(
+            self.max_per_location_date
+        )
+        self._strategy_changed()
         layout.addLayout(form)
 
         buttons = QDialogButtonBox(
@@ -98,6 +128,16 @@ class ReviewQueueDialog(QDialog):
         if self.name.text().strip() and self.species.currentData() is not None:
             self.accept()
 
+    def _strategy_changed(self) -> None:
+        stratified = self.ordering.currentData() == "score_stratified"
+        location_date = self.ordering.currentData() == "location_date"
+        self.score_band_width.setEnabled(stratified)
+        self.max_per_score_band.setEnabled(stratified)
+        self.max_per_location_date.setEnabled(location_date)
+        self.score_band_width_label.setEnabled(stratified)
+        self.max_per_score_band_label.setEnabled(stratified)
+        self.max_per_location_date_label.setEnabled(location_date)
+
     def values(self) -> dict[str, object]:
         return {
             "name": self.name.text().strip(),
@@ -106,4 +146,19 @@ class ReviewQueueDialog(QDialog):
             "max_per_recording": self.max_per_recording.value(),
             "min_spacing_ms": round(self.min_spacing.value() * 1000),
             "ordering": str(self.ordering.currentData()),
+            "score_band_width": (
+                self.score_band_width.value()
+                if self.ordering.currentData() == "score_stratified"
+                else None
+            ),
+            "max_per_score_band": (
+                self.max_per_score_band.value()
+                if self.ordering.currentData() == "score_stratified"
+                else None
+            ),
+            "max_per_location_date": (
+                self.max_per_location_date.value()
+                if self.ordering.currentData() == "location_date"
+                else None
+            ),
         }

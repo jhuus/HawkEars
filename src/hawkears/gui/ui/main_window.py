@@ -79,6 +79,7 @@ from hawkears.gui.services.analysis_runner import AnalysisRunner
 from hawkears.gui.services.spectrogram import (
     ReviewSpectrogram,
     colorize_spectrogram,
+    filter_playback_audio,
     generate_review_spectrogram,
 )
 from hawkears.gui.ui.location_dialog import LocationDialog, location_summary
@@ -137,6 +138,7 @@ class NumericTableWidgetItem(QTableWidgetItem):
 class WelcomePage(QWidget):
     create_requested = Signal()
     open_requested = Signal()
+    recent_open_requested = Signal(object)
 
     def __init__(self) -> None:
         super().__init__()
@@ -176,12 +178,42 @@ class WelcomePage(QWidget):
         note.setWordWrap(True)
         layout.addWidget(note)
 
+        self.recent_panel = QWidget()
+        recent_layout = QVBoxLayout(self.recent_panel)
+        recent_layout.setContentsMargins(0, 8, 0, 0)
+        recent_layout.setSpacing(6)
+        recent_layout.addWidget(section_title(self.tr("Recent projects")))
+        self.recent_projects_layout = QVBoxLayout()
+        self.recent_projects_layout.setSpacing(6)
+        recent_layout.addLayout(self.recent_projects_layout)
+        self._recent_buttons: list[QPushButton] = []
+        self.recent_panel.setVisible(False)
+        layout.addWidget(self.recent_panel)
+
         centered = QHBoxLayout()
         centered.addStretch()
         centered.addWidget(panel)
         centered.addStretch()
         outer.addLayout(centered)
         outer.addStretch()
+
+    def configure_recent_projects(self, paths: list[Path]) -> None:
+        for button in self._recent_buttons:
+            self.recent_projects_layout.removeWidget(button)
+            button.deleteLater()
+        self._recent_buttons.clear()
+        for path in paths[:3]:
+            button = QPushButton(f"{path.stem}  —  {path.parent}")
+            button.setToolTip(str(path))
+            button.setStyleSheet("text-align: left; padding: 8px 10px;")
+            button.clicked.connect(
+                lambda checked=False, project_path=path: self.recent_open_requested.emit(
+                    project_path
+                )
+            )
+            self.recent_projects_layout.addWidget(button)
+            self._recent_buttons.append(button)
+        self.recent_panel.setVisible(bool(self._recent_buttons))
 
 
 class ProjectPage(QWidget):
@@ -685,6 +717,7 @@ class ResultsPage(QWidget):
     run_changed = Signal(object)
     queue_changed = Signal(object)
     create_queue_requested = Signal()
+    review_order_changed = Signal(int, str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -705,14 +738,23 @@ class ResultsPage(QWidget):
         sources.addWidget(self.run, 1)
         sources.addWidget(QLabel(self.tr("Review queue")))
         self.queue = QComboBox()
-        self.queue.currentIndexChanged.connect(
-            lambda: self.queue_changed.emit(self.queue.currentData())
-        )
+        self.queue.currentIndexChanged.connect(self._queue_selected)
         sources.addWidget(self.queue, 1)
+        sources.addWidget(QLabel(self.tr("Review order")))
+        self.review_order = QComboBox()
+        self.review_order.addItem(self.tr("Sampling order"), "queue")
+        self.review_order.addItem(self.tr("Highest score first"), "score")
+        self.review_order.addItem(
+            self.tr("Chronological by recording"), "chronological"
+        )
+        self.review_order.setEnabled(False)
+        self.review_order.currentIndexChanged.connect(self._review_order_selected)
+        sources.addWidget(self.review_order)
         self.create_queue_button = QPushButton(self.tr("Create queue…"))
         self.create_queue_button.clicked.connect(self.create_queue_requested)
         sources.addWidget(self.create_queue_button)
         outer.addLayout(sources)
+        self._queue_orders: dict[int, str] = {}
 
         filters = QHBoxLayout()
         self.search = QLineEdit()
@@ -804,6 +846,7 @@ class ResultsPage(QWidget):
         current = self.queue.currentData()
         self.queue.blockSignals(True)
         self.queue.clear()
+        self._queue_orders = {queue.id: queue.review_order for queue in queues}
         self.queue.addItem(self.tr("No review queue"), None)
         for queue in queues:
             self.queue.addItem(
@@ -817,6 +860,32 @@ class ResultsPage(QWidget):
         selected = self.queue.findData(current)
         self.queue.setCurrentIndex(max(0, selected))
         self.queue.blockSignals(False)
+        self._sync_review_order()
+
+    def _queue_selected(self) -> None:
+        self._sync_review_order()
+        self.queue_changed.emit(self.queue.currentData())
+
+    def _sync_review_order(self) -> None:
+        queue_id = self.current_queue_id()
+        self.review_order.blockSignals(True)
+        if queue_id is None:
+            self.review_order.setCurrentIndex(0)
+            self.review_order.setEnabled(False)
+        else:
+            self.review_order.setEnabled(True)
+            index = self.review_order.findData(
+                self._queue_orders.get(queue_id, "queue")
+            )
+            self.review_order.setCurrentIndex(max(0, index))
+        self.review_order.blockSignals(False)
+
+    def _review_order_selected(self) -> None:
+        queue_id = self.current_queue_id()
+        if queue_id is not None:
+            review_order = str(self.review_order.currentData())
+            self._queue_orders[queue_id] = review_order
+            self.review_order_changed.emit(queue_id, review_order)
 
     def current_queue_id(self) -> int | None:
         value = self.queue.currentData()
@@ -825,6 +894,7 @@ class ResultsPage(QWidget):
     def select_queue(self, queue_id: int | None) -> None:
         index = self.queue.findData(queue_id)
         self.queue.setCurrentIndex(max(0, index))
+        self._sync_review_order()
 
     def select_unreviewed(self) -> None:
         self.review.setCurrentText(self.tr("Unreviewed"))
@@ -1224,6 +1294,13 @@ class SpectrogramView(QWidget):
             painter.end()
             return
         painter.drawPixmap(plot, self._pixmap)
+        frequency_span = self._data.max_frequency - self._data.min_frequency
+        grid_color = QColor("#f8f0e7")
+        grid_color.setAlpha(85)
+        painter.setPen(QPen(grid_color, 1))
+        for tick in range(1, 4):
+            y = plot.top() + round(plot.height() * tick / 4)
+            painter.drawLine(plot.left(), y, plot.right(), y)
         painter.setPen(QPen(QColor("#fbb040"), 2))
         left_fraction = (
             self._detection_start - self._data.start_seconds
@@ -1237,7 +1314,6 @@ class SpectrogramView(QWidget):
             top = plot.top()
             bottom = plot.bottom()
         else:
-            frequency_span = self._data.max_frequency - self._data.min_frequency
             low, high = self._frequency_bounds
             top = plot.top() + round(
                 (self._data.max_frequency - high) / frequency_span * plot.height()
@@ -1261,7 +1337,6 @@ class SpectrogramView(QWidget):
                 / self._data.duration_seconds
                 * plot.width()
             )
-            frequency_span = self._data.max_frequency - self._data.min_frequency
             pending_top = plot.top() + round(
                 (self._data.max_frequency - high) / frequency_span * plot.height()
             )
@@ -1290,8 +1365,14 @@ class SpectrogramView(QWidget):
                 painter.setPen(QPen(QColor("#f8f0e7"), 1))
                 painter.drawLine(cursor_x, plot.top(), cursor_x, plot.bottom())
         painter.setPen(QColor("#f8f0e7"))
-        painter.drawText(7, plot.top() + 5, f"{self._data.max_frequency / 1000:g} kHz")
-        painter.drawText(7, plot.bottom(), f"{self._data.min_frequency / 1000:g} kHz")
+        for tick in range(5):
+            fraction = tick / 4
+            y = plot.top() + round(plot.height() * fraction)
+            frequency = self._data.max_frequency - frequency_span * fraction
+            label_y = (
+                plot.top() + 5 if tick == 0 else plot.bottom() if tick == 4 else y + 5
+            )
+            painter.drawText(4, label_y, self._frequency_label(frequency))
         painter.drawText(
             plot.left(), self.height() - 8, f"{self._data.start_seconds:.1f}s"
         )
@@ -1301,6 +1382,13 @@ class SpectrogramView(QWidget):
             f"{self._data.start_seconds + self._data.duration_seconds:.1f}s",
         )
         painter.end()
+
+    @staticmethod
+    def _frequency_label(frequency: float) -> str:
+        if frequency >= 1000:
+            value = f"{frequency / 1000:.1f}".rstrip("0").rstrip(".")
+            return f"{value} kHz"
+        return f"{round(frequency)} Hz"
 
 
 class ReviewPage(QWidget):
@@ -1362,16 +1450,38 @@ class ReviewPage(QWidget):
         playback.addWidget(self.play_context_button)
         playback.addWidget(self.play_detection_button)
         playback.addStretch()
-        playback.addWidget(QLabel(self.tr("Playback gain")))
+        playback.addWidget(QLabel(self.tr("Context: 10 seconds")))
+        media.addLayout(playback)
+
+        audio_controls = QHBoxLayout()
+        audio_controls.addStretch()
+        audio_controls.addWidget(QLabel(self.tr("Playback gain")))
         self.playback_gain = QComboBox()
-        for decibels in (0, 6, 12, 18, 24):
+        for decibels in (0, 6, 12, 18, 24, 48):
             label = "0" if decibels == 0 else f"+{decibels}"
             self.playback_gain.addItem(self.tr("%1 dB").replace("%1", label), decibels)
         self.playback_gain.setEnabled(False)
         self.playback_gain.currentIndexChanged.connect(self._rebuild_playback_audio)
-        playback.addWidget(self.playback_gain)
-        playback.addWidget(QLabel(self.tr("Context: 10 seconds")))
-        media.addLayout(playback)
+        audio_controls.addWidget(self.playback_gain)
+        audio_controls.addWidget(QLabel(self.tr("High-pass")))
+        self.high_pass = QComboBox()
+        self.high_pass.addItem(self.tr("Off"), 0)
+        for cutoff in (250, 500, 1_000, 2_000, 4_000):
+            self.high_pass.addItem(self.tr("%1 Hz").replace("%1", str(cutoff)), cutoff)
+        self.high_pass.setEnabled(False)
+        self.high_pass.currentIndexChanged.connect(self._high_pass_changed)
+        audio_controls.addWidget(self.high_pass)
+        audio_controls.addWidget(QLabel(self.tr("Low-pass")))
+        self.low_pass = QComboBox()
+        self.low_pass.addItem(self.tr("Off"), 0)
+        for cutoff in (3_000, 4_000, 6_000, 8_000):
+            self.low_pass.addItem(
+                self.tr("%1 kHz").replace("%1", f"{cutoff / 1000:g}"), cutoff
+            )
+        self.low_pass.setEnabled(False)
+        self.low_pass.currentIndexChanged.connect(self._low_pass_changed)
+        audio_controls.addWidget(self.low_pass)
+        media.addLayout(audio_controls)
         splitter.addWidget(media_card)
 
         review_card, review = card_layout()
@@ -1492,6 +1602,8 @@ class ReviewPage(QWidget):
         self._playback_channels = 1
         self._playback_source_start_ms = 0
         self.playback_gain.setEnabled(False)
+        self.high_pass.setEnabled(False)
+        self.low_pass.setEnabled(False)
         self._detection_start_ms = detection.start_ms
         self._detection_end_ms = detection.end_ms
         midpoint_ms = (detection.start_ms + detection.end_ms) // 2
@@ -1553,10 +1665,51 @@ class ReviewPage(QWidget):
             data.audio_samples.shape[1] if data.audio_samples.ndim == 2 else 1
         )
         self._playback_source_start_ms = round(data.start_seconds * 1000)
+        self._configure_filter_controls()
         self.playback_gain.setEnabled(True)
+        self.high_pass.setEnabled(True)
+        self.low_pass.setEnabled(True)
         self._rebuild_playback_audio()
         self.play_context_button.setEnabled(True)
         self.play_detection_button.setEnabled(True)
+
+    def _configure_filter_controls(self) -> None:
+        nyquist = self._playback_sample_rate / 2
+        for control in (self.high_pass, self.low_pass):
+            control.blockSignals(True)
+            for index in range(control.count()):
+                cutoff = int(control.itemData(index) or 0)
+                item = control.model().item(index)
+                if item is not None:
+                    valid = cutoff == 0 or cutoff < nyquist
+                    if control is self.low_pass and cutoff == nyquist:
+                        valid = True
+                    item.setEnabled(valid)
+            current_cutoff = int(control.currentData() or 0)
+            invalid = current_cutoff > nyquist or (
+                control is self.high_pass and current_cutoff == nyquist
+            )
+            if invalid:
+                control.setCurrentIndex(0)
+            control.blockSignals(False)
+
+    def _high_pass_changed(self) -> None:
+        high_pass_hz = int(self.high_pass.currentData() or 0)
+        low_pass_hz = int(self.low_pass.currentData() or 0)
+        if high_pass_hz and low_pass_hz and high_pass_hz >= low_pass_hz:
+            self.low_pass.blockSignals(True)
+            self.low_pass.setCurrentIndex(0)
+            self.low_pass.blockSignals(False)
+        self._rebuild_playback_audio()
+
+    def _low_pass_changed(self) -> None:
+        high_pass_hz = int(self.high_pass.currentData() or 0)
+        low_pass_hz = int(self.low_pass.currentData() or 0)
+        if high_pass_hz and low_pass_hz and high_pass_hz >= low_pass_hz:
+            self.high_pass.blockSignals(True)
+            self.high_pass.setCurrentIndex(0)
+            self.high_pass.blockSignals(False)
+        self._rebuild_playback_audio()
 
     def _rebuild_playback_audio(self) -> None:
         if self._playback_samples is None or self._playback_sample_rate <= 0:
@@ -1565,7 +1718,14 @@ class ReviewPage(QWidget):
 
         self._stop_playback()
         decibels = float(self.playback_gain.currentData() or 0)
-        samples = np.asarray(self._playback_samples, dtype=np.float32)
+        high_pass_hz = int(self.high_pass.currentData() or 0)
+        low_pass_hz = int(self.low_pass.currentData() or 0)
+        samples = filter_playback_audio(
+            np.asarray(self._playback_samples, dtype=np.float32),
+            self._playback_sample_rate,
+            high_pass_hz=high_pass_hz,
+            low_pass_hz=low_pass_hz,
+        )
         if decibels > 0:
             gain = 10 ** (decibels / 20)
             samples = np.tanh(samples * gain)
@@ -1592,10 +1752,13 @@ class ReviewPage(QWidget):
             self._audio_sink.stateChanged.connect(self._audio_state_changed)
         self._audio_data = pcm.tobytes()
         logger.debug(
-            "Prepared direct PCM playback: rate=%d channels=%d gain_db=%.1f bytes=%d",
+            "Prepared direct PCM playback: rate=%d channels=%d gain_db=%.1f "
+            "high_pass_hz=%d low_pass_hz=%d bytes=%d",
             self._playback_sample_rate,
             self._playback_channels,
             decibels,
+            high_pass_hz,
+            low_pass_hz,
             len(pcm) * 2,
         )
 
@@ -2216,9 +2379,13 @@ class MainWindow(QMainWindow):
 
         self.welcome.create_requested.connect(self._create_project)
         self.welcome.open_requested.connect(self._open_project)
+        self.welcome.recent_open_requested.connect(self._open_project_path)
         self.results_page.review_requested.connect(self._open_review)
         self.results_page.run_changed.connect(self._results_run_changed)
         self.results_page.queue_changed.connect(self._results_queue_changed)
+        self.results_page.review_order_changed.connect(
+            self._results_review_order_changed
+        )
         self.results_page.create_queue_requested.connect(self._create_review_queue)
         self.reports_page.run_changed.connect(self._load_report_summary)
         self.reports_page.validated_report_changed.connect(self._load_validated_report)
@@ -2235,6 +2402,7 @@ class MainWindow(QMainWindow):
         self._analysis_thread: QThread | None = None
         self._analysis_runner: AnalysisRunner | None = None
         self._build_menu()
+        self._refresh_welcome_recent_projects()
 
     def _build_sidebar(self) -> QWidget:
         sidebar = QFrame()
@@ -2383,6 +2551,7 @@ class MainWindow(QMainWindow):
         self._project_open = True
         self._database = database
         self._remember_project(database.path)
+        self._refresh_welcome_recent_projects()
         self.setWindowTitle(self.tr("HawkEars — %1").replace("%1", name))
         self.project_chip.setText(self.tr("CURRENT PROJECT\n%1").replace("%1", name))
         self._update_navigation()
@@ -2440,6 +2609,9 @@ class MainWindow(QMainWindow):
         QSettings().setValue(
             "recentProjects", [str(item) for item in [resolved, *recent][:8]]
         )
+
+    def _refresh_welcome_recent_projects(self) -> None:
+        self.welcome.configure_recent_projects(self._recent_projects()[:3])
 
     def _load_recording_scope(self) -> None:
         assert self._database is not None
@@ -2600,6 +2772,7 @@ class MainWindow(QMainWindow):
         self.reports_page.set_summary(ReportSummary(0, 0, 0, 0, 0, 0, 0, ()))
         self.reports_page.set_processing_summary([])
         self.reports_page.set_queue_summaries([])
+        self._refresh_welcome_recent_projects()
         for button in self.nav_buttons:
             button.setEnabled(False)
             button.setChecked(False)
@@ -2667,6 +2840,21 @@ class MainWindow(QMainWindow):
         logger.info("Review queue selection changed: queue_id=%s", queue_id)
         if queue_id is not None:
             self.results_page.select_unreviewed()
+        self._load_queue_results(queue_id)
+
+    def _results_review_order_changed(self, queue_id: int, review_order: str) -> None:
+        if self._database is None:
+            return
+        try:
+            self._database.review_queues.set_review_order(queue_id, review_order)
+        except (LookupError, ValueError, sqlite3.DatabaseError) as error:
+            QMessageBox.critical(
+                self, self.tr("Could not change review order"), str(error)
+            )
+            self.results_page.configure_queues(
+                self._database.review_queues.list_queues()
+            )
+            return
         self._load_queue_results(queue_id)
 
     def _load_detection_results(self, run_id: object = None) -> None:
@@ -2762,6 +2950,21 @@ class MainWindow(QMainWindow):
                 max_per_recording=int(values["max_per_recording"]),
                 min_spacing_ms=int(values["min_spacing_ms"]),
                 ordering=str(values["ordering"]),  # type: ignore[arg-type]
+                score_band_width=(
+                    float(values["score_band_width"])
+                    if values["score_band_width"] is not None
+                    else None
+                ),
+                max_per_score_band=(
+                    int(values["max_per_score_band"])
+                    if values["max_per_score_band"] is not None
+                    else None
+                ),
+                max_per_location_date=(
+                    int(values["max_per_location_date"])
+                    if values["max_per_location_date"] is not None
+                    else None
+                ),
             )
         except (ValueError, sqlite3.DatabaseError) as error:
             QMessageBox.critical(
