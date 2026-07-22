@@ -1,10 +1,15 @@
 """Entry point for the HawkEars desktop application."""
 
+import logging
 from pathlib import Path
 import sys
 
+from hawkears.gui.diagnostics import configure_diagnostics
+
 
 def main() -> int:
+    log_path = configure_diagnostics()
+    logger = logging.getLogger(__name__)
     try:
         from PySide6.QtGui import QIcon
         from PySide6.QtCore import QCoreApplication
@@ -28,6 +33,7 @@ def main() -> int:
     )
 
     app = QApplication(sys.argv)
+    logger.info("PySide6 application created; log=%s", log_path)
     app.setApplicationName("HawkEars")
     app.setOrganizationName("HawkEars")
     translators = install_translators(app)
@@ -61,7 +67,10 @@ def main() -> int:
 
     window = MainWindow(class_catalog=class_catalog)
     window.show()
-    return app.exec()
+    logger.info("Main window shown")
+    result = app.exec()
+    logger.info("GUI event loop exited with status %d", result)
+    return result
 
 
 if __name__ == "__main__":

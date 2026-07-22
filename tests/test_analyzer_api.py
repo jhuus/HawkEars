@@ -90,7 +90,9 @@ def test_analyzer_returns_structured_results_and_progress(tmp_path: Path):
 def test_variable_labels_are_split_without_losing_coverage():
     analyzer = Analyzer.__new__(Analyzer)
     analyzer.cfg = SimpleNamespace(
-        hawkears=SimpleNamespace(max_label_length=3.0),
+        hawkears=SimpleNamespace(
+            max_label_length=3.0, max_label_length_merge_threshold=0.5
+        ),
         infer=SimpleNamespace(segment_len=None),
     )
     dataframe = pd.DataFrame(
@@ -108,9 +110,28 @@ def test_variable_labels_are_split_without_losing_coverage():
     split = analyzer._split_long_dataframe_labels(dataframe)
 
     assert list(zip(split.start_time, split.end_time)) == [
+        (1.0, 1.0 + 9.5 / 3),
+        (1.0 + 9.5 / 3, 1.0 + 19.0 / 3),
+        (1.0 + 19.0 / 3, 10.5),
+    ]
+    assert set(split.score) == {0.9}
+
+
+def test_variable_label_merge_threshold_can_be_overridden():
+    analyzer = Analyzer.__new__(Analyzer)
+    analyzer.cfg = SimpleNamespace(
+        hawkears=SimpleNamespace(
+            max_label_length=3.0, max_label_length_merge_threshold=0.25
+        ),
+        infer=SimpleNamespace(segment_len=None),
+    )
+    dataframe = pd.DataFrame([{"start_time": 1.0, "end_time": 10.5, "score": 0.9}])
+
+    split = analyzer._split_long_dataframe_labels(dataframe)
+
+    assert list(zip(split.start_time, split.end_time)) == [
         (1.0, 4.0),
         (4.0, 7.0),
         (7.0, 10.0),
         (10.0, 10.5),
     ]
-    assert set(split.score) == {0.9}

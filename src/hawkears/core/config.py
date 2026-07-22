@@ -47,6 +47,9 @@ class HawkEarsConfig:
     low_band_classifier: bool = True  # if true, include low-band classifier
     # Split variable-duration labels longer than this many seconds.
     max_label_length: Optional[float] = None
+    # Merge a trailing split fragment at or below this duration, distributing
+    # it across the preceding pieces so no very short label is created.
+    max_label_length_merge_threshold: float = 0.5
 
     main_models_url = "https://github.com/jhuus/HawkEars/releases/download/models-2.2.0/main-models-2.2.0.zip"
     low_band_models_url = "https://github.com/jhuus/HawkEars/releases/download/models-2.0.0/low-band-models-2.0.0.zip"

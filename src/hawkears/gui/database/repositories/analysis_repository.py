@@ -20,6 +20,7 @@ class AnalysisRepository:
         *,
         species_ids: Sequence[int],
         recording_ids: Sequence[int],
+        recording_metadata: Optional[Mapping[int, Mapping[str, object]]] = None,
         name: Optional[str] = None,
         model_version: Optional[str] = None,
     ) -> int:
@@ -43,13 +44,24 @@ class AnalysisRepository:
                 """,
                 ((run_id, species_id) for species_id in dict.fromkeys(species_ids)),
             )
+            metadata = recording_metadata or {}
             connection.executemany(
                 """
-                INSERT INTO analysis_item(analysis_run_id, recording_id)
-                VALUES (?, ?)
+                INSERT INTO analysis_item(
+                    analysis_run_id, recording_id, recorded_at, latitude,
+                    longitude, region_code, location_name
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    (run_id, recording_id)
+                    (
+                        run_id,
+                        recording_id,
+                        metadata.get(recording_id, {}).get("recorded_at"),
+                        metadata.get(recording_id, {}).get("latitude"),
+                        metadata.get(recording_id, {}).get("longitude"),
+                        metadata.get(recording_id, {}).get("region_code"),
+                        metadata.get(recording_id, {}).get("location_name"),
+                    )
                     for recording_id in dict.fromkeys(recording_ids)
                 ),
             )
@@ -93,6 +105,20 @@ class AnalysisRepository:
                     (run_id,),
                 )
             }
+        finally:
+            connection.close()
+
+    def settings(self, run_id: int) -> dict[str, object]:
+        """Return the immutable settings snapshot for an analysis run."""
+        connection = connect(self.database_path, readonly=True)
+        try:
+            row = connection.execute(
+                "SELECT settings_json FROM analysis_run WHERE id = ?", (run_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"Analysis run {run_id} does not exist.")
+            settings = json.loads(row["settings_json"])
+            return settings if isinstance(settings, dict) else {}
         finally:
             connection.close()
 

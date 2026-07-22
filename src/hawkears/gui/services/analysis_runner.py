@@ -1,5 +1,7 @@
 """Background inference and project persistence for the GUI."""
 
+import csv
+import math
 from pathlib import Path
 import threading
 from typing import Mapping, Sequence
@@ -11,7 +13,7 @@ from hawkears.commands._analyze import analyze
 from hawkears.core.analysis_result import AnalysisProgress
 from hawkears.core.analyzer import find_recording_paths
 from hawkears.gui.database import ProjectDatabase
-from hawkears.gui.database.records import Species
+from hawkears.gui.database.records import Recording, Species
 
 
 class AnalysisRunner(QObject):
@@ -55,19 +57,33 @@ class AnalysisRunner(QObject):
             if not paths:
                 raise ValueError("No supported audio recordings were found.")
             recordings = [database.recordings.get_or_add(path) for path in paths]
+            location = self.settings.get("location", {})
+            location = location if isinstance(location, dict) else {}
+            recording_metadata = self._recording_metadata(location, recordings)
+            if location.get("mode") == "filelist":
+                matched = [
+                    (path, recording)
+                    for path, recording in zip(paths, recordings)
+                    if recording.id in recording_metadata
+                ]
+                if not matched:
+                    raise ValueError(
+                        "No recordings in the selected directory match the file list."
+                    )
+                paths = [item[0] for item in matched]
+                recordings = [item[1] for item in matched]
             self.run_id = database.analysis.create_run(
                 __version__,
                 self.settings,
                 species_ids=[item.id for item in self.species],
                 recording_ids=[item.id for item in recordings],
+                recording_metadata=recording_metadata,
             )
             database.analysis.set_run_status(self.run_id, "running")
             item_ids = database.analysis.item_ids(self.run_id)
             for item_id in item_ids.values():
                 database.analysis.set_item_status(item_id, "running")
 
-            location = self.settings.get("location", {})
-            location = location if isinstance(location, dict) else {}
             date = self._date_value(location)
             result = analyze(
                 input_path=str(self.recording_directory),
@@ -175,6 +191,61 @@ class AnalysisRunner(QObject):
         if location.get("date_mode") == "specific":
             return str(location.get("date"))
         return None
+
+    @staticmethod
+    def _recording_metadata(
+        location: Mapping[str, object], recordings: Sequence[Recording]
+    ) -> dict[int, dict[str, object]]:
+        """Read immutable per-recording location/date values from a file list."""
+        if location.get("mode") != "filelist":
+            return {}
+        path = Path(str(location.get("path", ""))).expanduser()
+        by_name = {recording.display_name: recording for recording in recordings}
+        metadata: dict[int, dict[str, object]] = {}
+        with path.open(newline="", encoding="utf-8-sig") as source:
+            reader = csv.DictReader(source)
+            if reader.fieldnames is None or "filename" not in reader.fieldnames:
+                raise ValueError(f"Missing filename column in {path}")
+            for row in reader:
+                recording = by_name.get(str(row.get("filename", "")).strip())
+                if recording is None:
+                    continue
+                values: dict[str, object] = {}
+                recorded_at = str(row.get("recording_date", "") or "").strip()
+                if recorded_at:
+                    values["recorded_at"] = recorded_at
+                region = str(row.get("region", "") or "").strip()
+                if region:
+                    values["region_code"] = region
+                latitude = AnalysisRunner._optional_coordinate(
+                    row.get("latitude"), "latitude", path
+                )
+                longitude = AnalysisRunner._optional_coordinate(
+                    row.get("longitude"), "longitude", path
+                )
+                if latitude is not None and longitude is not None:
+                    values["latitude"] = latitude
+                    values["longitude"] = longitude
+                location_name = str(
+                    row.get("location_name", row.get("location", "")) or ""
+                ).strip()
+                if location_name:
+                    values["location_name"] = location_name
+                metadata[recording.id] = values
+        return metadata
+
+    @staticmethod
+    def _optional_coordinate(value: object, field: str, path: Path) -> float | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            coordinate = float(text)
+        except ValueError as error:
+            raise ValueError(f"Invalid {field} value in {path}: {text}") from error
+        if not math.isfinite(coordinate):
+            raise ValueError(f"Invalid {field} value in {path}: {text}")
+        return coordinate
 
     def output_directory(self, run_id: int) -> Path:
         """Return the project-specific artifact directory for an analysis run."""

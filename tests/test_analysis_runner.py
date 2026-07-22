@@ -19,6 +19,12 @@ def test_analysis_runner_persists_direct_results(tmp_path: Path, monkeypatch):
     )
     recording = tmp_path / "marsh.wav"
     recording.touch()
+    filelist = tmp_path / "filelist.csv"
+    filelist.write_text(
+        "filename,latitude,longitude,recording_date\n"
+        "marsh.wav,45.1,-75.2,2026-05-18\n",
+        encoding="utf-8",
+    )
 
     monkeypatch.setattr(
         analysis_runner,
@@ -45,7 +51,10 @@ def test_analysis_runner_persists_direct_results(tmp_path: Path, monkeypatch):
         tmp_path,
         False,
         [species],
-        {"min_score": 0.6, "location": {"mode": "none"}},
+        {
+            "min_score": 0.6,
+            "location": {"mode": "filelist", "path": str(filelist)},
+        },
     )
     runner.completed.connect(lambda run_id, count: completed.append((run_id, count)))
 
@@ -70,9 +79,14 @@ def test_analysis_runner_persists_direct_results(tmp_path: Path, monkeypatch):
             JOIN detection_revision
               ON detection_revision.id = detection.current_revision_id
             """).fetchone()
+        item_location = connection.execute("""
+            SELECT recorded_at, latitude, longitude
+            FROM analysis_item WHERE id = 1
+            """).fetchone()
     finally:
         connection.close()
     assert tuple(detection) == (0.87, 2_000, 5_000)
+    assert tuple(item_location) == ("2026-05-18", 45.1, -75.2)
 
 
 def test_analysis_runner_maps_date_options():

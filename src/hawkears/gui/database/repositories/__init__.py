@@ -7,6 +7,9 @@ from hawkears.gui.database.repositories.detection_repository import (
 from hawkears.gui.database.repositories.import_repository import ImportRepository
 from hawkears.gui.database.repositories.project_repository import ProjectRepository
 from hawkears.gui.database.repositories.recording_repository import RecordingRepository
+from hawkears.gui.database.repositories.review_queue_repository import (
+    ReviewQueueRepository,
+)
 from hawkears.gui.database.repositories.species_repository import SpeciesRepository
 
 __all__ = [
@@ -15,5 +18,6 @@ __all__ = [
     "ImportRepository",
     "ProjectRepository",
     "RecordingRepository",
+    "ReviewQueueRepository",
     "SpeciesRepository",
 ]

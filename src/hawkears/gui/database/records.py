@@ -170,6 +170,22 @@ class AnalysisRunSummary:
 
 
 @dataclass(frozen=True)
+class ReviewQueueSummary:
+    id: int
+    name: str
+    analysis_run_id: int
+    species_id: int
+    species_name: str
+    min_score: float
+    max_per_recording: int
+    min_spacing_ms: int
+    ordering: str
+    detection_count: int
+    reviewed_count: int
+    created_at: str
+
+
+@dataclass(frozen=True)
 class SpeciesProcessingSummary:
     """Recording coverage for one target species in an analysis run."""
 

@@ -3,12 +3,29 @@
 import csv
 from pathlib import Path
 import json
+import logging
 import sqlite3
 import time
 
-from PySide6.QtCore import QObject, QSettings, QThread, Qt, QUrl, Signal, Slot
+from PySide6.QtCore import (
+    QBuffer,
+    QByteArray,
+    QIODevice,
+    QObject,
+    QSettings,
+    QThread,
+    QTimer,
+    Qt,
+    Signal,
+    Slot,
+)
 from PySide6.QtGui import QAction, QColor, QIcon, QImage, QPainter, QPen, QPixmap
-from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PySide6.QtMultimedia import (
+    QAudioFormat,
+    QAudioSink,
+    QMediaDevices,
+    QtAudio,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -45,6 +62,7 @@ from hawkears.gui.database.records import (
     AnalysisRunSummary,
     DetectionResult,
     ReportSummary,
+    ReviewQueueSummary,
     ReviewVerdict,
     SpeciesDefinition,
     SpeciesProcessingSummary,
@@ -57,11 +75,15 @@ from hawkears.gui.services.location_catalog import (
 from hawkears.gui.services.analysis_runner import AnalysisRunner
 from hawkears.gui.services.spectrogram import (
     ReviewSpectrogram,
+    colorize_spectrogram,
     generate_review_spectrogram,
 )
 from hawkears.gui.ui.location_dialog import LocationDialog, location_summary
 from hawkears.gui.ui.resources import brand_icon_path
+from hawkears.gui.ui.review_queue_dialog import ReviewQueueDialog
 from hawkears.gui.ui.species_dialog import SpeciesDialog
+
+logger = logging.getLogger(__name__)
 
 
 def page_header(title: str, subtitle: str) -> tuple[QWidget, QVBoxLayout]:
@@ -657,24 +679,38 @@ class AnalysisPage(QWidget):
 class ResultsPage(QWidget):
     review_requested = Signal(int)
     run_changed = Signal(object)
+    queue_changed = Signal(object)
+    create_queue_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
         page, outer = page_header(
             self.tr("Results"),
-            self.tr(
-                "Find and prioritize detections, then open one to review it in context."
-            ),
+            self.tr("Sort and filter detections, then review them in sequence."),
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(page)
 
-        filters = QHBoxLayout()
+        sources = QHBoxLayout()
+        sources.addWidget(QLabel(self.tr("Analysis run")))
         self.run = QComboBox()
         self.run.currentIndexChanged.connect(
             lambda: self.run_changed.emit(self.run.currentData())
         )
+        sources.addWidget(self.run, 1)
+        sources.addWidget(QLabel(self.tr("Review queue")))
+        self.queue = QComboBox()
+        self.queue.currentIndexChanged.connect(
+            lambda: self.queue_changed.emit(self.queue.currentData())
+        )
+        sources.addWidget(self.queue, 1)
+        self.create_queue_button = QPushButton(self.tr("Create queue…"))
+        self.create_queue_button.clicked.connect(self.create_queue_requested)
+        sources.addWidget(self.create_queue_button)
+        outer.addLayout(sources)
+
+        filters = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setPlaceholderText(self.tr("Search species or recording…"))
         self.search.textChanged.connect(self._apply_filters)
@@ -692,7 +728,6 @@ class ResultsPage(QWidget):
             ]
         )
         self.review.currentTextChanged.connect(self._apply_filters)
-        filters.addWidget(self.run)
         filters.addWidget(self.search, 2)
         filters.addWidget(self.species)
         filters.addWidget(self.review)
@@ -715,9 +750,11 @@ class ResultsPage(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSortingEnabled(True)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setMinimumSectionSize(55)
+        for column, width in enumerate((180, 75, 240, 115, 95, 150, 105)):
+            header.resizeSection(column, width)
         self.table.doubleClicked.connect(self._open_current)
         outer.addWidget(self.table, 1)
 
@@ -757,7 +794,38 @@ class ResultsPage(QWidget):
         value = self.run.currentData()
         return int(value) if value is not None else None
 
-    def set_detections(self, detections: list[DetectionResult]) -> None:
+    def configure_queues(self, queues: list[ReviewQueueSummary]) -> None:
+        current = self.queue.currentData()
+        self.queue.blockSignals(True)
+        self.queue.clear()
+        self.queue.addItem(self.tr("No review queue"), None)
+        for queue in queues:
+            self.queue.addItem(
+                self.tr("%1 · %2 · %3/%4 reviewed")
+                .replace("%1", queue.name)
+                .replace("%2", queue.species_name)
+                .replace("%3", str(queue.reviewed_count))
+                .replace("%4", str(queue.detection_count)),
+                queue.id,
+            )
+        selected = self.queue.findData(current)
+        self.queue.setCurrentIndex(max(0, selected))
+        self.queue.blockSignals(False)
+
+    def current_queue_id(self) -> int | None:
+        value = self.queue.currentData()
+        return int(value) if value is not None else None
+
+    def select_queue(self, queue_id: int | None) -> None:
+        index = self.queue.findData(queue_id)
+        self.queue.setCurrentIndex(max(0, index))
+
+    def select_unreviewed(self) -> None:
+        self.review.setCurrentText(self.tr("Unreviewed"))
+
+    def set_detections(
+        self, detections: list[DetectionResult], *, preserve_order: bool = False
+    ) -> None:
         self.table.setSortingEnabled(False)
         self.table.setRowCount(len(detections))
         species_names = sorted({item.species_name for item in detections})
@@ -789,8 +857,9 @@ class ResultsPage(QWidget):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, detection.detection_id)
                 self.table.setItem(row, column, item)
-        self.table.setSortingEnabled(True)
-        self.table.sortItems(1, Qt.SortOrder.DescendingOrder)
+        self.table.setSortingEnabled(not preserve_order)
+        if not preserve_order:
+            self.table.sortItems(1, Qt.SortOrder.DescendingOrder)
         self._apply_filters()
 
     @staticmethod
@@ -872,30 +941,50 @@ class ResultsPage(QWidget):
 
 
 class SpectrogramWorker(QObject):
-    generated = Signal(object)
-    failed = Signal(str)
+    generated = Signal(int, object)
+    failed = Signal(int, str)
 
     def __init__(
-        self, recording_path: Path, start_seconds: float, end_seconds: float
+        self,
+        request_id: int,
+        recording_path: Path,
+        start_seconds: float,
+        end_seconds: float,
     ) -> None:
         super().__init__()
+        self.request_id = request_id
         self.recording_path = recording_path
         self.start_seconds = start_seconds
         self.end_seconds = end_seconds
 
     @Slot()
     def run(self) -> None:
+        logger.debug(
+            "Spectrogram worker %d started: path=%s start=%.3f end=%.3f",
+            self.request_id,
+            self.recording_path,
+            self.start_seconds,
+            self.end_seconds,
+        )
         try:
-            self.generated.emit(
-                generate_review_spectrogram(
-                    self.recording_path, self.start_seconds, self.end_seconds
-                )
+            result = generate_review_spectrogram(
+                self.recording_path, self.start_seconds, self.end_seconds
             )
+            logger.debug(
+                "Spectrogram worker %d generated shape=%s audio_samples=%d",
+                self.request_id,
+                result.values.shape,
+                len(result.audio_samples),
+            )
+            self.generated.emit(self.request_id, result)
         except Exception as error:
-            self.failed.emit(str(error))
+            logger.exception("Spectrogram worker %d failed", self.request_id)
+            self.failed.emit(self.request_id, str(error))
 
 
 class SpectrogramView(QWidget):
+    generated = Signal(object)
+
     def __init__(self) -> None:
         super().__init__()
         self.setMinimumHeight(280)
@@ -908,22 +997,45 @@ class SpectrogramView(QWidget):
         self._message = self.tr("Select a detection to view its spectrogram.")
         self._thread: QThread | None = None
         self._worker: SpectrogramWorker | None = None
+        self._request_id = 0
+        self._pending_load: tuple[int, Path, float, float] | None = None
+        self._waiting_cursor = False
+        self._cursor_overridden = False
 
     def load(
         self, recording_path: Path, start_seconds: float, end_seconds: float
     ) -> None:
-        if self._thread is not None:
-            return
+        self._request_id += 1
+        request = (self._request_id, recording_path, start_seconds, end_seconds)
+        logger.debug(
+            "Spectrogram request %d: path=%s start=%.3f end=%.3f active=%s",
+            self._request_id,
+            recording_path,
+            start_seconds,
+            end_seconds,
+            self._thread is not None,
+        )
         self._detection_start = start_seconds
         self._detection_end = end_seconds
         self._pixmap = None
         self._data = None
         self._message = self.tr("Loading spectrogram…")
         self._playback_position = None
+        self._set_waiting_cursor(True)
         self.update()
+        if self._thread is not None:
+            self._pending_load = request
+            logger.debug("Spectrogram request %d queued", self._request_id)
+            return
+        self._start_load(request)
 
+    def _start_load(self, request: tuple[int, Path, float, float]) -> None:
+        request_id, recording_path, start_seconds, end_seconds = request
+        logger.debug("Starting spectrogram thread for request %d", request_id)
         thread = QThread(self)
-        worker = SpectrogramWorker(recording_path, start_seconds, end_seconds)
+        worker = SpectrogramWorker(
+            request_id, recording_path, start_seconds, end_seconds
+        )
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.generated.connect(self._spectrogram_ready)
@@ -936,42 +1048,90 @@ class SpectrogramView(QWidget):
         self._worker = worker
         thread.start()
 
-    @Slot(object)
-    def _spectrogram_ready(self, data: ReviewSpectrogram) -> None:
+    @Slot(int, object)
+    def _spectrogram_ready(self, request_id: int, data: ReviewSpectrogram) -> None:
+        if request_id != self._request_id:
+            logger.debug(
+                "Discarding stale spectrogram %d; current=%d",
+                request_id,
+                self._request_id,
+            )
+            return
         import numpy as np
 
-        values = data.values
-        pixels = np.ascontiguousarray(
-            np.flipud(np.clip(values * 255, 0, 255).astype(np.uint8))
-        )
+        pixels = np.ascontiguousarray(np.flipud(colorize_spectrogram(data.values)))
         image = QImage(
-            pixels.data,
             pixels.shape[1],
             pixels.shape[0],
-            pixels.strides[0],
-            QImage.Format.Format_Grayscale8,
-        ).copy()
+            QImage.Format.Format_RGB888,
+        )
+        # Populate storage allocated and owned by QImage. Constructing a QImage
+        # around a temporary Python/NumPy buffer can leave Qt with a dangling
+        # native pointer even when an immediate copy appears to succeed.
+        image_bytes = np.frombuffer(
+            image.bits(), dtype=np.uint8, count=image.sizeInBytes()
+        ).reshape(image.height(), image.bytesPerLine())
+        image_bytes[:, : pixels.shape[1] * 3] = pixels.reshape(
+            pixels.shape[0], pixels.shape[1] * 3
+        )
         self._data = data
         self._pixmap = QPixmap.fromImage(image)
+        logger.debug(
+            "Spectrogram request %d transferred to Qt image %dx%d",
+            request_id,
+            image.width(),
+            image.height(),
+        )
         self._message = ""
+        self._set_waiting_cursor(False)
+        self.generated.emit(data)
         self.update()
 
-    @Slot(str)
-    def _spectrogram_failed(self, message: str) -> None:
+    @Slot(int, str)
+    def _spectrogram_failed(self, request_id: int, message: str) -> None:
+        if request_id != self._request_id:
+            return
         self._message = message
+        logger.error("Spectrogram request %d failed: %s", request_id, message)
+        self._set_waiting_cursor(False)
         self.update()
+
+    def _set_waiting_cursor(self, waiting: bool) -> None:
+        if waiting == self._waiting_cursor:
+            return
+        self._waiting_cursor = waiting
+        if waiting:
+            QTimer.singleShot(0, self._apply_wait_cursor)
+        elif self._cursor_overridden:
+            QApplication.restoreOverrideCursor()
+            self._cursor_overridden = False
+
+    @Slot()
+    def _apply_wait_cursor(self) -> None:
+        if self._waiting_cursor and not self._cursor_overridden:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            self._cursor_overridden = True
 
     @Slot()
     def _thread_finished(self) -> None:
+        logger.debug(
+            "Spectrogram thread finished; pending=%s", self._pending_load is not None
+        )
         if self._thread is not None:
             self._thread.deleteLater()
         self._thread = None
         self._worker = None
+        if self._pending_load is not None:
+            pending = self._pending_load
+            self._pending_load = None
+            self._start_load(pending)
 
     def shutdown(self) -> None:
+        logger.debug("Spectrogram view shutdown; active=%s", self._thread is not None)
         if self._thread is not None:
             self._thread.quit()
             self._thread.wait()
+        self._set_waiting_cursor(False)
 
     def set_playback_position(self, position_seconds: float | None) -> None:
         self._playback_position = position_seconds
@@ -979,15 +1139,15 @@ class SpectrogramView(QWidget):
 
     def paintEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor("#122a31"))
+        painter.fillRect(self.rect(), QColor("#220e0d"))
         plot = self.rect().adjusted(48, 10, -12, -28)
         if self._pixmap is None or self._data is None:
-            painter.setPen(QColor("#d8e4e0"))
+            painter.setPen(QColor("#f8f0e7"))
             painter.drawText(plot, Qt.AlignmentFlag.AlignCenter, self._message)
             painter.end()
             return
         painter.drawPixmap(plot, self._pixmap)
-        painter.setPen(QPen(QColor("#eea94f"), 2))
+        painter.setPen(QPen(QColor("#fbb040"), 2))
         left_fraction = (
             self._detection_start - self._data.start_seconds
         ) / self._data.duration_seconds
@@ -1003,9 +1163,9 @@ class SpectrogramView(QWidget):
             ) / self._data.duration_seconds
             if 0 <= playback_fraction <= 1:
                 cursor_x = plot.left() + round(playback_fraction * plot.width())
-                painter.setPen(QPen(QColor("#f7faf8"), 1))
+                painter.setPen(QPen(QColor("#f8f0e7"), 1))
                 painter.drawLine(cursor_x, plot.top(), cursor_x, plot.bottom())
-        painter.setPen(QColor("#d8e4e0"))
+        painter.setPen(QColor("#f8f0e7"))
         painter.drawText(7, plot.top() + 5, f"{self._data.max_frequency / 1000:g} kHz")
         painter.drawText(7, plot.bottom(), f"{self._data.min_frequency / 1000:g} kHz")
         painter.drawText(
@@ -1048,6 +1208,7 @@ class ReviewPage(QWidget):
         media.addWidget(self.detection_title)
         media.addWidget(self.detection_meta)
         self.spectrogram = SpectrogramView()
+        self.spectrogram.generated.connect(self._set_review_audio)
         media.addWidget(self.spectrogram, 1)
         playback = QHBoxLayout()
         self.play_context_button = QPushButton(self.tr("▶  Play context"))
@@ -1059,6 +1220,14 @@ class ReviewPage(QWidget):
         playback.addWidget(self.play_context_button)
         playback.addWidget(self.play_detection_button)
         playback.addStretch()
+        playback.addWidget(QLabel(self.tr("Playback gain")))
+        self.playback_gain = QComboBox()
+        for decibels in (0, 6, 12, 18, 24):
+            label = "0" if decibels == 0 else f"+{decibels}"
+            self.playback_gain.addItem(self.tr("%1 dB").replace("%1", label), decibels)
+        self.playback_gain.setEnabled(False)
+        self.playback_gain.currentIndexChanged.connect(self._rebuild_playback_audio)
+        playback.addWidget(self.playback_gain)
         playback.addWidget(QLabel(self.tr("Context: 10 seconds")))
         media.addLayout(playback)
         splitter.addWidget(media_card)
@@ -1117,13 +1286,18 @@ class ReviewPage(QWidget):
         splitter.setSizes([700, 330])
         outer.addWidget(splitter, 1)
 
-        self.audio_output = QAudioOutput(self)
-        self.player = QMediaPlayer(self)
-        self.player.setAudioOutput(self.audio_output)
-        self.player.positionChanged.connect(self._position_changed)
-        self.player.playbackStateChanged.connect(self._playback_state_changed)
-        self.player.errorOccurred.connect(self._playback_error)
+        self._audio_sink: QAudioSink | None = None
+        self._audio_buffer = QBuffer(self)
+        self._audio_data = QByteArray()
+        self._cursor_timer = QTimer(self)
+        self._cursor_timer.setInterval(33)
+        self._cursor_timer.timeout.connect(self._animate_playback_cursor)
+        self._playback_start_ms = 0
         self._playback_mode: str | None = None
+        self._playback_samples = None
+        self._playback_sample_rate = 0
+        self._playback_channels = 1
+        self._playback_source_start_ms = 0
         self._play_end_ms = 0
         self._context_start_ms = 0
         self._detection_start_ms = 0
@@ -1131,6 +1305,14 @@ class ReviewPage(QWidget):
         self._detection_id: int | None = None
 
     def show_detection(self, detection: DetectionResult, recording_path: Path) -> None:
+        logger.info(
+            "Showing detection id=%d species=%s recording=%s start_ms=%d end_ms=%d",
+            detection.detection_id,
+            detection.species_name,
+            recording_path,
+            detection.start_ms,
+            detection.end_ms,
+        )
         score = "—" if detection.score is None else f"{detection.score:.3f}"
         self.detection_title.setText(f"{detection.species_name} · {score}")
         self._detection_id = detection.detection_id
@@ -1150,18 +1332,90 @@ class ReviewPage(QWidget):
         self.save_button.setEnabled(detection.review_verdict is not None)
         timestamp = ResultsPage._time_range(detection.start_ms, detection.end_ms)
         self.detection_meta.setText(f"{detection.recording_name}  ·  {timestamp}")
-        self.player.stop()
-        self.player.setSource(QUrl.fromLocalFile(str(recording_path)))
+        self._stop_playback()
+        self._playback_samples = None
+        self._playback_sample_rate = 0
+        self._playback_channels = 1
+        self._playback_source_start_ms = 0
+        self.playback_gain.setEnabled(False)
         self._detection_start_ms = detection.start_ms
         self._detection_end_ms = detection.end_ms
         midpoint_ms = (detection.start_ms + detection.end_ms) // 2
         self._context_start_ms = max(0, midpoint_ms - 5_000)
-        available = recording_path.is_file()
-        self.play_context_button.setEnabled(available)
-        self.play_detection_button.setEnabled(available)
+        self.play_context_button.setEnabled(False)
+        self.play_detection_button.setEnabled(False)
         self.spectrogram.load(
             recording_path, detection.start_ms / 1000, detection.end_ms / 1000
         )
+
+    @Slot(object)
+    def _set_review_audio(self, data: ReviewSpectrogram) -> None:
+        logger.debug(
+            "Preparing review audio: samples=%d rate=%d start=%.3f",
+            len(data.audio_samples),
+            data.sample_rate,
+            data.start_seconds,
+        )
+        self._playback_samples = data.audio_samples
+        self._playback_sample_rate = data.sample_rate
+        self._playback_channels = (
+            data.audio_samples.shape[1] if data.audio_samples.ndim == 2 else 1
+        )
+        self._playback_source_start_ms = round(data.start_seconds * 1000)
+        self.playback_gain.setEnabled(True)
+        self._rebuild_playback_audio()
+        self.play_context_button.setEnabled(True)
+        self.play_detection_button.setEnabled(True)
+
+    def _rebuild_playback_audio(self) -> None:
+        if self._playback_samples is None or self._playback_sample_rate <= 0:
+            return
+        import numpy as np
+
+        self._stop_playback()
+        decibels = float(self.playback_gain.currentData() or 0)
+        samples = np.asarray(self._playback_samples, dtype=np.float32)
+        if decibels > 0:
+            gain = 10 ** (decibels / 20)
+            samples = np.tanh(samples * gain)
+        samples = np.nan_to_num(samples, nan=0.0, posinf=1.0, neginf=-1.0)
+        pcm = np.round(np.clip(samples, -1.0, 1.0) * 32767).astype("<i2")
+        audio_format = QAudioFormat()
+        audio_format.setSampleRate(self._playback_sample_rate)
+        audio_format.setChannelCount(self._playback_channels)
+        audio_format.setSampleFormat(QAudioFormat.SampleFormat.Int16)
+        device = QMediaDevices.defaultAudioOutput()
+        if not device.isFormatSupported(audio_format):
+            logger.error(
+                "Audio output does not support %d-channel Int16 at %d Hz",
+                self._playback_channels,
+                self._playback_sample_rate,
+            )
+            self.play_context_button.setEnabled(False)
+            self.play_detection_button.setEnabled(False)
+            return
+        if self._audio_sink is None or self._audio_sink.format() != audio_format:
+            if self._audio_sink is not None:
+                self._audio_sink.deleteLater()
+            self._audio_sink = QAudioSink(device, audio_format, self)
+            self._audio_sink.stateChanged.connect(self._audio_state_changed)
+        self._audio_buffer.close()
+        self._audio_data = QByteArray(pcm.tobytes())
+        self._audio_buffer.setData(self._audio_data)
+        self._audio_buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+        logger.debug(
+            "Prepared direct PCM playback: rate=%d channels=%d gain_db=%.1f bytes=%d",
+            self._playback_sample_rate,
+            self._playback_channels,
+            decibels,
+            len(pcm) * 2,
+        )
+
+    def cleanup_playback_file(self) -> None:
+        logger.debug("Cleaning direct PCM playback")
+        self._stop_playback()
+        self._audio_buffer.close()
+        self._audio_data.clear()
 
     def _play_context(self) -> None:
         self._play_range(
@@ -1172,28 +1426,80 @@ class ReviewPage(QWidget):
         self._play_range("detection", self._detection_start_ms, self._detection_end_ms)
 
     def _play_range(self, mode: str, start_ms: int, end_ms: int) -> None:
-        if (
-            self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
-            and self._playback_mode == mode
-        ):
-            self.player.stop()
+        if self._is_playing() and self._playback_mode == mode:
+            self._stop_playback()
             return
+        if self._audio_sink is None or not self._audio_buffer.isOpen():
+            return
+        self._stop_playback()
         self._playback_mode = mode
-        self._play_end_ms = end_ms
-        self.player.setPosition(start_ms)
-        self.player.play()
+        relative_start = max(0, start_ms - self._playback_source_start_ms)
+        self._play_end_ms = max(
+            relative_start + 1, end_ms - self._playback_source_start_ms
+        )
+        self._playback_start_ms = relative_start
+        byte_offset = round(
+            relative_start
+            * self._playback_sample_rate
+            * self._playback_channels
+            * 2
+            / 1000
+        )
+        self._audio_buffer.seek(min(byte_offset, self._audio_buffer.size()))
+        logger.info(
+            "Starting direct PCM playback mode=%s relative_start_ms=%d end_ms=%d",
+            mode,
+            relative_start,
+            self._play_end_ms,
+        )
+        self.spectrogram.set_playback_position(
+            (relative_start + self._playback_source_start_ms) / 1000
+        )
+        self._audio_sink.start(self._audio_buffer)
         self._update_playback_buttons(True)
 
-    @Slot(int)
-    def _position_changed(self, position_ms: int) -> None:
-        self.spectrogram.set_playback_position(position_ms / 1000)
-        if self._play_end_ms > 0 and position_ms >= self._play_end_ms:
-            self.player.stop()
+    def _is_playing(self) -> bool:
+        return (
+            self._audio_sink is not None
+            and self._audio_sink.state() == QtAudio.State.ActiveState
+        )
 
-    @Slot(QMediaPlayer.PlaybackState)
-    def _playback_state_changed(self, state: QMediaPlayer.PlaybackState) -> None:
-        playing = state == QMediaPlayer.PlaybackState.PlayingState
-        if not playing:
+    def _stop_playback(self) -> None:
+        if self._audio_sink is not None:
+            self._audio_sink.stop()
+        self._cursor_timer.stop()
+        self.spectrogram.set_playback_position(None)
+        self._playback_mode = None
+        self._update_playback_buttons(False)
+
+    @Slot()
+    def _animate_playback_cursor(self) -> None:
+        if self._audio_sink is None:
+            return
+        position_ms = self._playback_start_ms + round(
+            self._audio_sink.processedUSecs() / 1000
+        )
+        if self._play_end_ms > 0:
+            position_ms = min(position_ms, self._play_end_ms)
+        self._cursor_position_ms = position_ms
+        self.spectrogram.set_playback_position(
+            (position_ms + self._playback_source_start_ms) / 1000
+        )
+        if self._play_end_ms > 0 and position_ms >= self._play_end_ms:
+            self._stop_playback()
+
+    @Slot(QtAudio.State)
+    def _audio_state_changed(self, state: QtAudio.State) -> None:
+        logger.debug(
+            "Direct audio state changed: state=%s error=%s",
+            state,
+            self._audio_sink.error() if self._audio_sink is not None else None,
+        )
+        playing = state == QtAudio.State.ActiveState
+        if playing:
+            self._cursor_timer.start()
+        elif state in (QtAudio.State.IdleState, QtAudio.State.StoppedState):
+            self._cursor_timer.stop()
             self.spectrogram.set_playback_position(None)
             self._playback_mode = None
         self._update_playback_buttons(playing)
@@ -1210,21 +1516,21 @@ class ReviewPage(QWidget):
             else self.tr("Play detection")
         )
 
-    @Slot(QMediaPlayer.Error, str)
-    def _playback_error(self, error: QMediaPlayer.Error, message: str) -> None:
-        if error != QMediaPlayer.Error.NoError:
-            QMessageBox.warning(self, self.tr("Audio playback failed"), message)
-
     def _save(self) -> None:
         checked = self.verdict_group.checkedButton()
         if self._detection_id is None or checked is None:
             return
-        self.save_requested.emit(
-            self._detection_id,
-            ReviewVerdict(str(checked.property("verdictValue"))),
-            self.correction.currentText().strip(),
-            self.notes.toPlainText().strip(),
-        )
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.processEvents()
+        try:
+            self.save_requested.emit(
+                self._detection_id,
+                ReviewVerdict(str(checked.property("verdictValue"))),
+                self.correction.currentText().strip(),
+                self.notes.toPlainText().strip(),
+            )
+        finally:
+            QApplication.restoreOverrideCursor()
 
 
 class ReportsPage(QWidget):
@@ -1301,6 +1607,27 @@ class ReportsPage(QWidget):
         processing_layout.addWidget(self.processing_table)
         self.processing_report.setVisible(False)
         outer.addWidget(self.processing_report)
+
+        self.queue_report, queue_layout = card_layout()
+        queue_layout.addWidget(section_title(self.tr("Review queues")))
+        self.queue_table = QTableWidget(0, 5)
+        self.queue_table.setHorizontalHeaderLabels(
+            [
+                self.tr("Queue"),
+                self.tr("Species"),
+                self.tr("Detections"),
+                self.tr("Reviewed"),
+                self.tr("Remaining"),
+            ]
+        )
+        self.queue_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.queue_table.setAlternatingRowColors(True)
+        self.queue_table.setSortingEnabled(True)
+        self.queue_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.queue_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        queue_layout.addWidget(self.queue_table)
+        self.queue_report.setVisible(False)
+        outer.addWidget(self.queue_report)
 
         report, report_layout = card_layout()
         header = QHBoxLayout()
@@ -1417,6 +1744,24 @@ class ReportsPage(QWidget):
         self.processing_table.setSortingEnabled(True)
         self.processing_report.setVisible(bool(summaries))
 
+    def set_queue_summaries(self, queues: list[ReviewQueueSummary]) -> None:
+        self.queue_table.setSortingEnabled(False)
+        self.queue_table.setRowCount(len(queues))
+        for row, queue in enumerate(queues):
+            values = (
+                queue.name,
+                queue.species_name,
+                queue.detection_count,
+                queue.reviewed_count,
+                queue.detection_count - queue.reviewed_count,
+            )
+            for column, value in enumerate(values):
+                item = QTableWidgetItem()
+                item.setData(Qt.DisplayRole, value)
+                self.queue_table.setItem(row, column, item)
+        self.queue_table.setSortingEnabled(True)
+        self.queue_report.setVisible(bool(queues))
+
     @staticmethod
     def _percentage(value: int, total: int) -> str:
         return "0%" if total == 0 else f"{round(value * 100 / total)}%"
@@ -1510,7 +1855,9 @@ class MainWindow(QMainWindow):
         self.welcome.create_requested.connect(self._create_project)
         self.welcome.open_requested.connect(self._open_project)
         self.results_page.review_requested.connect(self._open_review)
-        self.results_page.run_changed.connect(self._load_detection_results)
+        self.results_page.run_changed.connect(self._results_run_changed)
+        self.results_page.queue_changed.connect(self._results_queue_changed)
+        self.results_page.create_queue_requested.connect(self._create_review_queue)
         self.reports_page.run_changed.connect(self._load_report_summary)
         self.review_page.save_requested.connect(self._save_review)
         self.project_page.recording_scope_changed.connect(self._save_recording_scope)
@@ -1633,6 +1980,7 @@ class MainWindow(QMainWindow):
             self._open_project_path(Path(path))
 
     def _open_project_path(self, path: Path) -> None:
+        logger.info("Opening project: %s", path)
         if self._analysis_thread is not None:
             self._show_analysis_busy_message()
             return
@@ -1647,7 +1995,14 @@ class MainWindow(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
         if error is not None:
+            logger.error(
+                "Could not open project %s",
+                path,
+                exc_info=(type(error), error, error.__traceback__),
+            )
             QMessageBox.critical(self, self.tr("Could not open project"), str(error))
+        else:
+            logger.info("Project opened: %s", path)
 
     @staticmethod
     def _project_directory(create: bool = False) -> Path:
@@ -1872,10 +2227,12 @@ class MainWindow(QMainWindow):
         self.project_page.configure_species_summary([], selection_enabled=False)
         self.analysis_page.reset_run_status()
         self.results_page.configure_runs([])
+        self.results_page.configure_queues([])
         self.results_page.set_detections([])
         self.reports_page.configure_runs([])
         self.reports_page.set_summary(ReportSummary(0, 0, 0, 0, 0, 0, 0, ()))
         self.reports_page.set_processing_summary([])
+        self.reports_page.set_queue_summaries([])
         for button in self.nav_buttons:
             button.setEnabled(False)
             button.setChecked(False)
@@ -1892,27 +2249,58 @@ class MainWindow(QMainWindow):
 
     def _show_page(self, index: int) -> None:
         if index == 3:
-            self._load_results()
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            QApplication.processEvents()
+            try:
+                self._load_results()
+            finally:
+                QApplication.restoreOverrideCursor()
         if index == 5:
             self._load_reports()
         if index != 4:
-            self.review_page.player.stop()
+            self.review_page._stop_playback()
         self.pages.setCurrentIndex(index)
         if index > 0:
             self.nav_buttons[index - 1].setChecked(True)
 
-    def _load_results(self, selected_run_id: int | None = None) -> None:
+    def _load_results(
+        self,
+        selected_run_id: int | None = None,
+        selected_queue_id: int | None = None,
+    ) -> None:
         if self._database is None:
             self.results_page.configure_runs([])
+            self.results_page.configure_queues([])
             self.results_page.set_detections([])
             return
         runs = self._database.analysis.list_runs()
         self.results_page.configure_runs(runs)
+        self.results_page.configure_queues(self._database.review_queues.list_queues())
         if selected_run_id is not None:
             index = self.results_page.run.findData(selected_run_id)
             if index >= 0:
                 self.results_page.run.setCurrentIndex(index)
-        self._load_detection_results(self.results_page.current_run_id())
+            if selected_queue_id is None:
+                self.results_page.select_queue(None)
+        if selected_queue_id is not None:
+            self.results_page.select_queue(selected_queue_id)
+        queue_id = self.results_page.current_queue_id()
+        if queue_id is not None:
+            self._load_queue_results(queue_id)
+        else:
+            self._load_detection_results(self.results_page.current_run_id())
+
+    def _results_run_changed(self, run_id: object = None) -> None:
+        self.results_page.queue.blockSignals(True)
+        self.results_page.select_queue(None)
+        self.results_page.queue.blockSignals(False)
+        self._load_detection_results(run_id)
+
+    def _results_queue_changed(self, queue_id: object = None) -> None:
+        logger.info("Review queue selection changed: queue_id=%s", queue_id)
+        if queue_id is not None:
+            self.results_page.select_unreviewed()
+        self._load_queue_results(queue_id)
 
     def _load_detection_results(self, run_id: object = None) -> None:
         if self._database is None:
@@ -1923,13 +2311,109 @@ class MainWindow(QMainWindow):
             self._database.detections.list_results(selected_run_id)
         )
 
+    def _load_queue_results(self, queue_id: object = None) -> None:
+        if self._database is None or queue_id is None:
+            self._load_detection_results(self.results_page.current_run_id())
+            return
+        selected_queue_id = int(queue_id)
+        queue = next(
+            (
+                item
+                for item in self._database.review_queues.list_queues()
+                if item.id == selected_queue_id
+            ),
+            None,
+        )
+        if queue is None:
+            self.results_page.set_detections([])
+            return
+        run_index = self.results_page.run.findData(queue.analysis_run_id)
+        if run_index >= 0:
+            self.results_page.run.blockSignals(True)
+            self.results_page.run.setCurrentIndex(run_index)
+            self.results_page.run.blockSignals(False)
+        by_id = {
+            item.detection_id: item
+            for item in self._database.detections.list_results(queue.analysis_run_id)
+        }
+        self.results_page.set_detections(
+            [
+                by_id[detection_id]
+                for detection_id in self._database.review_queues.detection_ids(
+                    selected_queue_id
+                )
+                if detection_id in by_id
+            ],
+            preserve_order=True,
+        )
+
+    def _create_review_queue(self) -> None:
+        if self._database is None:
+            return
+        run_id = self.results_page.current_run_id()
+        if run_id is None:
+            QMessageBox.information(
+                self,
+                self.tr("Select an analysis run"),
+                self.tr("Select one analysis run before creating a review queue."),
+            )
+            return
+        detected_names = {
+            item.species_name for item in self._database.detections.list_results(run_id)
+        }
+        species = [
+            item
+            for item in self._database.species.list()
+            if item.common_name in detected_names
+        ]
+        if not species:
+            QMessageBox.information(
+                self,
+                self.tr("No detections"),
+                self.tr("This analysis run has no species detections to queue."),
+            )
+            return
+        settings = self._database.analysis.settings(run_id)
+        minimum_score = (
+            float(settings.get("min_score", 0.6)) if isinstance(settings, dict) else 0.6
+        )
+        dialog = ReviewQueueDialog(
+            self.results_page.run.currentText(),
+            species,
+            minimum_score=minimum_score,
+            parent=self,
+        )
+        if not dialog.exec():
+            return
+        values = dialog.values()
+        try:
+            queue_id = self._database.review_queues.create(
+                str(values["name"]),
+                run_id,
+                int(values["species_id"]),
+                min_score=float(values["min_score"]),
+                max_per_recording=int(values["max_per_recording"]),
+                min_spacing_ms=int(values["min_spacing_ms"]),
+                ordering=str(values["ordering"]),  # type: ignore[arg-type]
+            )
+        except (ValueError, sqlite3.DatabaseError) as error:
+            QMessageBox.critical(
+                self, self.tr("Could not create review queue"), str(error)
+            )
+            return
+        self._load_results(selected_run_id=run_id, selected_queue_id=queue_id)
+
     def _load_reports(self) -> None:
         if self._database is None:
             self.reports_page.configure_runs([])
             self.reports_page.set_summary(ReportSummary(0, 0, 0, 0, 0, 0, 0, ()))
             self.reports_page.set_processing_summary([])
+            self.reports_page.set_queue_summaries([])
             return
         self.reports_page.configure_runs(self._database.analysis.list_runs())
+        self.reports_page.set_queue_summaries(
+            self._database.review_queues.list_queues()
+        )
         self.reports_page.set_export_directory(self._database.path.parent)
         self._load_report_summary(self.reports_page.current_run_id())
 
@@ -1949,6 +2433,7 @@ class MainWindow(QMainWindow):
         )
 
     def _open_review(self, detection_id: int) -> None:
+        logger.info("Opening review: detection_id=%d", detection_id)
         if self._database is None:
             return
         detection = next(
@@ -1980,6 +2465,12 @@ class MainWindow(QMainWindow):
         corrected_species_name: str,
         notes: str,
     ) -> None:
+        logger.info(
+            "Saving review: detection_id=%d verdict=%s corrected_species=%s",
+            detection_id,
+            verdict.value,
+            corrected_species_name,
+        )
         if self._database is None:
             return
         definition = next(
@@ -2015,7 +2506,11 @@ class MainWindow(QMainWindow):
             return
 
         selected_run_id = self.results_page.current_run_id()
-        self._load_results(selected_run_id=selected_run_id)
+        selected_queue_id = self.results_page.current_queue_id()
+        self._load_results(
+            selected_run_id=selected_run_id,
+            selected_queue_id=selected_queue_id,
+        )
         if next_detection_id is not None:
             self._open_review(next_detection_id)
         else:
@@ -2033,5 +2528,5 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         self.review_page.spectrogram.shutdown()
-        self.review_page.player.stop()
+        self.review_page.cleanup_playback_file()
         event.accept()

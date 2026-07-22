@@ -10,6 +10,7 @@ from hawkears.gui.database.repositories import (
     ImportRepository,
     ProjectRepository,
     RecordingRepository,
+    ReviewQueueRepository,
     SpeciesRepository,
 )
 from hawkears.gui.database.schema import migrate, validate
@@ -23,6 +24,7 @@ class ProjectDatabase:
         self.project = ProjectRepository(self.path)
         self.species = SpeciesRepository(self.path)
         self.recordings = RecordingRepository(self.path)
+        self.review_queues = ReviewQueueRepository(self.path)
         self.analysis = AnalysisRepository(self.path)
         self.imports = ImportRepository(self.path)
         self.detections = DetectionRepository(self.path)

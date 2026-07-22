@@ -384,6 +384,7 @@ class DetectionRepository:
                        detection_revision.start_ms,
                        detection_revision.end_ms,
                        coalesce(
+                           analysis_item.recorded_at,
                            recording.recorded_at,
                            CASE WHEN json_extract(
                                analysis_run.settings_json,
@@ -394,6 +395,7 @@ class DetectionRepository:
                            ) END
                        ) AS recorded_at,
                        coalesce(
+                           analysis_item.latitude,
                            recording.latitude,
                            json_extract(
                                analysis_run.settings_json,
@@ -401,6 +403,7 @@ class DetectionRepository:
                            )
                        ) AS latitude,
                        coalesce(
+                           analysis_item.longitude,
                            recording.longitude,
                            json_extract(
                                analysis_run.settings_json,
@@ -408,13 +411,17 @@ class DetectionRepository:
                            )
                        ) AS longitude,
                        coalesce(
+                           analysis_item.region_code,
                            recording.region_code,
                            json_extract(
                                analysis_run.settings_json,
                                '$.location.region_code'
                            )
                        ) AS region_code,
-                       recording.location_name,
+                       coalesce(
+                           analysis_item.location_name,
+                           recording.location_name
+                       ) AS location_name,
                        review.verdict AS review_verdict,
                        coalesce(review.notes, '') AS review_notes
                 FROM detection

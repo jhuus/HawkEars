@@ -23,7 +23,7 @@ def test_create_and_open_project(tmp_path: Path):
 
     assert database.path.is_file()
     assert database.project.get().name == "Wetland Survey"
-    assert schema_version(database.path) == 2
+    assert schema_version(database.path) == 4
     assert ProjectDatabase.is_project(database.path)
 
     reopened = ProjectDatabase.open(database.path)
@@ -113,6 +113,20 @@ def test_project_analysis_settings_are_persisted(tmp_path: Path):
         )
         == settings
     )
+
+
+def test_analysis_run_settings_are_retrieved_from_run_snapshot(tmp_path: Path):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recording = database.recordings.add(tmp_path / "night.wav")
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.72},
+        species_ids=[species.id],
+        recording_ids=[recording.id],
+    )
+
+    assert database.analysis.settings(run_id) == {"min_score": 0.72}
 
 
 def test_project_species_can_be_replaced_from_supported_catalog(tmp_path: Path):
@@ -340,6 +354,13 @@ def test_bulk_inference_detection_creation(tmp_path: Path):
         },
         species_ids=[species.id, undetected_species.id],
         recording_ids=[recording.id],
+        recording_metadata={
+            recording.id: {
+                "recorded_at": "2015-07-12",
+                "latitude": 49.5,
+                "longitude": -119.5,
+            }
+        },
     )
     item_id = database.analysis.item_ids(run_id)[recording.id]
 
@@ -357,9 +378,9 @@ def test_bulk_inference_detection_creation(tmp_path: Path):
     results = database.detections.list_results(run_id)
     assert [result.species_name for result in results] == ["Marsh Wren"] * 2
     assert results[0].recording_name == "marsh.wav"
-    assert results[0].recorded_at == "2026-05-18"
+    assert results[0].recorded_at == "2015-07-12"
     assert results[0].region_code == "CA-ON-OT"
-    assert results[0].latitude == 45.4215
+    assert results[0].latitude == 49.5
     assert results[0].review_verdict is None
     processing = database.analysis.species_processing_summary(run_id)
     assert [item.species_name for item in processing] == [
@@ -383,3 +404,44 @@ def test_bulk_inference_detection_creation(tmp_path: Path):
         )
     finally:
         connection.close()
+
+
+def test_review_queue_applies_score_spacing_and_recording_limit(tmp_path: Path):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recording = database.recordings.add(tmp_path / "night.mp3")
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.5},
+        species_ids=[species.id],
+        recording_ids=[recording.id],
+    )
+    item_id = database.analysis.item_ids(run_id)[recording.id]
+    database.detections.create_inferred_many(
+        [
+            (recording.id, item_id, species.id, 1_000, 4_000, 0.95),
+            (recording.id, item_id, species.id, 3_000, 6_000, 0.90),
+            (recording.id, item_id, species.id, 10_000, 13_000, 0.80),
+            (recording.id, item_id, species.id, 20_000, 23_000, 0.40),
+        ]
+    )
+    queue_id = database.review_queues.create(
+        "Nighthawk priority",
+        run_id,
+        species.id,
+        min_score=0.6,
+        max_per_recording=2,
+        min_spacing_ms=5_000,
+        ordering="score",
+    )
+
+    detection_ids = database.review_queues.detection_ids(queue_id)
+    assert len(detection_ids) == 2
+    selected = [database.detections.get(item) for item in detection_ids]
+    assert [item.score for item in selected] == [0.95, 0.80]
+
+    database.detections.set_review(detection_ids[0], ReviewVerdict.CORRECT)
+    queue = database.review_queues.list_queues()[0]
+    assert queue.name == "Nighthawk priority"
+    assert queue.detection_count == 2
+    assert queue.reviewed_count == 1

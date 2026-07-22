@@ -346,13 +346,41 @@ class Analyzer:
         for name, class_labels in labels.items():
             split[name] = []
             for label in class_labels:
-                start = label.start_time
-                while label.end_time - start > maximum:
-                    split[name].append(type(label)(label.score, start, start + maximum))
-                    start += maximum
-                if label.end_time > start:
-                    split[name].append(type(label)(label.score, start, label.end_time))
+                for start, end in self._split_label_range(
+                    label.start_time, label.end_time
+                ):
+                    split[name].append(type(label)(label.score, start, end))
         return split
+
+    def _split_label_range(self, start: float, end: float) -> list[tuple[float, float]]:
+        """Split one range, absorbing a configured short trailing remainder."""
+        maximum = self.cfg.hawkears.max_label_length
+        if maximum is None or end - start <= maximum:
+            return [(start, end)]
+        duration = end - start
+        full_count = int(duration // maximum)
+        remainder = duration - full_count * maximum
+        threshold = self.cfg.hawkears.max_label_length_merge_threshold
+        if 0 < remainder <= threshold and full_count > 0:
+            piece_length = duration / full_count
+            return [
+                (
+                    start + index * piece_length,
+                    (
+                        end
+                        if index == full_count - 1
+                        else start + (index + 1) * piece_length
+                    ),
+                )
+                for index in range(full_count)
+            ]
+        ranges = [
+            (start + index * maximum, start + (index + 1) * maximum)
+            for index in range(full_count)
+        ]
+        if remainder > 0:
+            ranges.append((start + full_count * maximum, end))
+        return ranges
 
     def _split_long_dataframe_labels(self, dataframe):
         """Apply the variable-label limit to a predictor dataframe."""
@@ -361,15 +389,9 @@ class Analyzer:
             return dataframe
         rows = []
         for _, row in dataframe.iterrows():
-            start = float(row["start_time"])
-            end = float(row["end_time"])
-            while end - start > maximum:
-                piece = row.copy()
-                piece["start_time"] = start
-                piece["end_time"] = start + maximum
-                rows.append(piece)
-                start += maximum
-            if end > start:
+            for start, end in self._split_label_range(
+                float(row["start_time"]), float(row["end_time"])
+            ):
                 piece = row.copy()
                 piece["start_time"] = start
                 piece["end_time"] = end

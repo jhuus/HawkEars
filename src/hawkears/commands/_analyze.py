@@ -196,6 +196,8 @@ def analyze(
             and cfg.hawkears.max_label_length <= 0
         ):
             raise ValueError("max_label_length must be greater than zero.")
+        if cfg.hawkears.max_label_length_merge_threshold < 0:
+            raise ValueError("max_label_length_merge_threshold cannot be negative.")
         if (
             cfg.infer.segment_len is not None
             and cfg.hawkears.max_label_length is not None

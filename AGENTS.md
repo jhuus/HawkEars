@@ -113,8 +113,9 @@ changing the API.
 - Review spectrograms use audio parameters from `yaml/default.yaml`, a 10-second
   context, `decibels=True`, and `skip_cache=True` to avoid processing an entire
   recording just to display one detection.
-- Playback uses `QMediaPlayer` and the spectrogram cursor follows its reported
-  position.
+- Review playback feeds generated PCM audio directly to `QAudioSink`; do not
+  reintroduce `QMediaPlayer`/FFmpeg for these clips. The spectrogram cursor uses
+  `QAudioSink.processedUSecs()`.
 - Variable labels can be capped with `max_label_length`; oversized labels are
   split consecutively without discarding detected duration.
 - User-facing interface strings use Qt translation calls. English is the source
