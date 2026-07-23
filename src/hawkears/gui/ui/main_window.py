@@ -777,6 +777,7 @@ class ResultsPage(QWidget):
     queue_changed = Signal(object)
     create_queue_requested = Signal()
     review_order_changed = Signal(int, str)
+    confirmation_changed = Signal(int, bool)
 
     def __init__(self) -> None:
         super().__init__()
@@ -814,6 +815,7 @@ class ResultsPage(QWidget):
         sources.addWidget(self.create_queue_button)
         outer.addLayout(sources)
         self._queue_orders: dict[int, str] = {}
+        self._queue_confirmation: dict[int, tuple[str, bool]] = {}
 
         filters = QHBoxLayout()
         self.search = QLineEdit()
@@ -831,13 +833,20 @@ class ResultsPage(QWidget):
                 self.tr("Correct"),
                 self.tr("Incorrect"),
                 self.tr("Uncertain"),
+                self.tr("Skipped"),
             ]
         )
         self.review.currentTextChanged.connect(self._apply_filters)
+        self.confirmation_toggle = QCheckBox(
+            self.tr("Skip remaining after confirmation")
+        )
+        self.confirmation_toggle.setVisible(False)
+        self.confirmation_toggle.toggled.connect(self._confirmation_toggled)
         filters.addWidget(self.search, 2)
         filters.addWidget(self.species)
         filters.addWidget(QLabel(self.tr("Review status")))
         filters.addWidget(self.review)
+        filters.addWidget(self.confirmation_toggle)
         outer.addLayout(filters)
 
         self.table = QTableWidget(0, 7)
@@ -906,14 +915,19 @@ class ResultsPage(QWidget):
         self.queue.blockSignals(True)
         self.queue.clear()
         self._queue_orders = {queue.id: queue.review_order for queue in queues}
+        self._queue_confirmation = {
+            queue.id: (queue.confirmation_scope, queue.confirmation_enabled)
+            for queue in queues
+        }
         self.queue.addItem(self.tr("No review queue"), None)
         for queue in queues:
             self.queue.addItem(
-                self.tr("%1 · %2 · %3/%4 reviewed")
+                self.tr("%1 · %2 · %3/%4 reviewed · %5 skipped")
                 .replace("%1", queue.name)
                 .replace("%2", queue.species_name)
                 .replace("%3", str(queue.reviewed_count))
-                .replace("%4", str(queue.detection_count)),
+                .replace("%4", str(queue.detection_count))
+                .replace("%5", str(queue.skipped_count)),
                 queue.id,
             )
         selected = self.queue.findData(current)
@@ -931,13 +945,31 @@ class ResultsPage(QWidget):
         if queue_id is None:
             self.review_order.setCurrentIndex(0)
             self.review_order.setEnabled(False)
+            self.confirmation_toggle.setVisible(False)
         else:
             self.review_order.setEnabled(True)
             index = self.review_order.findData(
                 self._queue_orders.get(queue_id, "queue")
             )
             self.review_order.setCurrentIndex(max(0, index))
+            scope, enabled = self._queue_confirmation.get(queue_id, ("none", False))
+            self.confirmation_toggle.blockSignals(True)
+            self.confirmation_toggle.setVisible(scope != "none")
+            self.confirmation_toggle.setChecked(enabled)
+            self.confirmation_toggle.setToolTip(
+                self.tr("Confirmation applies per location and date.")
+                if scope == "location_date"
+                else self.tr("Confirmation applies per location.")
+            )
+            self.confirmation_toggle.blockSignals(False)
         self.review_order.blockSignals(False)
+
+    def _confirmation_toggled(self, enabled: bool) -> None:
+        queue_id = self.current_queue_id()
+        if queue_id is not None:
+            scope, _ = self._queue_confirmation.get(queue_id, ("none", False))
+            self._queue_confirmation[queue_id] = (scope, enabled)
+            self.confirmation_changed.emit(queue_id, enabled)
 
     def _review_order_selected(self) -> None:
         queue_id = self.current_queue_id()
@@ -959,8 +991,13 @@ class ResultsPage(QWidget):
         self.review.setCurrentText(self.tr("Unreviewed"))
 
     def set_detections(
-        self, detections: list[DetectionResult], *, preserve_order: bool = False
+        self,
+        detections: list[DetectionResult],
+        *,
+        preserve_order: bool = False,
+        queue_states: dict[int, str] | None = None,
     ) -> None:
+        queue_states = queue_states or {}
         self.table.setSortingEnabled(False)
         self.table.setRowCount(len(detections))
         species_names = sorted({item.species_name for item in detections})
@@ -983,9 +1020,13 @@ class ResultsPage(QWidget):
                 detection.recorded_at[:10] if detection.recorded_at else "—",
                 self._location(detection),
                 (
-                    self._verdict_text(detection.review_verdict)
-                    if detection.review_verdict is not None
-                    else self.tr("Unreviewed")
+                    self.tr("Skipped")
+                    if queue_states.get(detection.detection_id) == "skipped"
+                    else (
+                        self._verdict_text(detection.review_verdict)
+                        if detection.review_verdict is not None
+                        else self.tr("Unreviewed")
+                    )
                 ),
             )
             for column, value in enumerate(values):
@@ -1044,7 +1085,7 @@ class ResultsPage(QWidget):
                     or state == values[6]
                     or (
                         state == self.tr("Reviewed")
-                        and values[6] != self.tr("Unreviewed")
+                        and values[6] not in {self.tr("Unreviewed"), self.tr("Skipped")}
                     )
                 )
             )
@@ -1080,6 +1121,12 @@ class ResultsPage(QWidget):
         if current_index + 1 >= len(visible_ids):
             return None
         return visible_ids[current_index + 1]
+
+    def first_visible_detection_id(self) -> int | None:
+        for row in range(self.table.rowCount()):
+            if not self.table.isRowHidden(row):
+                return int(self.table.item(row, 0).data(Qt.UserRole))
+        return None
 
 
 class SpectrogramWorker(QObject):
@@ -2048,13 +2095,14 @@ class ReportsPage(QWidget):
 
         self.queue_report, queue_layout = card_layout()
         queue_layout.addWidget(section_title(self.tr("Review queues")))
-        self.queue_table = QTableWidget(0, 5)
+        self.queue_table = QTableWidget(0, 6)
         self.queue_table.setHorizontalHeaderLabels(
             [
                 self.tr("Queue"),
                 self.tr("Species"),
                 self.tr("Detections"),
                 self.tr("Reviewed"),
+                self.tr("Skipped"),
                 self.tr("Remaining"),
             ]
         )
@@ -2309,7 +2357,8 @@ class ReportsPage(QWidget):
                 queue.species_name,
                 queue.detection_count,
                 queue.reviewed_count,
-                queue.detection_count - queue.reviewed_count,
+                queue.skipped_count,
+                queue.pending_count,
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem()
@@ -2444,6 +2493,9 @@ class MainWindow(QMainWindow):
         self.results_page.queue_changed.connect(self._results_queue_changed)
         self.results_page.review_order_changed.connect(
             self._results_review_order_changed
+        )
+        self.results_page.confirmation_changed.connect(
+            self._results_confirmation_changed
         )
         self.results_page.create_queue_requested.connect(self._create_review_queue)
         self.reports_page.run_changed.connect(self._load_report_summary)
@@ -2959,6 +3011,17 @@ class MainWindow(QMainWindow):
             return
         self._load_queue_results(queue_id)
 
+    def _results_confirmation_changed(self, queue_id: int, enabled: bool) -> None:
+        if self._database is None:
+            return
+        try:
+            self._database.review_queues.set_confirmation_enabled(queue_id, enabled)
+        except (LookupError, ValueError, sqlite3.DatabaseError) as error:
+            QMessageBox.critical(
+                self, self.tr("Could not change confirmation behavior"), str(error)
+            )
+        self._load_queue_results(queue_id)
+
     def _load_detection_results(self, run_id: object = None) -> None:
         if self._database is None:
             self.results_page.set_detections([])
@@ -2973,6 +3036,9 @@ class MainWindow(QMainWindow):
             self._load_detection_results(self.results_page.current_run_id())
             return
         selected_queue_id = int(queue_id)
+        self._database.review_queues.recalculate(selected_queue_id)
+        self.results_page.configure_queues(self._database.review_queues.list_queues())
+        self.results_page.select_queue(selected_queue_id)
         queue = next(
             (
                 item
@@ -3002,6 +3068,7 @@ class MainWindow(QMainWindow):
                 if detection_id in by_id
             ],
             preserve_order=True,
+            queue_states=self._database.review_queues.item_states(selected_queue_id),
         )
 
     def _create_review_queue(self) -> None:
@@ -3052,6 +3119,7 @@ class MainWindow(QMainWindow):
                 max_per_recording=int(values["max_per_recording"]),
                 min_spacing_ms=int(values["min_spacing_ms"]),
                 ordering=str(values["ordering"]),  # type: ignore[arg-type]
+                confirmation_enabled=bool(values["confirmation_enabled"]),
                 score_band_width=(
                     float(values["score_band_width"])
                     if values["score_band_width"] is not None
@@ -3298,11 +3366,12 @@ class MainWindow(QMainWindow):
                 self.tr("Select a supported species from the Correct species list."),
             )
             return
-        next_detection_id = (
-            self.results_page.next_visible_detection_id(detection_id)
-            if advance
-            else None
-        )
+        selected_queue_id = self.results_page.current_queue_id()
+        next_detection_id = None
+        if advance and selected_queue_id is None:
+            next_detection_id = self.results_page.next_visible_detection_id(
+                detection_id
+            )
         try:
             corrected_species = self._database.species.ensure_catalog_species(
                 definition
@@ -3315,16 +3384,18 @@ class MainWindow(QMainWindow):
                     notes="Species corrected during review.",
                 )
             self._database.detections.set_review(detection_id, verdict, notes=notes)
+            self._database.review_queues.recalculate_for_detection(detection_id)
         except (LookupError, ValueError, sqlite3.DatabaseError) as error:
             QMessageBox.critical(self, self.tr("Could not save review"), str(error))
             return
 
         selected_run_id = self.results_page.current_run_id()
-        selected_queue_id = self.results_page.current_queue_id()
         self._load_results(
             selected_run_id=selected_run_id,
             selected_queue_id=selected_queue_id,
         )
+        if advance and selected_queue_id is not None:
+            next_detection_id = self.results_page.first_visible_detection_id()
         if advance and next_detection_id is not None:
             self._open_review(next_detection_id)
         else:

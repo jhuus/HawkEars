@@ -189,8 +189,12 @@ class ReviewQueueSummary:
     diel_bin_count: Optional[int]
     max_per_diel_bin: Optional[int]
     review_order: str
+    confirmation_scope: str
+    confirmation_enabled: bool
     detection_count: int
     reviewed_count: int
+    skipped_count: int
+    pending_count: int
     created_at: str
 
 

@@ -1,6 +1,7 @@
 """Dialog for creating a reproducible detection review queue."""
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -128,6 +129,14 @@ class ReviewQueueDialog(QDialog):
         self._populate_strategies()
         form.addRow(self.tr("Sampling strategy"), self.ordering)
 
+        self.confirmation_enabled = QCheckBox(
+            self.tr("Skip remaining detections after confirmation")
+        )
+        form.addRow(self.tr("Confirmation"), self.confirmation_enabled)
+        self.confirmation_scope = QLabel()
+        self.confirmation_scope.setObjectName("muted")
+        form.addRow("", self.confirmation_scope)
+
         self.score_band_width = QDoubleSpinBox()
         self.score_band_width.setRange(0.01, 0.5)
         self.score_band_width.setDecimals(2)
@@ -216,6 +225,23 @@ class ReviewQueueDialog(QDialog):
         self._strategy_changed()
 
     def _strategy_changed(self) -> None:
+        confirmation_scopes = {
+            "location_max_score": self.tr("Applies separately to each location."),
+            "location_max_count": self.tr("Applies separately to each location."),
+            "location_max_score_sum": self.tr("Applies separately to each location."),
+            "location_first_date": self.tr("Applies separately to each location."),
+            "location_date_high_score": self.tr(
+                "Applies separately to each location and date."
+            ),
+            "location_date_first_detection": self.tr(
+                "Applies separately to each location and date."
+            ),
+        }
+        scope_text = confirmation_scopes.get(str(self.ordering.currentData()), "")
+        self.confirmation_enabled.setEnabled(bool(scope_text))
+        self.confirmation_enabled.setChecked(bool(scope_text))
+        self.confirmation_scope.setText(scope_text)
+        self.confirmation_scope.setVisible(bool(scope_text))
         stratified = self.ordering.currentData() == "score_stratified"
         location_date = self.ordering.currentData() in {
             "location_date",
@@ -250,6 +276,7 @@ class ReviewQueueDialog(QDialog):
             "max_per_recording": self.max_per_recording.value(),
             "min_spacing_ms": round(self.min_spacing.value() * 1000),
             "ordering": str(self.ordering.currentData()),
+            "confirmation_enabled": self.confirmation_enabled.isChecked(),
             "score_band_width": (
                 self.score_band_width.value()
                 if self.ordering.currentData() == "score_stratified"

@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from datetime import date, timedelta
+import json
 from math import ceil
 from pathlib import Path
 import random
@@ -49,6 +50,7 @@ class ReviewQueueRepository:
         percentile_points: Optional[int] = None,
         diel_bin_count: Optional[int] = None,
         max_per_diel_bin: Optional[int] = None,
+        confirmation_enabled: bool = True,
     ) -> int:
         """Select detections according to a reproducible review strategy."""
         if not name.strip():
@@ -283,6 +285,7 @@ class ReviewQueueRepository:
         elif ordering == "chronological":
             selected.sort(key=lambda row: (row["display_name"], row["start_ms"]))
 
+        confirmation_scope = self._confirmation_scope(ordering)
         stored_ordering = (
             "score"
             if ordering
@@ -314,8 +317,9 @@ class ReviewQueueRepository:
                     max_per_diel_bin, location_max_count,
                     location_max_score_sum, location_max_score,
                     location_first_date, location_date_high_score,
-                    location_date_first_detection
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    location_date_first_detection, confirmation_scope,
+                    confirmation_enabled
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     name.strip(),
@@ -340,6 +344,8 @@ class ReviewQueueRepository:
                     ordering == "location_first_date",
                     ordering == "location_date_high_score",
                     ordering == "location_date_first_detection",
+                    confirmation_scope,
+                    confirmation_enabled and confirmation_scope != "none",
                 ),
             )
             if cursor.lastrowid is None:
@@ -348,15 +354,51 @@ class ReviewQueueRepository:
             connection.executemany(
                 """
                 INSERT INTO review_queue_item(
-                    review_queue_id, detection_id, position
-                ) VALUES (?, ?, ?)
+                    review_queue_id, detection_id, position, confirmation_key
+                ) VALUES (?, ?, ?, ?)
                 """,
                 (
-                    (queue_id, row["id"], position)
+                    (
+                        queue_id,
+                        row["id"],
+                        position,
+                        self._confirmation_key(row, confirmation_scope),
+                    )
                     for position, row in enumerate(selected)
                 ),
             )
+        self.recalculate(queue_id)
         return queue_id
+
+    @staticmethod
+    def _confirmation_scope(ordering: str) -> str:
+        if ordering in {
+            "location_max_score",
+            "location_max_count",
+            "location_max_score_sum",
+            "location_first_date",
+        }:
+            return "location"
+        if ordering in {
+            "location_date_high_score",
+            "location_date_first_detection",
+        }:
+            return "location_date"
+        return "none"
+
+    @staticmethod
+    def _confirmation_key(row, scope: str) -> Optional[str]:
+        location = row["location"]
+        if scope == "location":
+            return None if location == "Unknown location" else str(location)
+        if scope == "location_date":
+            recorded_date = row["recorded_date"]
+            if location == "Unknown location" or recorded_date == "Unknown date":
+                return None
+            return json.dumps([location, recorded_date], separators=(",", ":"))
+        if scope == "recording":
+            return str(row["recording_id"])
+        return None
 
     @classmethod
     def _location_date_first_detection_selection(
@@ -1080,14 +1122,22 @@ class ReviewQueueRepository:
                     diel_bin_count=row["diel_bin_count"],
                     max_per_diel_bin=row["max_per_diel_bin"],
                     review_order=row["review_order"],
+                    confirmation_scope=row["confirmation_scope"],
+                    confirmation_enabled=bool(row["confirmation_enabled"]),
                     detection_count=row["detection_count"],
                     reviewed_count=row["reviewed_count"],
+                    skipped_count=row["skipped_count"],
+                    pending_count=row["pending_count"],
                     created_at=row["created_at"],
                 )
                 for row in connection.execute("""
                     SELECT review_queue.*, species.common_name AS species_name,
                            count(review_queue_item.detection_id) AS detection_count,
-                           count(review.id) AS reviewed_count
+                           count(review.id) AS reviewed_count,
+                           sum(CASE WHEN review_queue_item.state = 'skipped'
+                               THEN 1 ELSE 0 END) AS skipped_count,
+                           sum(CASE WHEN review_queue_item.state = 'pending'
+                               THEN 1 ELSE 0 END) AS pending_count
                     FROM review_queue
                     JOIN species ON species.id = review_queue.species_id
                     LEFT JOIN review_queue_item
@@ -1098,6 +1148,145 @@ class ReviewQueueRepository:
                     ORDER BY review_queue.id DESC
                     """)
             ]
+        finally:
+            connection.close()
+
+    def recalculate(self, queue_id: int) -> None:
+        """Rebuild reversible reviewed, pending, and auto-skipped item state."""
+        with transaction(self.database_path) as connection:
+            queue = connection.execute(
+                """
+                SELECT confirmation_scope, confirmation_enabled
+                FROM review_queue WHERE id = ?
+                """,
+                (queue_id,),
+            ).fetchone()
+            if queue is None:
+                raise LookupError(f"Review queue {queue_id} does not exist.")
+            connection.execute(
+                """
+                UPDATE review_queue_item
+                SET state = CASE WHEN EXISTS (
+                        SELECT 1 FROM review
+                        WHERE review.detection_id =
+                              review_queue_item.detection_id
+                    ) THEN 'reviewed' ELSE 'pending' END,
+                    skipped_by_detection_id = NULL
+                WHERE review_queue_id = ?
+                """,
+                (queue_id,),
+            )
+            if (
+                queue["confirmation_scope"] == "none"
+                or not queue["confirmation_enabled"]
+            ):
+                return
+            confirmations = list(
+                connection.execute(
+                    """
+                    SELECT item.confirmation_key,
+                           min(item.position) AS confirmation_position,
+                           (
+                               SELECT candidate.detection_id
+                               FROM review_queue_item AS candidate
+                               JOIN review AS candidate_review
+                                 ON candidate_review.detection_id =
+                                    candidate.detection_id
+                               JOIN detection AS candidate_detection
+                                 ON candidate_detection.id =
+                                    candidate.detection_id
+                               JOIN detection_revision AS candidate_current
+                                 ON candidate_current.id =
+                                    candidate_detection.current_revision_id
+                               WHERE candidate.review_queue_id = item.review_queue_id
+                                 AND candidate.confirmation_key =
+                                     item.confirmation_key
+                                 AND candidate_review.verdict = 'correct'
+                                 AND candidate_current.species_id =
+                                     queue.species_id
+                               ORDER BY candidate.position
+                               LIMIT 1
+                           ) AS confirming_detection_id
+                    FROM review_queue_item AS item
+                    JOIN review ON review.detection_id = item.detection_id
+                    JOIN detection ON detection.id = item.detection_id
+                    JOIN detection_revision AS current
+                      ON current.id = detection.current_revision_id
+                    JOIN review_queue AS queue
+                      ON queue.id = item.review_queue_id
+                    WHERE item.review_queue_id = ?
+                      AND item.confirmation_key IS NOT NULL
+                      AND review.verdict = 'correct'
+                      AND current.species_id = queue.species_id
+                    GROUP BY item.confirmation_key
+                    """,
+                    (queue_id,),
+                )
+            )
+            for confirmation in confirmations:
+                connection.execute(
+                    """
+                    UPDATE review_queue_item
+                    SET state = 'skipped', skipped_by_detection_id = ?
+                    WHERE review_queue_id = ?
+                      AND confirmation_key = ?
+                      AND state = 'pending'
+                    """,
+                    (
+                        confirmation["confirming_detection_id"],
+                        queue_id,
+                        confirmation["confirmation_key"],
+                    ),
+                )
+
+    def recalculate_for_detection(self, detection_id: int) -> None:
+        connection = connect(self.database_path, readonly=True)
+        try:
+            queue_ids = [
+                row["review_queue_id"]
+                for row in connection.execute(
+                    """
+                    SELECT review_queue_id FROM review_queue_item
+                    WHERE detection_id = ?
+                    """,
+                    (detection_id,),
+                )
+            ]
+        finally:
+            connection.close()
+        for queue_id in queue_ids:
+            self.recalculate(queue_id)
+
+    def set_confirmation_enabled(self, queue_id: int, enabled: bool) -> None:
+        """Enable or disable automatic confirmation without changing membership."""
+        with transaction(self.database_path) as connection:
+            queue = connection.execute(
+                "SELECT confirmation_scope FROM review_queue WHERE id = ?",
+                (queue_id,),
+            ).fetchone()
+            if queue is None:
+                raise LookupError(f"Review queue {queue_id} does not exist.")
+            if queue["confirmation_scope"] == "none" and enabled:
+                raise ValueError("This review queue has no confirmation scope.")
+            connection.execute(
+                "UPDATE review_queue SET confirmation_enabled = ? WHERE id = ?",
+                (enabled, queue_id),
+            )
+        self.recalculate(queue_id)
+
+    def item_states(self, queue_id: int) -> dict[int, str]:
+        connection = connect(self.database_path, readonly=True)
+        try:
+            return {
+                row["detection_id"]: row["state"]
+                for row in connection.execute(
+                    """
+                    SELECT detection_id, state FROM review_queue_item
+                    WHERE review_queue_id = ?
+                    """,
+                    (queue_id,),
+                )
+            }
         finally:
             connection.close()
 

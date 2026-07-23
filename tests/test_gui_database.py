@@ -23,7 +23,7 @@ def test_create_and_open_project(tmp_path: Path):
 
     assert database.path.is_file()
     assert database.project.get().name == "Wetland Survey"
-    assert schema_version(database.path) == 18
+    assert schema_version(database.path) == 20
     assert ProjectDatabase.is_project(database.path)
 
     reopened = ProjectDatabase.open(database.path)
@@ -1386,3 +1386,135 @@ def test_location_date_first_detection_queue_uses_recording_time_and_offset(
     summary = database.review_queues.list_queues()[0]
     assert summary.ordering == "location_date_first_detection"
     assert summary.max_per_location_date == 2
+
+
+def test_confirmation_aware_queue_skips_and_restores_group_items(tmp_path: Path):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recordings = [
+        database.recordings.add(tmp_path / f"site-{index}.mp3") for index in range(2)
+    ]
+    metadata = {
+        recordings[0].id: {"location_name": "Site A"},
+        recordings[1].id: {"location_name": "Site B"},
+    }
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[species.id],
+        recording_ids=[recording.id for recording in recordings],
+        recording_metadata=metadata,
+    )
+    item_ids = database.analysis.item_ids(run_id)
+    database.detections.create_inferred_many(
+        [
+            (
+                recording.id,
+                item_ids[recording.id],
+                species.id,
+                index * 10_000,
+                index * 10_000 + 2_000,
+                0.9 - index / 10,
+            )
+            for recording in recordings
+            for index in range(3)
+        ]
+    )
+    queue_id = database.review_queues.create(
+        "Presence by location",
+        run_id,
+        species.id,
+        min_score=0.6,
+        max_per_recording=10,
+        min_spacing_ms=0,
+        ordering="location_max_score",
+    )
+    detection_ids = database.review_queues.detection_ids(queue_id)
+
+    database.detections.set_review(detection_ids[0], ReviewVerdict.CORRECT)
+    database.review_queues.recalculate_for_detection(detection_ids[0])
+
+    states = database.review_queues.item_states(queue_id)
+    assert states[detection_ids[0]] == "reviewed"
+    assert [states[item] for item in detection_ids[1:3]] == ["skipped", "skipped"]
+    assert [states[item] for item in detection_ids[3:]] == [
+        "pending",
+        "pending",
+        "pending",
+    ]
+    summary = database.review_queues.list_queues()[0]
+    assert summary.confirmation_scope == "location"
+    assert summary.reviewed_count == 1
+    assert summary.skipped_count == 2
+    assert summary.pending_count == 3
+    assert summary.confirmation_enabled
+
+    database.review_queues.set_confirmation_enabled(queue_id, False)
+    disabled = database.review_queues.item_states(queue_id)
+    assert all(disabled[item] == "pending" for item in detection_ids[1:])
+    assert not database.review_queues.list_queues()[0].confirmation_enabled
+
+    database.review_queues.set_confirmation_enabled(queue_id, True)
+    reenabled = database.review_queues.item_states(queue_id)
+    assert [reenabled[item] for item in detection_ids[1:3]] == [
+        "skipped",
+        "skipped",
+    ]
+
+    database.detections.set_review(detection_ids[0], ReviewVerdict.INCORRECT)
+    database.review_queues.recalculate_for_detection(detection_ids[0])
+
+    restored = database.review_queues.item_states(queue_id)
+    assert restored[detection_ids[0]] == "reviewed"
+    assert all(restored[item] == "pending" for item in detection_ids[1:])
+    summary = database.review_queues.list_queues()[0]
+    assert summary.skipped_count == 0
+    assert summary.pending_count == 5
+
+    other_species = database.species.add("Marsh Wren")
+    database.detections.revise(
+        detection_ids[0],
+        species_id=other_species.id,
+        notes="Corrected to another species.",
+    )
+    database.detections.set_review(detection_ids[0], ReviewVerdict.CORRECT)
+    database.review_queues.recalculate_for_detection(detection_ids[0])
+
+    corrected_states = database.review_queues.item_states(queue_id)
+    assert all(corrected_states[item] == "pending" for item in detection_ids[1:])
+
+
+def test_general_queue_does_not_auto_skip_after_correct_review(tmp_path: Path):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recording = database.recordings.add(tmp_path / "night.mp3")
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[species.id],
+        recording_ids=[recording.id],
+    )
+    item_id = database.analysis.item_ids(run_id)[recording.id]
+    database.detections.create_inferred_many(
+        [
+            (recording.id, item_id, species.id, 0, 2_000, 0.9),
+            (recording.id, item_id, species.id, 10_000, 12_000, 0.8),
+        ]
+    )
+    queue_id = database.review_queues.create(
+        "General review",
+        run_id,
+        species.id,
+        min_score=0.6,
+        max_per_recording=10,
+        min_spacing_ms=0,
+        ordering="score",
+    )
+    detection_ids = database.review_queues.detection_ids(queue_id)
+    database.detections.set_review(detection_ids[0], ReviewVerdict.CORRECT)
+    database.review_queues.recalculate_for_detection(detection_ids[0])
+
+    assert database.review_queues.item_states(queue_id) == {
+        detection_ids[0]: "reviewed",
+        detection_ids[1]: "pending",
+    }
