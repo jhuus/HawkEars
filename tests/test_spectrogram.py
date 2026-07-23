@@ -54,6 +54,7 @@ def test_review_spectrogram_uses_yaml_config_with_decibels(monkeypatch):
     class FakeAudio:
         def __init__(self, *, cfg):
             calls["configured_decibels"] = cfg.audio.decibels
+            calls["configured_min_frequency"] = cfg.audio.min_freq
 
         def load(self, path):
             calls["path"] = path
@@ -75,6 +76,7 @@ def test_review_spectrogram_uses_yaml_config_with_decibels(monkeypatch):
     result = spectrogram.generate_review_spectrogram(Path("marsh.wav"), 20.0, 23.0)
 
     assert calls["configured_decibels"] is True
+    assert calls["configured_min_frequency"] == 0
     assert calls["decibels"] is True
     assert calls["skip_cache"] is True
     assert calls["spec_duration"] == 10.0
@@ -82,5 +84,5 @@ def test_review_spectrogram_uses_yaml_config_with_decibels(monkeypatch):
     assert result.values.shape == (192, 1280)
     assert result.audio_samples.shape == (160_000, 2)
     assert result.sample_rate == 16_000
-    assert result.min_frequency == 200
+    assert result.min_frequency == 0
     assert result.max_frequency == 13_000

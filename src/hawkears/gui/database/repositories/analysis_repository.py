@@ -93,6 +93,17 @@ class AnalysisRepository:
                 (status, error_message, status, status, run_id),
             )
 
+    def link_import(self, run_id: int, import_batch_id: int) -> None:
+        """Record that an analysis run originated from external CLI output."""
+        with transaction(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO analysis_run_import(analysis_run_id, import_batch_id)
+                VALUES (?, ?)
+                """,
+                (run_id, import_batch_id),
+            )
+
     def item_ids(self, run_id: int) -> dict[int, int]:
         """Map recording IDs to analysis-item IDs for a run."""
         connection = connect(self.database_path, readonly=True)

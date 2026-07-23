@@ -76,6 +76,7 @@ from hawkears.gui.services.location_catalog import (
     LocationCatalogError,
 )
 from hawkears.gui.services.analysis_runner import AnalysisRunner
+from hawkears.gui.services.import_runner import HawkEarsImportRunner
 from hawkears.gui.services.spectrogram import (
     ReviewSpectrogram,
     colorize_spectrogram,
@@ -378,11 +379,13 @@ class AnalysisPage(QWidget):
     settings_changed = Signal(object)
     run_requested = Signal()
     cancel_requested = Signal()
+    import_requested = Signal(object)
 
     def __init__(self) -> None:
         super().__init__()
         self._location_catalog_path = Path.cwd() / "data" / "locations.db"
         self._browse_directory = Path.cwd()
+        self._recording_directory: Path | None = None
         self._location_settings: dict[str, object] = {"mode": "none"}
         page, outer = page_header(
             self.tr("Analyze"),
@@ -466,6 +469,8 @@ class AnalysisPage(QWidget):
         self.run_button = QPushButton(self.tr("Run analysis"))
         self.run_button.setProperty("primary", True)
         self.run_button.clicked.connect(self._start_run)
+        self.import_button = QPushButton(self.tr("Import analysis results…"))
+        self.import_button.clicked.connect(self._choose_import_directory)
         self.cancel_button = QPushButton(self.tr("Cancel"))
         self.cancel_button.setVisible(False)
         self.cancel_button.clicked.connect(self._request_cancel)
@@ -473,6 +478,7 @@ class AnalysisPage(QWidget):
         run.addWidget(self.progress)
         actions = QHBoxLayout()
         actions.addStretch()
+        actions.addWidget(self.import_button)
         actions.addWidget(self.cancel_button)
         actions.addWidget(self.run_button)
         run.addLayout(actions)
@@ -483,6 +489,7 @@ class AnalysisPage(QWidget):
         self._run_started_at: float | None = None
         self._loading = False
         self._scope_ready = False
+        self._import_ready = False
         self._editable = False
         self.threshold.valueChanged.connect(self._emit_settings)
         self.models.valueChanged.connect(self._emit_settings)
@@ -515,6 +522,7 @@ class AnalysisPage(QWidget):
         )
         if project_directory is not None:
             self._browse_directory = project_directory
+        self._recording_directory = recording_directory
         self._update_location_summary()
         self._loading = False
         self._editable = editable
@@ -531,6 +539,12 @@ class AnalysisPage(QWidget):
             missing.append(self.tr("at least one target species"))
         scope_complete = not missing
         self._scope_ready = scope_complete and editable
+        self._import_ready = (
+            recording_directory is not None
+            and recording_directory.is_dir()
+            and species_count > 0
+            and editable
+        )
         self.run_heading.setText(
             self.tr("Ready to analyze")
             if scope_complete
@@ -553,6 +567,7 @@ class AnalysisPage(QWidget):
             )
         if not self._running:
             self.run_button.setEnabled(self._scope_ready)
+            self.import_button.setEnabled(self._import_ready)
 
     def current_settings(self) -> dict[str, object]:
         maximum = self.max_label_length.value()
@@ -625,9 +640,29 @@ class AnalysisPage(QWidget):
         self.progress.setValue(0)
         self.status.setText(self.tr("Preparing models…"))
         self.run_button.setEnabled(False)
+        self.import_button.setEnabled(False)
         self.cancel_button.setEnabled(True)
         self.cancel_button.setVisible(True)
         self.run_requested.emit()
+
+    def _choose_import_directory(self) -> None:
+        if not self._import_ready or self._running:
+            return
+        path = QFileDialog.getExistingDirectory(
+            self,
+            self.tr("Select HawkEars CLI output"),
+            str(self._recording_directory or self._browse_directory),
+        )
+        if not path:
+            return
+        self._running = True
+        self._run_started_at = None
+        self.progress.setRange(0, 0)
+        self.status.setText(self.tr("Validating and importing analysis results…"))
+        self.run_button.setEnabled(False)
+        self.import_button.setEnabled(False)
+        self.cancel_button.setVisible(False)
+        self.import_requested.emit(Path(path))
 
     def _request_cancel(self) -> None:
         if not self._running:
@@ -679,13 +714,34 @@ class AnalysisPage(QWidget):
         self.cancel_button.setVisible(False)
         self.run_button.setText(self.tr("Run again"))
         self.run_button.setEnabled(self._scope_ready)
+        self.import_button.setEnabled(self._import_ready)
+
+    def import_completed(
+        self, detection_count: int, format_name: str, file_count: int
+    ) -> None:
+        self._running = False
+        self._run_started_at = None
+        self.progress.setRange(0, 100)
+        self.progress.setValue(100)
+        format_label = "CSV" if format_name == "csv" else self.tr("Audacity labels")
+        self.status.setText(
+            self.tr("Imported %n detections", None, detection_count)
+            + self.tr(" from %n file(s)", None, file_count)
+            + f" · {format_label}"
+        )
+        self.cancel_button.setVisible(False)
+        self.run_button.setText(self.tr("Run again"))
+        self.run_button.setEnabled(self._scope_ready)
+        self.import_button.setEnabled(self._import_ready)
 
     def analysis_failed(self) -> None:
         self._running = False
         self._run_started_at = None
+        self.progress.setRange(0, 100)
         self.status.setText(self.tr("Analysis failed"))
         self.cancel_button.setVisible(False)
         self.run_button.setEnabled(self._scope_ready)
+        self.import_button.setEnabled(self._import_ready)
 
     def analysis_cancelled(self, detection_count: int) -> None:
         self._running = False
@@ -696,16 +752,19 @@ class AnalysisPage(QWidget):
         self.cancel_button.setVisible(False)
         self.run_button.setText(self.tr("Run again"))
         self.run_button.setEnabled(self._scope_ready)
+        self.import_button.setEnabled(self._import_ready)
 
     def reset_run_status(self) -> None:
         """Reset transient analysis progress when the active project changes."""
         self._running = False
         self._run_started_at = None
+        self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.status.setText(self.tr("Not started"))
         self.cancel_button.setVisible(False)
         self.run_button.setText(self.tr("Run analysis"))
         self.run_button.setEnabled(self._scope_ready)
+        self.import_button.setEnabled(self._import_ready)
 
     @property
     def is_running(self) -> bool:
@@ -2398,9 +2457,10 @@ class MainWindow(QMainWindow):
         self.project_page.edit_species_requested.connect(self._edit_species)
         self.analysis_page.settings_changed.connect(self._save_analysis_settings)
         self.analysis_page.run_requested.connect(self._start_analysis)
+        self.analysis_page.import_requested.connect(self._start_import)
         self.analysis_page.cancel_requested.connect(self._cancel_analysis)
         self._analysis_thread: QThread | None = None
-        self._analysis_runner: AnalysisRunner | None = None
+        self._analysis_runner: AnalysisRunner | HawkEarsImportRunner | None = None
         self._build_menu()
         self._refresh_welcome_recent_projects()
 
@@ -2697,6 +2757,48 @@ class MainWindow(QMainWindow):
         self.analysis_page.analysis_completed(detection_count)
         self._update_navigation()
         self._load_results(selected_run_id=run_id)
+
+    def _start_import(self, output_directory: Path) -> None:
+        if self._database is None or self._analysis_thread is not None:
+            self.analysis_page.analysis_failed()
+            return
+        project = self._database.project.get()
+        recording_directory = project.resolved_recording_directory(self._database.path)
+        if recording_directory is None:
+            self.analysis_page.analysis_failed()
+            return
+
+        thread = QThread(self)
+        runner = HawkEarsImportRunner(
+            self._database.path,
+            recording_directory,
+            project.recurse,
+            self._class_catalog,
+            self.analysis_page.current_settings(),
+            output_directory,
+        )
+        runner.moveToThread(thread)
+        thread.started.connect(runner.run)
+        runner.completed.connect(self._import_completed)
+        runner.failed.connect(self._import_failed)
+        runner.completed.connect(thread.quit)
+        runner.failed.connect(thread.quit)
+        thread.finished.connect(runner.deleteLater)
+        thread.finished.connect(self._analysis_thread_finished)
+        self._analysis_thread = thread
+        self._analysis_runner = runner
+        thread.start()
+
+    def _import_completed(
+        self, run_id: int, detection_count: int, format_name: str, file_count: int
+    ) -> None:
+        self.analysis_page.import_completed(detection_count, format_name, file_count)
+        self._update_navigation()
+        self._load_results(selected_run_id=run_id)
+
+    def _import_failed(self, message: str) -> None:
+        self.analysis_page.analysis_failed()
+        QMessageBox.critical(self, self.tr("Import failed"), message)
 
     def _cancel_analysis(self) -> None:
         if self._analysis_runner is not None:

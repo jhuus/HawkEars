@@ -112,6 +112,7 @@ def generate_review_spectrogram(
     """Generate a decibel-scaled spectrogram centered on a detection."""
     cfg = deepcopy(get_config())
     cfg.audio.decibels = True
+    cfg.audio.min_freq = 0
     midpoint = (detection_start_seconds + detection_end_seconds) / 2
     start_seconds = max(0.0, midpoint - context_seconds / 2)
 

@@ -7,7 +7,7 @@ import sys
 from hawkears.gui.diagnostics import configure_diagnostics
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     log_path = configure_diagnostics()
     logger = logging.getLogger(__name__)
     try:
@@ -32,7 +32,7 @@ def main() -> int:
         load_class_catalog,
     )
 
-    app = QApplication(sys.argv)
+    app = QApplication(sys.argv if argv is None else argv)
     logger.info("PySide6 application created; log=%s", log_path)
     app.setApplicationName("HawkEars")
     app.setOrganizationName("HawkEars")

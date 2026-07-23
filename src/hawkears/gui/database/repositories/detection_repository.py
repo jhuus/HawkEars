@@ -137,6 +137,88 @@ class DetectionRepository:
                 )
         return len(detections)
 
+    def create_cli_imported_many(
+        self,
+        import_batch_id: int,
+        detections: list[tuple[object, ...]],
+    ) -> int:
+        """Create CLI inference detections with per-row import provenance.
+
+        Each tuple contains recording ID, analysis-item ID, species ID, start
+        and end milliseconds, score, source file, source row, and the five raw
+        recording/species/start/end/score values.
+        """
+        with transaction(self.database_path) as connection:
+            for values in detections:
+                (
+                    recording_id,
+                    analysis_item_id,
+                    species_id,
+                    start_ms,
+                    end_ms,
+                    score,
+                    source_file,
+                    source_row,
+                    raw_recording,
+                    raw_species,
+                    raw_start,
+                    raw_end,
+                    raw_score,
+                ) = values
+                self._validate_bounds(
+                    connection,
+                    int(recording_id),
+                    int(start_ms),
+                    int(end_ms),
+                    None,
+                    None,
+                )
+                cursor = connection.execute(
+                    """
+                    INSERT INTO detection(
+                        recording_id, analysis_item_id, source, score
+                    ) VALUES (?, ?, 'inference', ?)
+                    """,
+                    (recording_id, analysis_item_id, score),
+                )
+                if cursor.lastrowid is None:
+                    raise RuntimeError("SQLite did not return the new detection ID.")
+                detection_id = cursor.lastrowid
+                revision = connection.execute(
+                    """
+                    INSERT INTO detection_revision(
+                        detection_id, revision_number, species_id, start_ms, end_ms
+                    ) VALUES (?, 1, ?, ?, ?)
+                    """,
+                    (detection_id, species_id, start_ms, end_ms),
+                )
+                if revision.lastrowid is None:
+                    raise RuntimeError("SQLite did not return the new revision ID.")
+                connection.execute(
+                    "UPDATE detection SET current_revision_id = ? WHERE id = ?",
+                    (revision.lastrowid, detection_id),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO imported_analysis_detection(
+                        detection_id, import_batch_id, source_file, source_row,
+                        raw_recording, raw_species, raw_start, raw_end, raw_score
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        detection_id,
+                        import_batch_id,
+                        source_file,
+                        source_row,
+                        raw_recording,
+                        raw_species,
+                        raw_start,
+                        raw_end,
+                        raw_score,
+                    ),
+                )
+        return len(detections)
+
     def create_imported(
         self,
         recording_id: int,
