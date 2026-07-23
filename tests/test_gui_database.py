@@ -23,7 +23,7 @@ def test_create_and_open_project(tmp_path: Path):
 
     assert database.path.is_file()
     assert database.project.get().name == "Wetland Survey"
-    assert schema_version(database.path) == 8
+    assert schema_version(database.path) == 18
     assert ProjectDatabase.is_project(database.path)
 
     reopened = ProjectDatabase.open(database.path)
@@ -718,4 +718,671 @@ def test_location_date_review_queue_balances_metadata_groups(tmp_path: Path):
     }
     summary = database.review_queues.list_queues()[0]
     assert summary.ordering == "location_date"
+    assert summary.max_per_location_date == 2
+
+
+def test_random_review_queue_is_reproducible_and_respects_limits(tmp_path: Path):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recordings = [
+        database.recordings.add(tmp_path / f"night-{index}.mp3") for index in range(3)
+    ]
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[species.id],
+        recording_ids=[recording.id for recording in recordings],
+    )
+    item_ids = database.analysis.item_ids(run_id)
+    database.detections.create_inferred_many(
+        [
+            (
+                recording.id,
+                item_ids[recording.id],
+                species.id,
+                start_ms,
+                start_ms + 2_000,
+                0.7 + index / 100,
+            )
+            for recording in recordings
+            for index, start_ms in enumerate((0, 2_000, 10_000, 20_000))
+        ]
+    )
+
+    def create_random_queue(name: str, seed: int) -> int:
+        return database.review_queues.create(
+            name,
+            run_id,
+            species.id,
+            min_score=0.6,
+            max_per_recording=2,
+            min_spacing_ms=5_000,
+            ordering="random",
+            random_sample_size=5,
+            random_seed=seed,
+        )
+
+    first = database.review_queues.detection_ids(create_random_queue("Random one", 42))
+    repeated = database.review_queues.detection_ids(
+        create_random_queue("Random two", 42)
+    )
+    different = database.review_queues.detection_ids(
+        create_random_queue("Random three", 7)
+    )
+
+    assert first == repeated
+    assert first != different
+    assert len(first) == 5
+    selected = [database.detections.get(detection_id) for detection_id in first]
+    assert all(
+        sum(item.recording_id == recording.id for item in selected) <= 2
+        for recording in recordings
+    )
+    summary = database.review_queues.list_queues()[0]
+    assert summary.ordering == "random"
+    assert summary.random_sample_size == 5
+    assert summary.random_seed == 7
+
+
+def test_duration_ranked_queue_uses_unioned_time_and_chronological_order(
+    tmp_path: Path,
+):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recordings = [
+        database.recordings.add(tmp_path / name)
+        for name in ("short.mp3", "long.mp3", "overlap.mp3")
+    ]
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[species.id],
+        recording_ids=[recording.id for recording in recordings],
+    )
+    item_ids = database.analysis.item_ids(run_id)
+    intervals = {
+        recordings[0].id: ((1_000, 5_000),),
+        recordings[1].id: ((20_000, 26_000), (2_000, 7_000)),
+        recordings[2].id: ((0, 8_000), (2_000, 9_000)),
+    }
+    database.detections.create_inferred_many(
+        [
+            (
+                recording.id,
+                item_ids[recording.id],
+                species.id,
+                start_ms,
+                end_ms,
+                0.8,
+            )
+            for recording in recordings
+            for start_ms, end_ms in intervals[recording.id]
+        ]
+    )
+
+    queue_id = database.review_queues.create(
+        "Most detected time",
+        run_id,
+        species.id,
+        min_score=0.6,
+        max_per_recording=10,
+        min_spacing_ms=0,
+        ordering="duration_ranked",
+    )
+
+    selected = [
+        database.detections.get(detection_id)
+        for detection_id in database.review_queues.detection_ids(queue_id)
+    ]
+    assert [item.recording_id for item in selected] == [
+        recordings[1].id,
+        recordings[1].id,
+        recordings[2].id,
+        recordings[2].id,
+        recordings[0].id,
+    ]
+    assert [item.current.start_ms for item in selected[:2]] == [2_000, 20_000]
+    summary = database.review_queues.list_queues()[0]
+    assert summary.ordering == "duration_ranked"
+
+
+def test_recording_percentile_queue_samples_score_range_per_recording(
+    tmp_path: Path,
+):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recordings = [
+        database.recordings.add(tmp_path / f"night-{index}.mp3") for index in range(2)
+    ]
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[species.id],
+        recording_ids=[recording.id for recording in recordings],
+    )
+    item_ids = database.analysis.item_ids(run_id)
+    scores = tuple(0.6 + index * 0.05 for index in range(9))
+    database.detections.create_inferred_many(
+        [
+            (
+                recording.id,
+                item_ids[recording.id],
+                species.id,
+                index * 10_000,
+                index * 10_000 + 2_000,
+                score,
+            )
+            for recording in recordings
+            for index, score in enumerate(scores)
+        ]
+    )
+
+    queue_id = database.review_queues.create(
+        "Within-recording calibration",
+        run_id,
+        species.id,
+        min_score=0.6,
+        max_per_recording=10,
+        min_spacing_ms=0,
+        ordering="recording_percentiles",
+        percentile_points=5,
+    )
+
+    selected = [
+        database.detections.get(detection_id)
+        for detection_id in database.review_queues.detection_ids(queue_id)
+    ]
+    assert len(selected) == 10
+    for recording in recordings:
+        recording_scores = [
+            round(float(item.score), 2)
+            for item in selected
+            if item.recording_id == recording.id
+        ]
+        assert recording_scores == [0.6, 0.7, 0.8, 0.9, 1.0]
+    summary = database.review_queues.list_queues()[0]
+    assert summary.ordering == "recording_percentiles"
+    assert summary.percentile_points == 5
+
+
+def test_diel_queue_samples_time_bins_and_uses_detection_offset(tmp_path: Path):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recordings = [
+        database.recordings.add(tmp_path / name)
+        for name in (
+            "night.mp3",
+            "dawn.mp3",
+            "day.mp3",
+            "site_20250601_190000.mp3",
+            "unknown.mp3",
+        )
+    ]
+    metadata = {
+        recordings[0].id: {"recorded_at": "2025-06-01T01:00:00"},
+        recordings[1].id: {"recorded_at": "2025-06-01T05:59:00"},
+        recordings[2].id: {"recorded_at": "2025-06-01T13:00:00"},
+    }
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[species.id],
+        recording_ids=[recording.id for recording in recordings],
+        recording_metadata=metadata,
+    )
+    item_ids = database.analysis.item_ids(run_id)
+    database.detections.create_inferred_many(
+        [
+            (
+                recording.id,
+                item_ids[recording.id],
+                species.id,
+                120_000 if recording is recordings[1] else 0,
+                123_000 if recording is recordings[1] else 3_000,
+                0.8,
+            )
+            for recording in recordings
+        ]
+    )
+
+    queue_id = database.review_queues.create(
+        "Time-of-day coverage",
+        run_id,
+        species.id,
+        min_score=0.6,
+        max_per_recording=10,
+        min_spacing_ms=0,
+        ordering="diel_bins",
+        diel_bin_count=4,
+        max_per_diel_bin=1,
+    )
+
+    selected = [
+        database.detections.get(detection_id)
+        for detection_id in database.review_queues.detection_ids(queue_id)
+    ]
+    assert [item.recording_id for item in selected] == [
+        recordings[0].id,
+        recordings[1].id,
+        recordings[2].id,
+        recordings[3].id,
+    ]
+    summary = database.review_queues.list_queues()[0]
+    assert summary.ordering == "diel_bins"
+    assert summary.diel_bin_count == 4
+    assert summary.max_per_diel_bin == 1
+
+
+def test_location_max_count_queue_chooses_one_recording_per_location(
+    tmp_path: Path,
+):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recordings = [
+        database.recordings.add(tmp_path / f"site-{index}.mp3") for index in range(4)
+    ]
+    metadata = {
+        recordings[0].id: {"location_name": "Site A"},
+        recordings[1].id: {"location_name": "Site A"},
+        recordings[2].id: {"location_name": "Site B"},
+        recordings[3].id: {"location_name": "Site B"},
+    }
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[species.id],
+        recording_ids=[recording.id for recording in recordings],
+        recording_metadata=metadata,
+    )
+    item_ids = database.analysis.item_ids(run_id)
+    counts = (2, 4, 3, 1)
+    database.detections.create_inferred_many(
+        [
+            (
+                recording.id,
+                item_ids[recording.id],
+                species.id,
+                index * 10_000,
+                index * 10_000 + 2_000,
+                0.7 + index / 100,
+            )
+            for recording, count in zip(recordings, counts)
+            for index in range(count)
+        ]
+    )
+
+    queue_id = database.review_queues.create(
+        "Most detections by location",
+        run_id,
+        species.id,
+        min_score=0.6,
+        max_per_recording=3,
+        min_spacing_ms=0,
+        ordering="location_max_count",
+    )
+
+    selected = [
+        database.detections.get(detection_id)
+        for detection_id in database.review_queues.detection_ids(queue_id)
+    ]
+    assert [item.recording_id for item in selected] == [
+        recordings[1].id,
+        recordings[1].id,
+        recordings[1].id,
+        recordings[2].id,
+        recordings[2].id,
+        recordings[2].id,
+    ]
+    assert [item.score for item in selected[:3]] == [0.73, 0.72, 0.71]
+    assert database.review_queues.list_queues()[0].ordering == "location_max_count"
+
+
+def test_location_max_score_sum_queue_uses_aggregate_confidence(tmp_path: Path):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recordings = [
+        database.recordings.add(tmp_path / f"site-{index}.mp3") for index in range(4)
+    ]
+    metadata = {
+        recordings[0].id: {"location_name": "Site A"},
+        recordings[1].id: {"location_name": "Site A"},
+        recordings[2].id: {"location_name": "Site B"},
+        recordings[3].id: {"location_name": "Site B"},
+    }
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[species.id],
+        recording_ids=[recording.id for recording in recordings],
+        recording_metadata=metadata,
+    )
+    item_ids = database.analysis.item_ids(run_id)
+    recording_scores = (
+        (0.61, 0.61, 0.61, 0.61),
+        (0.90, 0.90, 0.90),
+        (0.70, 0.70),
+        (0.95, 0.80),
+    )
+    database.detections.create_inferred_many(
+        [
+            (
+                recording.id,
+                item_ids[recording.id],
+                species.id,
+                index * 10_000,
+                index * 10_000 + 2_000,
+                score,
+            )
+            for recording, scores in zip(recordings, recording_scores)
+            for index, score in enumerate(scores)
+        ]
+    )
+
+    queue_id = database.review_queues.create(
+        "Strongest aggregate confidence",
+        run_id,
+        species.id,
+        min_score=0.6,
+        max_per_recording=10,
+        min_spacing_ms=0,
+        ordering="location_max_score_sum",
+    )
+
+    selected = [
+        database.detections.get(detection_id)
+        for detection_id in database.review_queues.detection_ids(queue_id)
+    ]
+    assert [item.recording_id for item in selected] == [
+        recordings[1].id,
+        recordings[1].id,
+        recordings[1].id,
+        recordings[3].id,
+        recordings[3].id,
+    ]
+    assert database.review_queues.list_queues()[0].ordering == "location_max_score_sum"
+
+
+def test_location_max_score_queue_uses_strongest_single_detection(tmp_path: Path):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recordings = [
+        database.recordings.add(tmp_path / f"site-{index}.mp3") for index in range(4)
+    ]
+    metadata = {
+        recordings[0].id: {"location_name": "Site A"},
+        recordings[1].id: {"location_name": "Site A"},
+        recordings[2].id: {"location_name": "Site B"},
+        recordings[3].id: {"location_name": "Site B"},
+    }
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[species.id],
+        recording_ids=[recording.id for recording in recordings],
+        recording_metadata=metadata,
+    )
+    item_ids = database.analysis.item_ids(run_id)
+    recording_scores = (
+        (0.80, 0.80, 0.80),
+        (0.95, 0.60),
+        (0.70, 0.70, 0.70),
+        (0.90,),
+    )
+    database.detections.create_inferred_many(
+        [
+            (
+                recording.id,
+                item_ids[recording.id],
+                species.id,
+                index * 10_000,
+                index * 10_000 + 2_000,
+                score,
+            )
+            for recording, scores in zip(recordings, recording_scores)
+            for index, score in enumerate(scores)
+        ]
+    )
+
+    queue_id = database.review_queues.create(
+        "Strongest detection by location",
+        run_id,
+        species.id,
+        min_score=0.6,
+        max_per_recording=10,
+        min_spacing_ms=0,
+        ordering="location_max_score",
+    )
+
+    selected = [
+        database.detections.get(detection_id)
+        for detection_id in database.review_queues.detection_ids(queue_id)
+    ]
+    assert [item.recording_id for item in selected] == [
+        recordings[1].id,
+        recordings[1].id,
+        recordings[3].id,
+    ]
+    assert database.review_queues.list_queues()[0].ordering == "location_max_score"
+
+
+def test_location_first_date_queue_orders_dates_within_location(tmp_path: Path):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recordings = [
+        database.recordings.add(tmp_path / f"site-{index}.mp3") for index in range(5)
+    ]
+    metadata = {
+        recordings[0].id: {
+            "location_name": "Site A",
+            "recorded_at": "2025-06-03T04:00:00",
+        },
+        recordings[1].id: {
+            "location_name": "Site A",
+            "recorded_at": "2025-06-01T04:00:00",
+        },
+        recordings[2].id: {
+            "location_name": "Site B",
+            "recorded_at": "2025-05-30T04:00:00",
+        },
+        recordings[3].id: {
+            "location_name": "Site B",
+            "recorded_at": "2025-06-02T04:00:00",
+        },
+        recordings[4].id: {"location_name": "Site A"},
+    }
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[species.id],
+        recording_ids=[recording.id for recording in recordings],
+        recording_metadata=metadata,
+    )
+    item_ids = database.analysis.item_ids(run_id)
+    database.detections.create_inferred_many(
+        [
+            (
+                recording.id,
+                item_ids[recording.id],
+                species.id,
+                0,
+                2_000,
+                0.8,
+            )
+            for recording in recordings
+        ]
+    )
+
+    queue_id = database.review_queues.create(
+        "First arrival",
+        run_id,
+        species.id,
+        min_score=0.6,
+        max_per_recording=10,
+        min_spacing_ms=0,
+        ordering="location_first_date",
+    )
+
+    selected = [
+        database.detections.get(detection_id)
+        for detection_id in database.review_queues.detection_ids(queue_id)
+    ]
+    assert [item.recording_id for item in selected] == [
+        recordings[1].id,
+        recordings[0].id,
+        recordings[2].id,
+        recordings[3].id,
+    ]
+    assert database.review_queues.list_queues()[0].ordering == "location_first_date"
+
+
+def test_location_date_high_score_queue_selects_strongest_per_group(
+    tmp_path: Path,
+):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recordings = [
+        database.recordings.add(tmp_path / f"site-{index}.mp3") for index in range(4)
+    ]
+    metadata = {
+        recordings[0].id: {
+            "location_name": "Site A",
+            "recorded_at": "2025-06-01T04:00:00",
+        },
+        recordings[1].id: {
+            "location_name": "Site A",
+            "recorded_at": "2025-06-02T04:00:00",
+        },
+        recordings[2].id: {
+            "location_name": "Site B",
+            "recorded_at": "2025-06-01T04:00:00",
+        },
+        recordings[3].id: {"location_name": "Site B"},
+    }
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[species.id],
+        recording_ids=[recording.id for recording in recordings],
+        recording_metadata=metadata,
+    )
+    item_ids = database.analysis.item_ids(run_id)
+    recording_scores = (
+        (0.70, 0.90, 0.80),
+        (0.95,),
+        (0.65, 0.85, 0.75),
+        (0.99,),
+    )
+    database.detections.create_inferred_many(
+        [
+            (
+                recording.id,
+                item_ids[recording.id],
+                species.id,
+                index * 10_000,
+                index * 10_000 + 2_000,
+                score,
+            )
+            for recording, scores in zip(recordings, recording_scores)
+            for index, score in enumerate(scores)
+        ]
+    )
+
+    queue_id = database.review_queues.create(
+        "Daily presence",
+        run_id,
+        species.id,
+        min_score=0.6,
+        max_per_recording=10,
+        min_spacing_ms=0,
+        ordering="location_date_high_score",
+        max_per_location_date=2,
+    )
+
+    selected = [
+        database.detections.get(detection_id)
+        for detection_id in database.review_queues.detection_ids(queue_id)
+    ]
+    assert [item.score for item in selected] == [0.90, 0.80, 0.95, 0.85, 0.75]
+    summary = database.review_queues.list_queues()[0]
+    assert summary.ordering == "location_date_high_score"
+    assert summary.max_per_location_date == 2
+
+
+def test_location_date_first_detection_queue_uses_recording_time_and_offset(
+    tmp_path: Path,
+):
+    database = create_project(tmp_path)
+    species = database.species.add("Common Nighthawk")
+    recordings = [
+        database.recordings.add(tmp_path / name)
+        for name in (
+            "site-a-late.mp3",
+            "site-a-early.mp3",
+            "site_20250601_030000.mp3",
+            "unknown.mp3",
+        )
+    ]
+    metadata = {
+        recordings[0].id: {
+            "location_name": "Site A",
+            "recorded_at": "2025-06-01T05:00:00",
+        },
+        recordings[1].id: {
+            "location_name": "Site A",
+            "recorded_at": "2025-06-01T04:00:00",
+        },
+        recordings[2].id: {"location_name": "Site B"},
+        recordings[3].id: {"location_name": "Site B"},
+    }
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[species.id],
+        recording_ids=[recording.id for recording in recordings],
+        recording_metadata=metadata,
+    )
+    item_ids = database.analysis.item_ids(run_id)
+    rows = (
+        (recordings[0], 0, 0.99),
+        (recordings[1], 600_000, 0.70),
+        (recordings[1], 1_200_000, 0.60),
+        (recordings[2], 300_000, 0.80),
+        (recordings[3], 0, 0.95),
+    )
+    database.detections.create_inferred_many(
+        [
+            (
+                recording.id,
+                item_ids[recording.id],
+                species.id,
+                start_ms,
+                start_ms + 2_000,
+                score,
+            )
+            for recording, start_ms, score in rows
+        ]
+    )
+
+    queue_id = database.review_queues.create(
+        "First detection each day",
+        run_id,
+        species.id,
+        min_score=0.6,
+        max_per_recording=10,
+        min_spacing_ms=0,
+        ordering="location_date_first_detection",
+        max_per_location_date=2,
+    )
+
+    selected = [
+        database.detections.get(detection_id)
+        for detection_id in database.review_queues.detection_ids(queue_id)
+    ]
+    assert [(item.recording_id, item.current.start_ms) for item in selected] == [
+        (recordings[1].id, 600_000),
+        (recordings[1].id, 1_200_000),
+        (recordings[2].id, 300_000),
+    ]
+    summary = database.review_queues.list_queues()[0]
+    assert summary.ordering == "location_date_first_detection"
     assert summary.max_per_location_date == 2

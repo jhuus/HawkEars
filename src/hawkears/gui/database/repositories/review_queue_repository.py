@@ -1,8 +1,11 @@
 """Persisted, reproducible detection queues for review."""
 
 from collections import defaultdict
+from datetime import date, timedelta
 from math import ceil
 from pathlib import Path
+import random
+import re
 from typing import Literal, Optional
 
 from hawkears.gui.database.connection import connect, transaction
@@ -23,11 +26,29 @@ class ReviewQueueRepository:
         max_per_recording: int,
         min_spacing_ms: int,
         ordering: Literal[
-            "score", "chronological", "score_stratified", "location_date"
+            "score",
+            "chronological",
+            "score_stratified",
+            "location_date",
+            "random",
+            "duration_ranked",
+            "recording_percentiles",
+            "diel_bins",
+            "location_max_count",
+            "location_max_score_sum",
+            "location_max_score",
+            "location_first_date",
+            "location_date_high_score",
+            "location_date_first_detection",
         ],
         score_band_width: Optional[float] = None,
         max_per_score_band: Optional[int] = None,
         max_per_location_date: Optional[int] = None,
+        random_sample_size: Optional[int] = None,
+        random_seed: Optional[int] = None,
+        percentile_points: Optional[int] = None,
+        diel_bin_count: Optional[int] = None,
+        max_per_diel_bin: Optional[int] = None,
     ) -> int:
         """Select detections according to a reproducible review strategy."""
         if not name.strip():
@@ -41,6 +62,16 @@ class ReviewQueueRepository:
             "chronological",
             "score_stratified",
             "location_date",
+            "random",
+            "duration_ranked",
+            "recording_percentiles",
+            "diel_bins",
+            "location_max_count",
+            "location_max_score_sum",
+            "location_max_score",
+            "location_first_date",
+            "location_date_high_score",
+            "location_date_first_detection",
         }:
             raise ValueError(f"Unsupported review queue ordering: {ordering}")
         if ordering == "score_stratified":
@@ -51,13 +82,38 @@ class ReviewQueueRepository:
         else:
             score_band_width = None
             max_per_score_band = None
-        if ordering == "location_date":
+        if ordering in {
+            "location_date",
+            "location_date_high_score",
+            "location_date_first_detection",
+        }:
             if max_per_location_date is None or max_per_location_date <= 0:
                 raise ValueError(
                     "Maximum detections per location and date must be positive."
                 )
         else:
             max_per_location_date = None
+        if ordering == "random":
+            if random_sample_size is None or random_sample_size <= 0:
+                raise ValueError("Random sample size must be positive.")
+            if random_seed is None or random_seed < 0:
+                raise ValueError("Random seed cannot be negative.")
+        else:
+            random_sample_size = None
+            random_seed = None
+        if ordering == "recording_percentiles":
+            if percentile_points is None or not 2 <= percentile_points <= 10:
+                raise ValueError("Percentile points must be between 2 and 10.")
+        else:
+            percentile_points = None
+        if ordering == "diel_bins":
+            if diel_bin_count is None or not 2 <= diel_bin_count <= 24:
+                raise ValueError("Time-of-day bin count must be between 2 and 24.")
+            if max_per_diel_bin is None or max_per_diel_bin <= 0:
+                raise ValueError("Maximum detections per time bin must be positive.")
+        else:
+            diel_bin_count = None
+            max_per_diel_bin = None
 
         connection = connect(self.database_path, readonly=True)
         try:
@@ -65,7 +121,11 @@ class ReviewQueueRepository:
                 connection.execute(
                     """
                     SELECT detection.id, detection.recording_id, detection.score,
-                           current.start_ms, recording.display_name,
+                           current.start_ms, current.end_ms,
+                           recording.display_name,
+                           coalesce(
+                               analysis_item.recorded_at, recording.recorded_at
+                           ) AS recorded_at,
                            coalesce(substr(coalesce(
                                analysis_item.recorded_at, recording.recorded_at,
                                CASE WHEN json_extract(analysis_run.settings_json,
@@ -134,6 +194,80 @@ class ReviewQueueRepository:
                 max_per_recording=max_per_recording,
                 min_spacing_ms=min_spacing_ms,
             )
+        elif ordering == "random":
+            assert random_sample_size is not None
+            assert random_seed is not None
+            selected = self._random_selection(
+                candidates,
+                sample_size=random_sample_size,
+                seed=random_seed,
+                max_per_recording=max_per_recording,
+                min_spacing_ms=min_spacing_ms,
+            )
+        elif ordering == "duration_ranked":
+            selected = self._duration_ranked_selection(
+                candidates,
+                max_per_recording=max_per_recording,
+                min_spacing_ms=min_spacing_ms,
+            )
+        elif ordering == "recording_percentiles":
+            assert percentile_points is not None
+            selected = self._recording_percentile_selection(
+                candidates,
+                percentile_points=percentile_points,
+                max_per_recording=max_per_recording,
+                min_spacing_ms=min_spacing_ms,
+            )
+        elif ordering == "diel_bins":
+            assert diel_bin_count is not None
+            assert max_per_diel_bin is not None
+            selected = self._diel_bin_selection(
+                candidates,
+                bin_count=diel_bin_count,
+                max_per_bin=max_per_diel_bin,
+                max_per_recording=max_per_recording,
+                min_spacing_ms=min_spacing_ms,
+            )
+        elif ordering == "location_max_count":
+            selected = self._location_max_count_selection(
+                candidates,
+                max_per_recording=max_per_recording,
+                min_spacing_ms=min_spacing_ms,
+            )
+        elif ordering == "location_max_score_sum":
+            selected = self._location_max_score_sum_selection(
+                candidates,
+                max_per_recording=max_per_recording,
+                min_spacing_ms=min_spacing_ms,
+            )
+        elif ordering == "location_max_score":
+            selected = self._location_max_score_selection(
+                candidates,
+                max_per_recording=max_per_recording,
+                min_spacing_ms=min_spacing_ms,
+            )
+        elif ordering == "location_first_date":
+            selected = self._location_first_date_selection(
+                candidates,
+                max_per_recording=max_per_recording,
+                min_spacing_ms=min_spacing_ms,
+            )
+        elif ordering == "location_date_high_score":
+            assert max_per_location_date is not None
+            selected = self._location_date_high_score_selection(
+                candidates,
+                max_per_group=max_per_location_date,
+                max_per_recording=max_per_recording,
+                min_spacing_ms=min_spacing_ms,
+            )
+        elif ordering == "location_date_first_detection":
+            assert max_per_location_date is not None
+            selected = self._location_date_first_detection_selection(
+                candidates,
+                max_per_group=max_per_location_date,
+                max_per_recording=max_per_recording,
+                min_spacing_ms=min_spacing_ms,
+            )
         else:
             selected = self._per_recording_selection(
                 candidates,
@@ -150,7 +284,23 @@ class ReviewQueueRepository:
             selected.sort(key=lambda row: (row["display_name"], row["start_ms"]))
 
         stored_ordering = (
-            "score" if ordering in {"score_stratified", "location_date"} else ordering
+            "score"
+            if ordering
+            in {
+                "score_stratified",
+                "location_date",
+                "random",
+                "duration_ranked",
+                "recording_percentiles",
+                "diel_bins",
+                "location_max_count",
+                "location_max_score_sum",
+                "location_max_score",
+                "location_first_date",
+                "location_date_high_score",
+                "location_date_first_detection",
+            }
+            else ordering
         )
         with transaction(self.database_path) as connection:
             cursor = connection.execute(
@@ -159,8 +309,13 @@ class ReviewQueueRepository:
                     name, analysis_run_id, species_id, min_score,
                     max_per_recording, min_spacing_ms, ordering,
                     score_band_width, max_per_score_band,
-                    max_per_location_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    max_per_location_date, random_sample_size, random_seed,
+                    duration_ranked, percentile_points, diel_bin_count,
+                    max_per_diel_bin, location_max_count,
+                    location_max_score_sum, location_max_score,
+                    location_first_date, location_date_high_score,
+                    location_date_first_detection
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     name.strip(),
@@ -173,6 +328,18 @@ class ReviewQueueRepository:
                     score_band_width,
                     max_per_score_band,
                     max_per_location_date,
+                    random_sample_size,
+                    random_seed,
+                    ordering == "duration_ranked",
+                    percentile_points,
+                    diel_bin_count,
+                    max_per_diel_bin,
+                    ordering == "location_max_count",
+                    ordering == "location_max_score_sum",
+                    ordering == "location_max_score",
+                    ordering == "location_first_date",
+                    ordering == "location_date_high_score",
+                    ordering == "location_date_first_detection",
                 ),
             )
             if cursor.lastrowid is None:
@@ -190,6 +357,490 @@ class ReviewQueueRepository:
                 ),
             )
         return queue_id
+
+    @classmethod
+    def _location_date_first_detection_selection(
+        cls,
+        candidates: list,
+        *,
+        max_per_group: int,
+        max_per_recording: int,
+        min_spacing_ms: int,
+    ) -> list:
+        """Select the earliest detections within each location and date."""
+        groups: dict[tuple[str, str], list[tuple[int, object]]] = defaultdict(list)
+        for row in candidates:
+            recording_start = cls._recording_start_seconds(row)
+            recorded_date = row["recorded_date"]
+            if recorded_date == "Unknown date":
+                match = re.search(
+                    r"(?<!\d)((?:19|20)\d{6})[_-]\d{6}(?!\d)",
+                    row["display_name"],
+                )
+                if match is not None:
+                    value = match.group(1)
+                    recorded_date = f"{value[:4]}-{value[4:6]}-{value[6:8]}"
+            if recording_start is None or recorded_date == "Unknown date":
+                continue
+            total_seconds = recording_start + row["start_ms"] // 1000
+            day_offset, detection_seconds = divmod(total_seconds, 86_400)
+            try:
+                detection_date = (
+                    date.fromisoformat(recorded_date) + timedelta(days=day_offset)
+                ).isoformat()
+            except ValueError:
+                continue
+            groups[(row["location"], detection_date)].append((detection_seconds, row))
+        for rows in groups.values():
+            rows.sort(
+                key=lambda item: (
+                    item[0],
+                    -item[1]["score"],
+                    item[1]["display_name"].casefold(),
+                    item[1]["start_ms"],
+                    item[1]["id"],
+                )
+            )
+
+        selected = []
+        selected_by_recording: dict[int, list] = defaultdict(list)
+        for group in sorted(groups, key=lambda value: (value[0].casefold(), value[1])):
+            selected_in_group = 0
+            for _, row in groups[group]:
+                recording_selected = selected_by_recording[row["recording_id"]]
+                if len(recording_selected) >= max_per_recording:
+                    continue
+                if any(
+                    abs(row["start_ms"] - existing["start_ms"]) < min_spacing_ms
+                    for existing in recording_selected
+                ):
+                    continue
+                selected.append(row)
+                recording_selected.append(row)
+                selected_in_group += 1
+                if selected_in_group >= max_per_group:
+                    break
+        return selected
+
+    @staticmethod
+    def _location_date_high_score_selection(
+        candidates: list,
+        *,
+        max_per_group: int,
+        max_per_recording: int,
+        min_spacing_ms: int,
+    ) -> list:
+        """Select the strongest detections within each location and date."""
+        groups: dict[tuple[str, str], list] = defaultdict(list)
+        for row in candidates:
+            if row["recorded_date"] != "Unknown date":
+                groups[(row["location"], row["recorded_date"])].append(row)
+        for rows in groups.values():
+            rows.sort(
+                key=lambda row: (
+                    -row["score"],
+                    row["display_name"].casefold(),
+                    row["start_ms"],
+                    row["id"],
+                )
+            )
+
+        selected = []
+        selected_by_recording: dict[int, list] = defaultdict(list)
+        for group in sorted(groups, key=lambda value: (value[0].casefold(), value[1])):
+            selected_in_group = 0
+            for row in groups[group]:
+                recording_selected = selected_by_recording[row["recording_id"]]
+                if len(recording_selected) >= max_per_recording:
+                    continue
+                if any(
+                    abs(row["start_ms"] - existing["start_ms"]) < min_spacing_ms
+                    for existing in recording_selected
+                ):
+                    continue
+                selected.append(row)
+                recording_selected.append(row)
+                selected_in_group += 1
+                if selected_in_group >= max_per_group:
+                    break
+        return selected
+
+    @staticmethod
+    def _location_first_date_selection(
+        candidates: list,
+        *,
+        max_per_recording: int,
+        min_spacing_ms: int,
+    ) -> list:
+        """Order each location from its earliest recording dates onward."""
+        by_recording: dict[int, list] = defaultdict(list)
+        for row in candidates:
+            if row["recorded_date"] != "Unknown date":
+                by_recording[row["recording_id"]].append(row)
+
+        selected = []
+        for rows in by_recording.values():
+            rows.sort(key=lambda row: (-row["score"], row["start_ms"], row["id"]))
+            recording_selected = []
+            for row in rows:
+                if all(
+                    abs(row["start_ms"] - existing["start_ms"]) >= min_spacing_ms
+                    for existing in recording_selected
+                ):
+                    recording_selected.append(row)
+                    if len(recording_selected) >= max_per_recording:
+                        break
+            selected.extend(recording_selected)
+        selected.sort(
+            key=lambda row: (
+                row["location"].casefold(),
+                row["recorded_date"],
+                -row["score"],
+                row["display_name"].casefold(),
+                row["start_ms"],
+                row["id"],
+            )
+        )
+        return selected
+
+    @staticmethod
+    def _location_max_score_selection(
+        candidates: list,
+        *,
+        max_per_recording: int,
+        min_spacing_ms: int,
+    ) -> list:
+        """Choose the recording containing the strongest score per location."""
+        by_location: dict[str, dict[int, list]] = defaultdict(lambda: defaultdict(list))
+        for row in candidates:
+            by_location[row["location"]][row["recording_id"]].append(row)
+
+        selected = []
+        for location in sorted(by_location, key=str.casefold):
+            recordings = by_location[location]
+            recording_id = min(
+                recordings,
+                key=lambda key: (
+                    -max(row["score"] for row in recordings[key]),
+                    -sum(row["score"] for row in recordings[key]),
+                    -len(recordings[key]),
+                    recordings[key][0]["display_name"].casefold(),
+                    key,
+                ),
+            )
+            rows = sorted(
+                recordings[recording_id],
+                key=lambda row: (-row["score"], row["start_ms"], row["id"]),
+            )
+            recording_selected = []
+            for row in rows:
+                if all(
+                    abs(row["start_ms"] - existing["start_ms"]) >= min_spacing_ms
+                    for existing in recording_selected
+                ):
+                    recording_selected.append(row)
+                    if len(recording_selected) >= max_per_recording:
+                        break
+            selected.extend(recording_selected)
+        return selected
+
+    @staticmethod
+    def _location_max_score_sum_selection(
+        candidates: list,
+        *,
+        max_per_recording: int,
+        min_spacing_ms: int,
+    ) -> list:
+        """Choose the recording with the highest summed score per location."""
+        by_location: dict[str, dict[int, list]] = defaultdict(lambda: defaultdict(list))
+        for row in candidates:
+            by_location[row["location"]][row["recording_id"]].append(row)
+
+        selected = []
+        for location in sorted(by_location, key=str.casefold):
+            recordings = by_location[location]
+            recording_id = min(
+                recordings,
+                key=lambda key: (
+                    -sum(row["score"] for row in recordings[key]),
+                    -len(recordings[key]),
+                    recordings[key][0]["display_name"].casefold(),
+                    key,
+                ),
+            )
+            rows = sorted(
+                recordings[recording_id],
+                key=lambda row: (-row["score"], row["start_ms"], row["id"]),
+            )
+            recording_selected = []
+            for row in rows:
+                if all(
+                    abs(row["start_ms"] - existing["start_ms"]) >= min_spacing_ms
+                    for existing in recording_selected
+                ):
+                    recording_selected.append(row)
+                    if len(recording_selected) >= max_per_recording:
+                        break
+            selected.extend(recording_selected)
+        return selected
+
+    @staticmethod
+    def _location_max_count_selection(
+        candidates: list,
+        *,
+        max_per_recording: int,
+        min_spacing_ms: int,
+    ) -> list:
+        """Choose the recording with the most detections at each location."""
+        by_location: dict[str, dict[int, list]] = defaultdict(lambda: defaultdict(list))
+        for row in candidates:
+            by_location[row["location"]][row["recording_id"]].append(row)
+
+        selected = []
+        for location in sorted(by_location, key=str.casefold):
+            recordings = by_location[location]
+            recording_id = min(
+                recordings,
+                key=lambda key: (
+                    -len(recordings[key]),
+                    -sum(row["score"] for row in recordings[key]),
+                    recordings[key][0]["display_name"].casefold(),
+                    key,
+                ),
+            )
+            rows = sorted(
+                recordings[recording_id],
+                key=lambda row: (-row["score"], row["start_ms"], row["id"]),
+            )
+            recording_selected = []
+            for row in rows:
+                if all(
+                    abs(row["start_ms"] - existing["start_ms"]) >= min_spacing_ms
+                    for existing in recording_selected
+                ):
+                    recording_selected.append(row)
+                    if len(recording_selected) >= max_per_recording:
+                        break
+            selected.extend(recording_selected)
+        return selected
+
+    @staticmethod
+    def _recording_start_seconds(row) -> Optional[int]:
+        recorded_at = str(row["recorded_at"] or "")
+        match = re.search(r"(?:T|\s)(\d{2}):?(\d{2})(?::?(\d{2}))?", recorded_at)
+        if match is None:
+            match = re.search(
+                r"(?<!\d)(?:19|20)\d{6}[_-](\d{2})(\d{2})(\d{2})(?!\d)",
+                row["display_name"],
+            )
+        if match is None:
+            return None
+        hour, minute, second = (int(value or 0) for value in match.groups())
+        if hour > 23 or minute > 59 or second > 59:
+            return None
+        return hour * 3600 + minute * 60 + second
+
+    @classmethod
+    def _diel_bin_selection(
+        cls,
+        candidates: list,
+        *,
+        bin_count: int,
+        max_per_bin: int,
+        max_per_recording: int,
+        min_spacing_ms: int,
+    ) -> list:
+        """Sample across equal time-of-day bins, preferring different files."""
+        bins: dict[int, list] = defaultdict(list)
+        seconds_per_bin = 86_400 / bin_count
+        for row in candidates:
+            recording_start = cls._recording_start_seconds(row)
+            if recording_start is None:
+                continue
+            detection_time = (recording_start + row["start_ms"] / 1000) % 86_400
+            bin_index = min(int(detection_time / seconds_per_bin), bin_count - 1)
+            bins[bin_index].append(row)
+        for rows in bins.values():
+            rows.sort(
+                key=lambda row: (
+                    -row["score"],
+                    row["display_name"].casefold(),
+                    row["start_ms"],
+                    row["id"],
+                )
+            )
+
+        selected = []
+        selected_by_recording: dict[int, list] = defaultdict(list)
+        for bin_index in range(bin_count):
+            rows = bins.get(bin_index, [])
+            selected_in_bin = 0
+            while rows and selected_in_bin < max_per_bin:
+                candidate_index = min(
+                    range(len(rows)),
+                    key=lambda index: (
+                        len(selected_by_recording[rows[index]["recording_id"]]),
+                        index,
+                    ),
+                )
+                candidate = rows.pop(candidate_index)
+                recording_selected = selected_by_recording[candidate["recording_id"]]
+                if len(recording_selected) >= max_per_recording:
+                    continue
+                if any(
+                    abs(candidate["start_ms"] - existing["start_ms"]) < min_spacing_ms
+                    for existing in recording_selected
+                ):
+                    continue
+                selected.append(candidate)
+                recording_selected.append(candidate)
+                selected_in_bin += 1
+        return selected
+
+    @staticmethod
+    def _recording_percentile_selection(
+        candidates: list,
+        *,
+        percentile_points: int,
+        max_per_recording: int,
+        min_spacing_ms: int,
+    ) -> list:
+        """Select detections nearest evenly spaced score percentiles per file."""
+        by_recording: dict[int, list] = defaultdict(list)
+        for row in candidates:
+            by_recording[row["recording_id"]].append(row)
+
+        selected = []
+        for recording_id in sorted(
+            by_recording,
+            key=lambda key: (
+                by_recording[key][0]["display_name"].casefold(),
+                key,
+            ),
+        ):
+            rows = sorted(
+                by_recording[recording_id],
+                key=lambda row: (row["score"], row["start_ms"], row["id"]),
+            )
+            point_count = min(percentile_points, max_per_recording, len(rows))
+            available = list(rows)
+            recording_selected = []
+            for index in range(point_count):
+                rank = (
+                    0
+                    if point_count == 1
+                    else index * (len(rows) - 1) / (point_count - 1)
+                )
+                lower = int(rank)
+                upper = min(lower + 1, len(rows) - 1)
+                fraction = rank - lower
+                target = (
+                    rows[lower]["score"] * (1 - fraction)
+                    + rows[upper]["score"] * fraction
+                )
+                eligible = [
+                    row
+                    for row in available
+                    if all(
+                        abs(row["start_ms"] - existing["start_ms"]) >= min_spacing_ms
+                        for existing in recording_selected
+                    )
+                ]
+                if not eligible:
+                    break
+                chosen = min(
+                    eligible,
+                    key=lambda row: (
+                        abs(row["score"] - target),
+                        -row["score"],
+                        row["start_ms"],
+                        row["id"],
+                    ),
+                )
+                available.remove(chosen)
+                recording_selected.append(chosen)
+            selected.extend(recording_selected)
+        return selected
+
+    @staticmethod
+    def _duration_ranked_selection(
+        candidates: list,
+        *,
+        max_per_recording: int,
+        min_spacing_ms: int,
+    ) -> list:
+        """Rank recordings by unioned detected time, then detections by time."""
+        by_recording: dict[int, list] = defaultdict(list)
+        for row in candidates:
+            by_recording[row["recording_id"]].append(row)
+
+        def union_duration(rows: list) -> int:
+            intervals = sorted((row["start_ms"], row["end_ms"]) for row in rows)
+            total = 0
+            current_start = current_end = None
+            for start, end in intervals:
+                if current_start is None:
+                    current_start, current_end = start, end
+                elif start <= current_end:
+                    current_end = max(current_end, end)
+                else:
+                    total += current_end - current_start
+                    current_start, current_end = start, end
+            if current_start is not None:
+                total += current_end - current_start
+            return total
+
+        ranked = sorted(
+            by_recording.values(),
+            key=lambda rows: (
+                -union_duration(rows),
+                rows[0]["display_name"].casefold(),
+                rows[0]["recording_id"],
+            ),
+        )
+        selected = []
+        for rows in ranked:
+            rows.sort(key=lambda row: (row["start_ms"], -row["score"], row["id"]))
+            recording_selected = []
+            for row in rows:
+                if all(
+                    abs(row["start_ms"] - existing["start_ms"]) >= min_spacing_ms
+                    for existing in recording_selected
+                ):
+                    recording_selected.append(row)
+                    if len(recording_selected) >= max_per_recording:
+                        break
+            selected.extend(recording_selected)
+        return selected
+
+    @staticmethod
+    def _random_selection(
+        candidates: list,
+        *,
+        sample_size: int,
+        seed: int,
+        max_per_recording: int,
+        min_spacing_ms: int,
+    ) -> list:
+        """Draw a reproducible random sample while enforcing queue limits."""
+        shuffled = sorted(candidates, key=lambda row: row["id"])
+        random.Random(seed).shuffle(shuffled)
+        selected = []
+        selected_by_recording: dict[int, list] = defaultdict(list)
+        for candidate in shuffled:
+            recording_selected = selected_by_recording[candidate["recording_id"]]
+            if len(recording_selected) >= max_per_recording:
+                continue
+            if any(
+                abs(candidate["start_ms"] - existing["start_ms"]) < min_spacing_ms
+                for existing in recording_selected
+            ):
+                continue
+            selected.append(candidate)
+            recording_selected.append(candidate)
+            if len(selected) >= sample_size:
+                break
+        return selected
 
     @staticmethod
     def _per_recording_selection(
@@ -369,14 +1020,65 @@ class ReviewQueueRepository:
                         "score_stratified"
                         if row["score_band_width"] is not None
                         else (
-                            "location_date"
-                            if row["max_per_location_date"] is not None
-                            else row["ordering"]
+                            "location_date_high_score"
+                            if row["location_date_high_score"]
+                            else (
+                                "location_date_first_detection"
+                                if row["location_date_first_detection"]
+                                else (
+                                    "location_date"
+                                    if row["max_per_location_date"] is not None
+                                    else (
+                                        "random"
+                                        if row["random_sample_size"] is not None
+                                        else (
+                                            "duration_ranked"
+                                            if row["duration_ranked"]
+                                            else (
+                                                "recording_percentiles"
+                                                if row["percentile_points"] is not None
+                                                else (
+                                                    "diel_bins"
+                                                    if row["diel_bin_count"] is not None
+                                                    else (
+                                                        "location_max_count"
+                                                        if row["location_max_count"]
+                                                        else (
+                                                            "location_max_score_sum"
+                                                            if row[
+                                                                "location_max_score_sum"
+                                                            ]
+                                                            else (
+                                                                "location_max_score"
+                                                                if row[
+                                                                    "location_max_score"
+                                                                ]
+                                                                else (
+                                                                    "location_first_date"
+                                                                    if row[
+                                                                        "location_first_date"
+                                                                    ]
+                                                                    else row["ordering"]
+                                                                )
+                                                            )
+                                                        )
+                                                    )
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            )
                         )
                     ),
                     score_band_width=row["score_band_width"],
                     max_per_score_band=row["max_per_score_band"],
                     max_per_location_date=row["max_per_location_date"],
+                    random_sample_size=row["random_sample_size"],
+                    random_seed=row["random_seed"],
+                    percentile_points=row["percentile_points"],
+                    diel_bin_count=row["diel_bin_count"],
+                    max_per_diel_bin=row["max_per_diel_bin"],
                     review_order=row["review_order"],
                     detection_count=row["detection_count"],
                     reviewed_count=row["reviewed_count"],

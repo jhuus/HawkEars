@@ -3067,6 +3067,31 @@ class MainWindow(QMainWindow):
                     if values["max_per_location_date"] is not None
                     else None
                 ),
+                random_sample_size=(
+                    int(values["random_sample_size"])
+                    if values["random_sample_size"] is not None
+                    else None
+                ),
+                random_seed=(
+                    int(values["random_seed"])
+                    if values["random_seed"] is not None
+                    else None
+                ),
+                percentile_points=(
+                    int(values["percentile_points"])
+                    if values["percentile_points"] is not None
+                    else None
+                ),
+                diel_bin_count=(
+                    int(values["diel_bin_count"])
+                    if values["diel_bin_count"] is not None
+                    else None
+                ),
+                max_per_diel_bin=(
+                    int(values["max_per_diel_bin"])
+                    if values["max_per_diel_bin"] is not None
+                    else None
+                ),
             )
         except (ValueError, sqlite3.DatabaseError) as error:
             QMessageBox.critical(

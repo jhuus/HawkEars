@@ -183,6 +183,11 @@ class ReviewQueueSummary:
     score_band_width: Optional[float]
     max_per_score_band: Optional[int]
     max_per_location_date: Optional[int]
+    random_sample_size: Optional[int]
+    random_seed: Optional[int]
+    percentile_points: Optional[int]
+    diel_bin_count: Optional[int]
+    max_per_diel_bin: Optional[int]
     review_order: str
     detection_count: int
     reviewed_count: int
