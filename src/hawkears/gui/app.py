@@ -1,7 +1,6 @@
 """Entry point for the HawkEars desktop application."""
 
 import logging
-from pathlib import Path
 import sys
 
 from hawkears.gui.diagnostics import configure_diagnostics
@@ -12,7 +11,7 @@ def main(argv: list[str] | None = None) -> int:
     logger = logging.getLogger(__name__)
     try:
         from PySide6.QtGui import QIcon
-        from PySide6.QtCore import QCoreApplication
+        from PySide6.QtCore import QCoreApplication, QSettings
         from PySide6.QtWidgets import QApplication, QMessageBox
     except ImportError:
         print(
@@ -31,18 +30,23 @@ def main(argv: list[str] | None = None) -> int:
         catalog_path,
         load_class_catalog,
     )
+    from hawkears.core.app_paths import resolve_application_paths
 
     app = QApplication(sys.argv if argv is None else argv)
     logger.info("PySide6 application created; log=%s", log_path)
     app.setApplicationName("HawkEars")
     app.setOrganizationName("HawkEars")
+    configured_data_root = QSettings().value("dataDirectory")
+    paths = resolve_application_paths(
+        str(configured_data_root) if configured_data_root else None
+    )
     translators = install_translators(app)
     app._hawkears_translators = translators  # type: ignore[attr-defined]
     app.setWindowIcon(QIcon(brand_icon_path()))
     app.setStyleSheet(STYLESHEET)
 
     class_catalog = []
-    classes_path = catalog_path(Path.cwd())
+    classes_path = catalog_path(paths.data_root)
     if not classes_path.is_file():
         QMessageBox.critical(
             None,
@@ -65,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
                 str(error),
             )
 
-    window = MainWindow(class_catalog=class_catalog)
+    window = MainWindow(class_catalog=class_catalog, application_paths=paths)
     window.show()
     logger.info("Main window shown")
     result = app.exec()

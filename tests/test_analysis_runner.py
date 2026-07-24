@@ -55,6 +55,7 @@ def test_analysis_runner_persists_direct_results(tmp_path: Path, monkeypatch):
             "min_score": 0.6,
             "location": {"mode": "filelist", "path": str(filelist)},
         },
+        tmp_path / "hawkears-data",
     )
     runner.completed.connect(lambda run_id, count: completed.append((run_id, count)))
 
@@ -64,6 +65,7 @@ def test_analysis_runner_persists_direct_results(tmp_path: Path, monkeypatch):
     assert Path(analyze_arguments["output_path"]) == (
         tmp_path / "survey" / "analysis" / "1"
     )
+    assert analyze_arguments["data_root"] == tmp_path / "hawkears-data"
     connection = connect(project_path, readonly=True)
     try:
         assert (

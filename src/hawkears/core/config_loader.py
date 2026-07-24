@@ -1,78 +1,123 @@
 #!/usr/bin/env python3
 
-# Defer some imports to improve initialization performance.
+"""Load configuration from a writable data root or packaged defaults."""
+
 import logging
-import os
+from pathlib import Path
 from typing import cast, Optional
 
 from britekit.core import util
+
+from hawkears.core.app_paths import resolve_application_paths
 from hawkears.core.config import HawkEarsBaseConfig
+from hawkears.core.initializer import installation_resources
 
-_base_config: Optional[HawkEarsBaseConfig] = None
+_base_configs: dict[tuple[Path, str], HawkEarsBaseConfig] = {}
 
 
-def get_config(cfg_path: Optional[str] = None) -> HawkEarsBaseConfig:
+def get_config(
+    cfg_path: Optional[str] = None,
+    *,
+    data_root: Path | str | None = None,
+) -> HawkEarsBaseConfig:
     from omegaconf import OmegaConf, DictConfig
 
+    root = resolve_application_paths(data_root).data_root
     if cfg_path is None:
-        return get_config_with_dict()
-    else:
-        yaml_cfg = cast(DictConfig, OmegaConf.load(cfg_path))
-        return get_config_with_dict(yaml_cfg)
+        return get_config_with_dict(data_root=root)
+    yaml_cfg = cast(DictConfig, OmegaConf.load(cfg_path))
+    return get_config_with_dict(yaml_cfg, data_root=root)
 
 
-def get_config_with_dict(cfg_dict=None) -> HawkEarsBaseConfig:
-    from omegaconf import OmegaConf, DictConfig
+def _load_yaml(root: Path, name: str):
+    from omegaconf import OmegaConf
 
-    global _base_config
-    if _base_config is None:
-        _base_config = OmegaConf.structured(HawkEarsBaseConfig())
-        default_yaml_path = os.path.join("yaml", "default.yaml")
-        if os.path.exists(default_yaml_path):
-            yaml_cfg = cast(DictConfig, OmegaConf.load(default_yaml_path))
-            _base_config = cast(
-                HawkEarsBaseConfig,
-                OmegaConf.merge(_base_config, OmegaConf.create(yaml_cfg)),
-            )
-        else:
-            logging.error(f"Error: {default_yaml_path} not found.")
-            return _base_config
+    local_path = root / "yaml" / name
+    if local_path.is_file():
+        return OmegaConf.load(local_path)
 
-        device = util.get_device()
-        if device == "cpu":
-            # Apply CPU-specific config overrides
-            cpu_yaml_path = os.path.join("yaml", "default-cpu.yaml")
-            if os.path.exists(cpu_yaml_path):
-                yaml_cfg = cast(DictConfig, OmegaConf.load(cpu_yaml_path))
-                _base_config = cast(
-                    HawkEarsBaseConfig,
-                    OmegaConf.merge(_base_config, OmegaConf.create(yaml_cfg)),
-                )
-            else:
-                logging.error(f"Error: {cpu_yaml_path} not found.")
-                return _base_config
-        elif device == "mps":
-            # Apply MPS-specific config overrides for Apple Metal processors
-            mps_yaml_path = os.path.join("yaml", "default-mps.yaml")
-            if os.path.exists(mps_yaml_path):
-                yaml_cfg = cast(DictConfig, OmegaConf.load(mps_yaml_path))
-                _base_config = cast(
-                    HawkEarsBaseConfig,
-                    OmegaConf.merge(_base_config, OmegaConf.create(yaml_cfg)),
-                )
-            else:
-                logging.error(f"Error: {mps_yaml_path} not found.")
-                return _base_config
+    resource = installation_resources().joinpath("yaml", name)
+    if resource.is_file():
+        with resource.open("r", encoding="utf-8") as handle:
+            return OmegaConf.load(handle)
+    return None
 
-    # allow late merges/overrides even if already initialized
-    if cfg_dict is not None:
-        _base_config = cast(
+
+def _resolve_runtime_paths(cfg: HawkEarsBaseConfig, root: Path) -> None:
+    def rooted(value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        path = Path(value)
+        return str(path if path.is_absolute() else root / path)
+
+    cfg.misc.ckpt_folder = cast(str, rooted(cfg.misc.ckpt_folder))
+    cfg.hawkears.include_list = rooted(cfg.hawkears.include_list)
+    cfg.hawkears.exclude_list = rooted(cfg.hawkears.exclude_list)
+    cfg.hawkears.occurrence_pickle = cast(str, rooted(cfg.hawkears.occurrence_pickle))
+
+
+def get_config_with_dict(
+    cfg_dict=None,
+    *,
+    data_root: Path | str | None = None,
+) -> HawkEarsBaseConfig:
+    from omegaconf import OmegaConf
+
+    root = resolve_application_paths(data_root).data_root
+    device = util.get_device()
+    cache_key = (root, device)
+    base_config = _base_configs.get(cache_key)
+    if base_config is None:
+        base_config = OmegaConf.structured(HawkEarsBaseConfig())
+        yaml_cfg = _load_yaml(root, "default.yaml")
+        if yaml_cfg is None:
+            logging.error("Error: default.yaml not found.")
+            return base_config
+        base_config = cast(
             HawkEarsBaseConfig,
-            OmegaConf.merge(_base_config, OmegaConf.create(cfg_dict)),
+            OmegaConf.merge(base_config, OmegaConf.create(yaml_cfg)),
         )
-    return _base_config
+
+        override_name = {
+            "cpu": "default-cpu.yaml",
+            "mps": "default-mps.yaml",
+        }.get(device)
+        if override_name is not None:
+            yaml_cfg = _load_yaml(root, override_name)
+            if yaml_cfg is None:
+                logging.error("Error: %s not found.", override_name)
+                return base_config
+            base_config = cast(
+                HawkEarsBaseConfig,
+                OmegaConf.merge(base_config, OmegaConf.create(yaml_cfg)),
+            )
+
+        _resolve_runtime_paths(base_config, root)
+        _base_configs[cache_key] = base_config
+
+    if cfg_dict is not None:
+        base_config = cast(
+            HawkEarsBaseConfig,
+            OmegaConf.merge(base_config, OmegaConf.create(cfg_dict)),
+        )
+        _resolve_runtime_paths(base_config, root)
+    return base_config
 
 
 def set_base_config(cfg: HawkEarsBaseConfig) -> None:
-    global _base_config
-    _base_config = cfg
+    root = resolve_application_paths().data_root
+    _base_configs[(root, util.get_device())] = cfg
+
+
+def load_auxiliary_config(name: str, *, data_root: Path | str | None = None):
+    """Load auxiliary YAML from the data root or packaged resources."""
+    root = resolve_application_paths(data_root).data_root
+    return _load_yaml(root, name)
+
+
+def resolve_config_paths(
+    cfg: HawkEarsBaseConfig, *, data_root: Path | str | None = None
+) -> None:
+    """Resolve relative runtime paths after applying an auxiliary config."""
+    root = resolve_application_paths(data_root).data_root
+    _resolve_runtime_paths(cfg, root)

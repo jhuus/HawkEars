@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 from britekit import OccurrencePickleProvider
 
@@ -21,3 +22,7 @@ def test_init_installs_compact_occurrence_and_location_catalog(tmp_path, monkeyp
     assert location_path.is_file()
     assert OccurrencePickleProvider(occurrence_path).format_version == 2
     assert len(downloads) == 2
+    manifest = json.loads((tmp_path / "data" / "models.json").read_text())
+    assert manifest["format_version"] == 1
+    assert manifest["bundles"]["main"]["version"] == "2.2.0"
+    assert manifest["bundles"]["low_band"]["version"] == "2.0.0"

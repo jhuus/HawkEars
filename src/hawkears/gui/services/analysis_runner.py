@@ -29,6 +29,7 @@ class AnalysisRunner(QObject):
         recurse: bool,
         species: Sequence[Species],
         settings: Mapping[str, object],
+        data_root: Path | None = None,
     ) -> None:
         super().__init__()
         self.database_path = database_path
@@ -36,6 +37,7 @@ class AnalysisRunner(QObject):
         self.recurse = recurse
         self.species = list(species)
         self.settings = dict(settings)
+        self.data_root = data_root
         self.run_id: int | None = None
         self._cancel_requested = threading.Event()
         self._completed_paths: set[Path] = set()
@@ -127,6 +129,7 @@ class AnalysisRunner(QObject):
                     item.class_name or item.common_name for item in self.species
                 ],
                 raise_errors=True,
+                data_root=self.data_root,
             )
             if result is None:
                 raise RuntimeError("HawkEars did not return an analysis result.")

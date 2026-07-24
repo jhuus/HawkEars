@@ -49,6 +49,7 @@ def analyze(
     cancellation_callback: Optional[Callable[[], bool]] = None,
     include_names: Optional[Collection[str]] = None,
     raise_errors: bool = False,
+    data_root: Path | str | None = None,
 ) -> AnalysisResult | None:
     """
     Run inference on audio recordings to detect and classify sounds.
@@ -92,6 +93,8 @@ def analyze(
       to stop the analysis after recordings already in progress finish.
     - include_names: Optional model class names to include, avoiding an include-list file.
     - raise_errors: Re-raise inference and validation errors for application callers.
+    - data_root: Explicit HawkEars data directory. If omitted, legacy
+      current-directory discovery is retained.
     """
 
     # defer slow imports to improve --help performance
@@ -99,7 +102,10 @@ def analyze(
 
     try:
         # API calls must not leak overrides into later runs through the cached config.
-        cfg = deepcopy(get_config(cfg_path))
+        # Preserve the historical CLI contract: without an explicit application
+        # data root, configuration and models are resolved from the shell's cwd.
+        effective_data_root = Path.cwd() if data_root is None else data_root
+        cfg = deepcopy(get_config(cfg_path, data_root=effective_data_root))
 
         import importlib.util
 

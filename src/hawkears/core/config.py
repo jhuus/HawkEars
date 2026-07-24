@@ -51,8 +51,14 @@ class HawkEarsConfig:
     # it across the preceding pieces so no very short label is created.
     max_label_length_merge_threshold: float = 0.5
 
-    main_models_url = "https://github.com/jhuus/HawkEars/releases/download/models-2.2.0/main-models-2.2.0.zip"
-    low_band_models_url = "https://github.com/jhuus/HawkEars/releases/download/models-2.0.0/low-band-models-2.0.0.zip"
+    main_models_version: str = "2.2.0"
+    main_models_url: str = (
+        "https://github.com/jhuus/HawkEars/releases/download/models-2.2.0/main-models-2.2.0.zip"
+    )
+    low_band_models_version: str = "2.0.0"
+    low_band_models_url: str = (
+        "https://github.com/jhuus/HawkEars/releases/download/models-2.0.0/low-band-models-2.0.0.zip"
+    )
 
 
 @dataclass

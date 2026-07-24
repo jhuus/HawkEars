@@ -2,16 +2,17 @@
 
 from copy import deepcopy
 import logging
-import os
+from pathlib import Path
 from typing import cast, Optional
 
 from britekit import Audio, Predictor
 import numpy as np
-from omegaconf import OmegaConf, DictConfig
+from omegaconf import OmegaConf
 
 from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.class_manager import ClassManager
 from hawkears.core.occurrence_manager import OccurrenceManager
+from hawkears.core.config_loader import load_auxiliary_config, resolve_config_paths
 
 
 class LowBandHeuristics:
@@ -98,16 +99,17 @@ class LowBandHeuristics:
         """Create low-band model config object from main config object."""
         low_band_cfg = deepcopy(cfg)
 
-        yaml_path = os.path.join("yaml", "low_band.yaml")
-        if not os.path.exists(yaml_path):
-            logging.error(f"File {yaml_path} not found. Skipping low-band classifier.")
+        data_root = Path(cfg.misc.ckpt_folder).parent.parent
+        yaml_cfg = load_auxiliary_config("low_band.yaml", data_root=data_root)
+        if yaml_cfg is None:
+            logging.error("File low_band.yaml not found. Skipping low-band classifier.")
             self.enabled = False
             return cfg
 
-        yaml_cfg = cast(DictConfig, OmegaConf.load(yaml_path))
         low_band_cfg = cast(
             HawkEarsBaseConfig,
             OmegaConf.merge(low_band_cfg, OmegaConf.create(yaml_cfg)),
         )
+        resolve_config_paths(low_band_cfg, data_root=data_root)
 
         return low_band_cfg

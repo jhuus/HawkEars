@@ -60,6 +60,7 @@ from PySide6.QtWidgets import (
 )
 
 from hawkears.gui.database import InvalidProjectError, MigrationError, ProjectDatabase
+from hawkears.core.app_paths import ApplicationPaths, resolve_application_paths
 from hawkears.gui.database.records import (
     AnalysisRunSummary,
     DetectionResult,
@@ -381,10 +382,11 @@ class AnalysisPage(QWidget):
     cancel_requested = Signal()
     import_requested = Signal(object)
 
-    def __init__(self) -> None:
+    def __init__(self, application_paths: ApplicationPaths | None = None) -> None:
         super().__init__()
-        self._location_catalog_path = Path.cwd() / "data" / "locations.db"
-        self._browse_directory = Path.cwd()
+        paths = application_paths or resolve_application_paths()
+        self._location_catalog_path = paths.data_directory / "locations.db"
+        self._browse_directory = paths.data_root
         self._recording_directory: Path | None = None
         self._location_settings: dict[str, object] = {"mode": "none"}
         page, outer = page_header(
@@ -2445,8 +2447,13 @@ class ReportsPage(QWidget):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, class_catalog: list[SpeciesDefinition] | None = None) -> None:
+    def __init__(
+        self,
+        class_catalog: list[SpeciesDefinition] | None = None,
+        application_paths: ApplicationPaths | None = None,
+    ) -> None:
         super().__init__()
+        self._application_paths = application_paths or resolve_application_paths()
         self.setWindowTitle("HawkEars")
         self.setWindowIcon(QIcon(brand_icon_path()))
         self.resize(1240, 780)
@@ -2454,7 +2461,7 @@ class MainWindow(QMainWindow):
         self._project_open = False
         self._database: ProjectDatabase | None = None
         if class_catalog is None:
-            path = catalog_path(Path.cwd())
+            path = catalog_path(self._application_paths.data_root)
             class_catalog = load_class_catalog(path) if path.is_file() else []
         self._class_catalog = class_catalog
 
@@ -2469,7 +2476,7 @@ class MainWindow(QMainWindow):
         self.pages.setObjectName("pageSurface")
         self.welcome = WelcomePage()
         self.project_page = ProjectPage()
-        self.analysis_page = AnalysisPage()
+        self.analysis_page = AnalysisPage(self._application_paths)
         self.results_page = ResultsPage()
         self.review_page = ReviewPage(self._class_catalog)
         self.reports_page = ReportsPage()
@@ -2651,13 +2658,16 @@ class MainWindow(QMainWindow):
         else:
             logger.info("Project opened: %s", path)
 
-    @staticmethod
-    def _project_directory(create: bool = False) -> Path:
+    def _project_directory(self, create: bool = False) -> Path:
         """Return the projects directory beside HawkEars' data directory."""
-        directory = Path.cwd() / "projects"
+        directory = self._application_paths.projects_directory
         if create:
             directory.mkdir(parents=True, exist_ok=True)
-        return directory if directory.is_dir() else Path.cwd()
+        return (
+            directory
+            if directory.is_dir()
+            else self._application_paths.data_root
+        )
 
     def _activate_project(self, name: str, *, database: ProjectDatabase) -> None:
         self._project_open = True
@@ -2789,6 +2799,7 @@ class MainWindow(QMainWindow):
             project.recurse,
             species,
             self.analysis_page.current_settings(),
+            self._application_paths.data_root,
         )
         runner.moveToThread(thread)
         thread.started.connect(runner.run)
