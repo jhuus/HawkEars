@@ -14,6 +14,7 @@ $Python = Join-Path $VirtualEnvironment "Scripts/python.exe"
 $BuildRoot = Join-Path $PackagingRoot "build"
 $Launcher = Join-Path $PackagingRoot "HawkEars.py"
 $Icon = Join-Path $PackagingRoot "assets/hawkears.ico"
+$NuitkaReport = Join-Path $BuildRoot "nuitka-report.xml"
 
 function Assert-LastExitCode([string]$Step) {
     if ($LASTEXITCODE -ne 0) {
@@ -43,12 +44,7 @@ Assert-LastExitCode "Installing HawkEars"
 & $Python -m pip install -r (Join-Path $PackagingRoot "requirements-build.txt")
 Assert-LastExitCode "Installing Windows build tools"
 
-& $Python -c @"
-import torch
-assert torch.__version__.startswith("2.8.0"), torch.__version__
-assert torch.version.cuda == "12.6", torch.version.cuda
-print(f"Building with torch {torch.__version__}, CUDA runtime {torch.version.cuda}")
-"@
+& $Python (Join-Path $PackagingRoot "validate_build_environment.py")
 Assert-LastExitCode "Validating PyTorch"
 
 $AppVersion = (& $Python -c "from hawkears import __version__; print(__version__)").Trim()
@@ -69,6 +65,7 @@ Assert-LastExitCode "Recording the Windows build environment"
     --windows-console-mode=disable `
     --windows-icon-from-ico=$Icon `
     --output-dir=$BuildRoot `
+    --report=$NuitkaReport `
     --output-filename=HawkEars.exe `
     --company-name=HawkEars `
     --product-name=HawkEars `
