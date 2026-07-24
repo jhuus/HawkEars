@@ -92,9 +92,13 @@ _temp_*
 
 # Other
 /data/
+/Europe/
 /logs/
+/projects/
+/recordings/
 /reports/
 /yaml/
+/run.sh
 *.ckpt
 *.onnx
 *.jpeg
