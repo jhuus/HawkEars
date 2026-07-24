@@ -2451,6 +2451,7 @@ class MainWindow(QMainWindow):
         self,
         class_catalog: list[SpeciesDefinition] | None = None,
         application_paths: ApplicationPaths | None = None,
+        initial_project: Path | None = None,
     ) -> None:
         super().__init__()
         self._application_paths = application_paths or resolve_application_paths()
@@ -2522,6 +2523,8 @@ class MainWindow(QMainWindow):
         self._analysis_runner: AnalysisRunner | HawkEarsImportRunner | None = None
         self._build_menu()
         self._refresh_welcome_recent_projects()
+        if initial_project is not None:
+            self._open_project_path(initial_project)
 
     def _build_sidebar(self) -> QWidget:
         sidebar = QFrame()

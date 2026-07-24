@@ -1,12 +1,17 @@
 """Entry point for the HawkEars desktop application."""
 
 import logging
+from pathlib import Path
 import sys
 
 from hawkears.gui.diagnostics import configure_diagnostics
 
 
 def main(argv: list[str] | None = None) -> int:
+    application_arguments = sys.argv if argv is None else argv
+    if application_arguments[1:] == ["--packaging-smoke-test"]:
+        return _run_packaging_smoke_test()
+
     log_path = configure_diagnostics()
     logger = logging.getLogger(__name__)
     try:
@@ -36,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     from hawkears.gui.ui.setup_dialog import SetupDialog
 
-    app = QApplication(sys.argv if argv is None else argv)
+    app = QApplication(application_arguments)
     logger.info("PySide6 application created; log=%s", log_path)
     app.setApplicationName("HawkEars")
     app.setOrganizationName("HawkEars")
@@ -80,12 +85,52 @@ def main(argv: list[str] | None = None) -> int:
                 str(error),
             )
 
-    window = MainWindow(class_catalog=class_catalog, application_paths=paths)
+    initial_project = _initial_project_path(application_arguments[1:])
+    window = MainWindow(
+        class_catalog=class_catalog,
+        application_paths=paths,
+        initial_project=initial_project,
+    )
     window.show()
     logger.info("Main window shown")
     result = app.exec()
     logger.info("GUI event loop exited with status %d", result)
     return result
+
+
+def _initial_project_path(arguments: list[str]) -> Path | None:
+    """Return a project supplied by a desktop file association, if any."""
+    if len(arguments) != 1:
+        return None
+    path = Path(arguments[0])
+    if path.suffix.casefold() != ".hawkears" or not path.is_file():
+        return None
+    return path.resolve()
+
+
+def _run_packaging_smoke_test() -> int:
+    """Import native dependencies and required packaged resources."""
+    import torch
+    from PySide6.QtCore import qVersion
+
+    from hawkears.core.initializer import installation_resources
+    from hawkears.gui.ui.resources import brand_icon_path
+
+    resources = installation_resources()
+    required_resources = (
+        resources.joinpath("yaml", "default.yaml"),
+        resources.joinpath("data", "classes.csv"),
+        resources.joinpath("data", "locations.db"),
+    )
+    if not all(resource.is_file() for resource in required_resources):
+        raise RuntimeError("Required HawkEars packaged resources are missing.")
+    if not Path(brand_icon_path()).is_file():
+        raise RuntimeError("The HawkEars application icon is missing.")
+    print(
+        f"HawkEars packaging smoke test passed: Qt {qVersion()}, "
+        f"torch {torch.__version__}, CUDA runtime {torch.version.cuda}"
+    )
+    return 0
 
 
 if __name__ == "__main__":

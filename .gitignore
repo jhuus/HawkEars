@@ -99,6 +99,8 @@ _temp_*
 /reports/
 /yaml/
 /run.sh
+/packaging/windows/.venv/
+/packaging/windows/build/
 *.ckpt
 *.onnx
 *.jpeg

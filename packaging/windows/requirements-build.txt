@@ -1,0 +1,2 @@
+# Build tools only. Application dependencies come from pyproject.toml.
+Nuitka[standalone]==4.1
