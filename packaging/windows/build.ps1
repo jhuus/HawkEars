@@ -61,6 +61,9 @@ Assert-LastExitCode "Recording the Windows build environment"
 & $Python -m nuitka `
     --mode=standalone `
     --enable-plugin=pyside6 `
+    --low-memory `
+    --nofollow-import-to=faiss `
+    --nofollow-import-to=pyinaturalist `
     --include-package-data=hawkears `
     --windows-console-mode=disable `
     --windows-icon-from-ico=$Icon `
