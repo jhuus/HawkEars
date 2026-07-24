@@ -9,18 +9,13 @@ from typing import Optional
 import click
 from britekit.core import util
 
-from hawkears.core.initializer import download_and_extract, initialize
-
-
-def _download_and_unzip(url: str, extract_dir: Path) -> None:
-    """Backward-compatible wrapper around the shared model downloader."""
-    download_and_extract(url, extract_dir)
+from hawkears.core.initializer import initialize
 
 
 def init(dest: Optional[Path] = None) -> None:
     """Set up the default HawkEars directory and download model checkpoints."""
     destination = Path(".") if dest is None else dest
-    initialize(destination, downloader=_download_and_unzip)
+    initialize(destination)
     logging.info("Done. Destination: %s", destination)
 
 

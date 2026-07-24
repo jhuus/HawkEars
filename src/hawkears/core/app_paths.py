@@ -43,6 +43,25 @@ def is_initialized_directory(path: Path) -> bool:
     return (path / "yaml" / "default.yaml").is_file() and (path / "data").is_dir()
 
 
+def is_application_ready(path: Path) -> bool:
+    """Return whether required catalogs and both model sets are installed."""
+    data_directory = path / "data"
+
+    def has_models(directory: Path) -> bool:
+        return directory.is_dir() and any(
+            item.is_file() and item.suffix.lower() in {".ckpt", ".onnx"}
+            for item in directory.iterdir()
+        )
+
+    return (
+        is_initialized_directory(path)
+        and (data_directory / "classes.csv").is_file()
+        and (data_directory / "locations.db").is_file()
+        and has_models(data_directory / "ckpt")
+        and has_models(data_directory / "ckpt-low-band")
+    )
+
+
 def default_data_directory(
     *,
     environ: Mapping[str, str] | None = None,

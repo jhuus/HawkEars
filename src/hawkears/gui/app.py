@@ -30,7 +30,11 @@ def main(argv: list[str] | None = None) -> int:
         catalog_path,
         load_class_catalog,
     )
-    from hawkears.core.app_paths import resolve_application_paths
+    from hawkears.core.app_paths import (
+        is_application_ready,
+        resolve_application_paths,
+    )
+    from hawkears.gui.ui.setup_dialog import SetupDialog
 
     app = QApplication(sys.argv if argv is None else argv)
     logger.info("PySide6 application created; log=%s", log_path)
@@ -45,6 +49,13 @@ def main(argv: list[str] | None = None) -> int:
     app.setWindowIcon(QIcon(brand_icon_path()))
     app.setStyleSheet(STYLESHEET)
 
+    if not is_application_ready(paths.data_root):
+        setup = SetupDialog(paths.data_root)
+        if setup.exec() != SetupDialog.DialogCode.Accepted:
+            return 0
+        paths = resolve_application_paths(setup.data_directory)
+        QSettings().setValue("dataDirectory", str(paths.data_root))
+
     class_catalog = []
     classes_path = catalog_path(paths.data_root)
     if not classes_path.is_file():
@@ -53,8 +64,8 @@ def main(argv: list[str] | None = None) -> int:
             QCoreApplication.translate("Application", "HawkEars setup required"),
             QCoreApplication.translate(
                 "Application",
-                "Root directory is not configured for HawkEars. "
-                "Run 'hawkears init' to set it up.",
+                "The HawkEars data directory is incomplete. "
+                "Restart HawkEars to repair the installation.",
             ),
         )
     else:

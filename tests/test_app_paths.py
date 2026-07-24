@@ -2,6 +2,7 @@ from pathlib import Path
 
 from hawkears.core.app_paths import (
     default_data_directory,
+    is_application_ready,
     resolve_application_paths,
 )
 from hawkears.core import config_loader
@@ -76,3 +77,21 @@ def test_packaged_config_uses_explicit_data_root(tmp_path, monkeypatch):
     assert (
         Path(config.hawkears.occurrence_pickle) == tmp_path / "data" / "occurrence.pkl"
     )
+
+
+def test_application_readiness_requires_catalogs_and_both_model_sets(tmp_path):
+    (tmp_path / "yaml").mkdir()
+    (tmp_path / "yaml" / "default.yaml").touch()
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "classes.csv").touch()
+    (data / "locations.db").touch()
+    (data / "ckpt").mkdir()
+    (data / "ckpt" / "main.ckpt").touch()
+
+    assert not is_application_ready(tmp_path)
+
+    (data / "ckpt-low-band").mkdir()
+    (data / "ckpt-low-band" / "low.onnx").touch()
+
+    assert is_application_ready(tmp_path)
