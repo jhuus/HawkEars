@@ -49,6 +49,21 @@ def test_dialog_serializes_global_coordinates():
     app.processEvents()
 
 
+def test_coordinate_fields_accept_pasted_decimal_values():
+    app = application()
+    catalog = LocationCatalog(Path("data/locations.db"))
+    dialog = LocationDialog(catalog, {"mode": "coordinates"})
+    dialog.latitude.setText("45.421500")
+    dialog.longitude.setText("-75.697200")
+
+    settings = dialog.location_settings()
+    assert settings["latitude"] == 45.4215
+    assert settings["longitude"] == -75.6972
+    assert settings["region_code"] == "CA-ON-OT"
+    dialog.close()
+    app.processEvents()
+
+
 def test_dialog_serializes_specific_date_for_coordinates():
     app = application()
     catalog = LocationCatalog(Path("data/locations.db"))

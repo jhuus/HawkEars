@@ -3,13 +3,13 @@
 from pathlib import Path
 from typing import Mapping
 
-from PySide6.QtCore import QCoreApplication, QDate
+from PySide6.QtCore import QCoreApplication, QDate, QLocale
+from PySide6.QtGui import QDoubleValidator
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QDateEdit,
-    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -168,23 +168,28 @@ class LocationDialog(QDialog):
     def _coordinates_page(self) -> QWidget:
         page = QWidget()
         form = QFormLayout(page)
-        self.latitude = QDoubleSpinBox()
-        self.latitude.setRange(-90, 90)
-        self.latitude.setDecimals(6)
-        self.latitude.setSingleStep(0.01)
-        self.longitude = QDoubleSpinBox()
-        self.longitude.setRange(-180, 180)
-        self.longitude.setDecimals(6)
-        self.longitude.setSingleStep(0.01)
+        self.latitude = QLineEdit()
+        self.latitude.setPlaceholderText(self.tr("-90 to 90"))
+        self.latitude.setValidator(self._coordinate_validator(-90, 90))
+        self.longitude = QLineEdit()
+        self.longitude.setPlaceholderText(self.tr("-180 to 180"))
+        self.longitude.setValidator(self._coordinate_validator(-180, 180))
         form.addRow(self.tr("Latitude"), self.latitude)
         form.addRow(self.tr("Longitude"), self.longitude)
         self.coordinate_region = QLabel()
         self.coordinate_region.setWordWrap(True)
         form.addRow(self.tr("Detected county"), self.coordinate_region)
-        self.latitude.valueChanged.connect(self._update_coordinate_region)
-        self.longitude.valueChanged.connect(self._update_coordinate_region)
+        self.latitude.textChanged.connect(self._update_coordinate_region)
+        self.longitude.textChanged.connect(self._update_coordinate_region)
         self._update_coordinate_region()
         return page
+
+    @staticmethod
+    def _coordinate_validator(bottom: float, top: float) -> QDoubleValidator:
+        validator = QDoubleValidator(bottom, top, 6)
+        validator.setLocale(QLocale.c())
+        validator.setNotation(QDoubleValidator.Notation.StandardNotation)
+        return validator
 
     def _region_page(self) -> QWidget:
         page = QWidget()
@@ -234,8 +239,8 @@ class LocationDialog(QDialog):
         index = self.mode.findData(mode)
         self.mode.setCurrentIndex(max(0, index))
         try:
-            self.latitude.setValue(float(initial.get("latitude", 0.0)))
-            self.longitude.setValue(float(initial.get("longitude", 0.0)))
+            self.latitude.setText(str(float(initial.get("latitude", 0.0))))
+            self.longitude.setText(str(float(initial.get("longitude", 0.0))))
         except (TypeError, ValueError):
             pass
         self._update_coordinate_region()
@@ -353,7 +358,17 @@ class LocationDialog(QDialog):
             self.filelist.setText(path)
 
     def _coordinate_area(self) -> AdministrativeArea | None:
-        return self.catalog.find_area(self.latitude.value(), self.longitude.value())
+        coordinates = self._coordinate_values()
+        if coordinates is None:
+            return None
+        return self.catalog.find_area(*coordinates)
+
+    def _coordinate_values(self) -> tuple[float, float] | None:
+        if not self.latitude.hasAcceptableInput():
+            return None
+        if not self.longitude.hasAcceptableInput():
+            return None
+        return float(self.latitude.text()), float(self.longitude.text())
 
     def _update_coordinate_region(self) -> None:
         area = self._coordinate_area()
@@ -404,10 +419,12 @@ class LocationDialog(QDialog):
             date_settings["date"] = self.date.date().toString("yyyy-MM-dd")
         if mode == "coordinates":
             area = self._coordinate_area()
+            coordinates = self._coordinate_values()
+            assert coordinates is not None
             return {
                 "mode": mode,
-                "latitude": self.latitude.value(),
-                "longitude": self.longitude.value(),
+                "latitude": coordinates[0],
+                "longitude": coordinates[1],
                 "region_code": area.code if area is not None else None,
                 **date_settings,
             }
