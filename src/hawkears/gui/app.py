@@ -112,6 +112,7 @@ def _run_packaging_smoke_test() -> int:
     """Import native dependencies and required packaged resources."""
     import torch
     from PySide6.QtCore import qVersion
+    from PySide6.QtGui import QImage
 
     from hawkears.core.initializer import installation_resources
     from hawkears.gui.ui.resources import brand_icon_path
@@ -124,8 +125,11 @@ def _run_packaging_smoke_test() -> int:
     )
     if not all(resource.is_file() for resource in required_resources):
         raise RuntimeError("Required HawkEars packaged resources are missing.")
-    if not Path(brand_icon_path()).is_file():
+    icon_path = Path(brand_icon_path())
+    if not icon_path.is_file():
         raise RuntimeError("The HawkEars application icon is missing.")
+    if QImage(str(icon_path)).isNull():
+        raise RuntimeError("Qt cannot decode the HawkEars application icon.")
     print(
         f"HawkEars packaging smoke test passed: Qt {qVersion()}, "
         f"torch {torch.__version__}, CUDA runtime {torch.version.cuda}"

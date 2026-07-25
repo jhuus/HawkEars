@@ -4,15 +4,15 @@ STYLESHEET = """
 QWidget {
     color: #2f211f;
     font-family: "Inter", "Segoe UI", sans-serif;
-    font-size: 13px;
+    font-size: 10pt;
 }
 QMainWindow, #appRoot, #pageSurface { background: #faf6f1; }
 #sidebar {
     background: #4f1612;
     border: none;
 }
-#brand { color: #f8f0e7; font-size: 22px; font-weight: 700; }
-#brandSubtle { color: #fcbb73; font-size: 11px; }
+#brand { color: #f8f0e7; font-size: 17pt; font-weight: 700; }
+#brandSubtle { color: #fcbb73; font-size: 8pt; }
 #projectChip {
     background: #220e0d;
     border: 1px solid #79352d;
@@ -24,19 +24,36 @@ QMainWindow, #appRoot, #pageSurface { background: #faf6f1; }
 #projectChip:hover { background: #68241e; border-color: #fbb040; }
 QPushButton[nav="true"] {
     background: transparent;
-    border: none;
+    border: 1px solid transparent;
     border-radius: 7px;
     color: #f8f0e7;
     padding: 10px 12px;
     text-align: left;
 }
-QPushButton[nav="true"]:hover { background: #220e0d; color: white; }
-QPushButton[nav="true"]:checked { background: #f8f0e7; color: #4f1612; font-weight: 600; }
-QPushButton[nav="true"]:disabled { color: #9d7771; }
-#pageTitle { color: #4f1612; font-size: 25px; font-weight: 700; }
-#pageSubtitle { color: #756763; font-size: 13px; }
-#sectionTitle { color: #4f1612; font-size: 16px; font-weight: 650; }
-#metricValue { color: #4f1612; font-size: 25px; font-weight: 700; }
+QPushButton[nav="true"]:enabled:!checked {
+    background: #68241e;
+    border-color: #79352d;
+}
+QPushButton[nav="true"]:enabled:!checked:hover {
+    background: #220e0d;
+    border-color: #fbb040;
+    color: white;
+}
+QPushButton[nav="true"]:checked {
+    background: #f8f0e7;
+    border-color: #f8f0e7;
+    color: #4f1612;
+    font-weight: 600;
+}
+QPushButton[nav="true"]:disabled {
+    background: transparent;
+    border-color: transparent;
+    color: #9d7771;
+}
+#pageTitle { color: #4f1612; font-size: 19pt; font-weight: 700; }
+#pageSubtitle { color: #756763; font-size: 10pt; }
+#sectionTitle { color: #4f1612; font-size: 12pt; font-weight: 650; }
+#metricValue { color: #4f1612; font-size: 19pt; font-weight: 700; }
 #muted { color: #786b67; }
 QLabel:disabled { color: #a39792; }
 QFrame[card="true"] {
