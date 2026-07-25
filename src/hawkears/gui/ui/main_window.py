@@ -19,7 +19,7 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
-from PySide6.QtGui import QAction, QColor, QIcon, QImage, QPainter, QPen, QPixmap
+from PySide6.QtGui import QAction, QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtMultimedia import (
     QAudioFormat,
     QAudioSink,
@@ -85,7 +85,7 @@ from hawkears.gui.services.spectrogram import (
     generate_review_spectrogram,
 )
 from hawkears.gui.ui.location_dialog import LocationDialog, location_summary
-from hawkears.gui.ui.resources import brand_icon_path
+from hawkears.gui.ui.resources import brand_icon, brand_pixmap
 from hawkears.gui.ui.review_queue_dialog import ReviewQueueDialog
 from hawkears.gui.ui.review_export_dialog import ReviewExportDialog
 from hawkears.gui.ui.species_dialog import SpeciesDialog
@@ -2456,7 +2456,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._application_paths = application_paths or resolve_application_paths()
         self.setWindowTitle("HawkEars")
-        self.setWindowIcon(QIcon(brand_icon_path()))
+        self.setWindowIcon(brand_icon())
         self.resize(1240, 780)
         self.setMinimumSize(980, 640)
         self._project_open = False
@@ -2537,14 +2537,7 @@ class MainWindow(QMainWindow):
         brand_row.setSpacing(10)
         icon = QLabel()
         icon.setFixedSize(45, 45)
-        icon.setPixmap(
-            QPixmap(brand_icon_path()).scaled(
-                45,
-                45,
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
-            )
-        )
+        icon.setPixmap(brand_pixmap(45, 45))
         brand = QLabel("HawkEars")
         brand.setObjectName("brand")
         brand_row.addWidget(icon)

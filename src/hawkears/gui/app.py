@@ -15,7 +15,6 @@ def main(argv: list[str] | None = None) -> int:
     log_path = configure_diagnostics()
     logger = logging.getLogger(__name__)
     try:
-        from PySide6.QtGui import QIcon
         from PySide6.QtCore import QCoreApplication, QSettings
         from PySide6.QtWidgets import QApplication, QMessageBox
     except ImportError:
@@ -28,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from hawkears.gui.ui.main_window import MainWindow
     from hawkears.gui.i18n import install_translators
-    from hawkears.gui.ui.resources import brand_icon_path
+    from hawkears.gui.ui.resources import brand_icon
     from hawkears.gui.ui.theme import STYLESHEET
     from hawkears.gui.services.class_catalog import (
         ClassCatalogError,
@@ -51,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     translators = install_translators(app)
     app._hawkears_translators = translators  # type: ignore[attr-defined]
-    app.setWindowIcon(QIcon(brand_icon_path()))
+    app.setWindowIcon(brand_icon())
     app.setStyleSheet(STYLESHEET)
 
     if not is_application_ready(paths.data_root):
@@ -112,7 +111,7 @@ def _run_packaging_smoke_test() -> int:
     """Import native dependencies and required packaged resources."""
     import torch
     from PySide6.QtCore import qVersion
-    from PySide6.QtGui import QImage
+    from PySide6.QtSvg import QSvgRenderer
 
     from hawkears.core.initializer import installation_resources
     from hawkears.gui.ui.resources import brand_icon_path
@@ -128,7 +127,7 @@ def _run_packaging_smoke_test() -> int:
     icon_path = Path(brand_icon_path())
     if not icon_path.is_file():
         raise RuntimeError("The HawkEars application icon is missing.")
-    if QImage(str(icon_path)).isNull():
+    if not QSvgRenderer(str(icon_path)).isValid():
         raise RuntimeError("Qt cannot decode the HawkEars application icon.")
     print(
         f"HawkEars packaging smoke test passed: Qt {qVersion()}, "
