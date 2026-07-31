@@ -69,6 +69,7 @@ Assert-LastExitCode "Recording the Windows build environment"
     --lto=no `
     --no-deployment-flag=excluded-module-usage `
     --module-parameter=torch-disable-jit=yes `
+    --module-parameter=numba-disable-jit=yes `
     --nofollow-import-to=faiss `
     --nofollow-import-to=pyinaturalist `
     --nofollow-import-to=lightning `
@@ -87,6 +88,8 @@ Assert-LastExitCode "Recording the Windows build environment"
     --nofollow-import-to=timm.optim `
     --include-package=hawkears.heuristics.canada `
     --include-package=scipy._external.array_api_compat `
+    --include-package=librosa.util.example_data `
+    --include-package-data=librosa.util.example_data `
     --include-package-data=hawkears `
     --windows-console-mode=disable `
     --windows-icon-from-ico=$Icon `

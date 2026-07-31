@@ -24,6 +24,8 @@ from hawkears.core.analysis_result import (
 from hawkears.core.occurrence_manager import OccurrenceManager
 from hawkears.heuristics.base import HeuristicsManager
 
+logger = logging.getLogger(__name__)
+
 
 def find_recording_paths(input_path: str, recurse: bool = False) -> list[str]:
     """Return the audio files HawkEars would analyze for an input path."""
@@ -177,7 +179,23 @@ class Analyzer:
                     recording_path, initial_start_times
                 )
 
+            if predictor.audio.load_backend == "soundfile":
+                logger.warning(
+                    "Librosa audio loading failed for %s; SoundFile fallback "
+                    "succeeded. Error: %s",
+                    recording_path,
+                    predictor.audio.primary_load_error,
+                )
+
             if frame_map is None:
+                logger.warning(
+                    "No predictions generated for %s (length=%.2f seconds, "
+                    "audio_error=%s, librosa_error=%s)",
+                    recording_path,
+                    predictor.audio.seconds(),
+                    getattr(predictor.audio, "load_error", None),
+                    getattr(predictor.audio, "primary_load_error", None),
+                )
                 if progress is not None:
                     progress.advance(task_id, file_sizes.get(recording_path, 0))
                 elif not self.quiet:
