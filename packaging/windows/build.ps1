@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$BriteKitPath = "",
+    [ValidateRange(1, 64)]
+    [int]$Jobs = 2,
     [switch]$SkipInstaller
 )
 
@@ -63,8 +65,28 @@ Assert-LastExitCode "Recording the Windows build environment"
     --enable-plugin=pyside6 `
     --include-qt-plugins=imageformats,iconengines `
     --low-memory `
+    --jobs=$Jobs `
+    --lto=no `
+    --no-deployment-flag=excluded-module-usage `
+    --module-parameter=torch-disable-jit=yes `
     --nofollow-import-to=faiss `
     --nofollow-import-to=pyinaturalist `
+    --nofollow-import-to=lightning `
+    --nofollow-import-to=torchmetrics `
+    --nofollow-import-to=britekit.commands `
+    --nofollow-import-to=britekit.core.augmentation `
+    --nofollow-import-to=britekit.core.data_module `
+    --nofollow-import-to=britekit.core.dataset `
+    --nofollow-import-to=britekit.core.pickler `
+    --nofollow-import-to=britekit.core.reextractor `
+    --nofollow-import-to=britekit.core.trainer `
+    --nofollow-import-to=britekit.core.tuner `
+    --nofollow-import-to=britekit.testing `
+    --nofollow-import-to=britekit.training_db `
+    --nofollow-import-to=sklearn `
+    --nofollow-import-to=timm.optim `
+    --include-package=hawkears.heuristics.canada `
+    --include-package=scipy._external.array_api_compat `
     --include-package-data=hawkears `
     --windows-console-mode=disable `
     --windows-icon-from-ico=$Icon `
@@ -81,13 +103,34 @@ Assert-LastExitCode "Recording the Windows build environment"
     $Launcher
 Assert-LastExitCode "Building HawkEars with Nuitka"
 
+if (Select-String `
+    -Path $NuitkaReport `
+    -Pattern '<module name="(lightning|torchmetrics)(\.|")' `
+    -Quiet) {
+    throw "Nuitka included Lightning or TorchMetrics in the inference bundle."
+}
+
 $Executable = Join-Path $BuildRoot "HawkEars.dist/HawkEars.exe"
 if (-not (Test-Path $Executable)) {
     throw "Nuitka did not create the expected executable: $Executable"
 }
 
-& $Executable --packaging-smoke-test
-Assert-LastExitCode "Running the packaged HawkEars smoke test"
+$SmokeLog = Join-Path $BuildRoot "HawkEars.dist/hawkears-packaging-smoke-test.log"
+if (Test-Path $SmokeLog) {
+    Remove-Item $SmokeLog
+}
+$SmokeTest = Start-Process `
+    -FilePath $Executable `
+    -ArgumentList "--packaging-smoke-test" `
+    -Wait `
+    -PassThru `
+    -WindowStyle Hidden
+if ($SmokeTest.ExitCode -ne 0) {
+    if (Test-Path $SmokeLog) {
+        Write-Host (Get-Content $SmokeLog -Raw)
+    }
+    throw "Packaged HawkEars smoke test failed with exit code $($SmokeTest.ExitCode)."
+}
 
 if (-not $SkipInstaller) {
     & (Join-Path $PackagingRoot "build-installer.ps1") -AppVersion $AppVersion

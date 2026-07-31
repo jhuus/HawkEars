@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+import os
+
+# HawkEars is an inference application. Keep BriteKit's optional training
+# framework out of runtime imports and native application bundles.
+os.environ.setdefault("BRITEKIT_INFERENCE_ONLY", "1")
+
 from .__about__ import __version__
 
 __all__ = ["__version__"]

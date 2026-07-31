@@ -23,6 +23,13 @@ From PowerShell at the repository root:
 .\packaging\windows\build.ps1
 ```
 
+The build uses two parallel C compilation jobs by default. If that exceeds the
+available memory, retry with one job:
+
+```powershell
+.\packaging\windows\build.ps1 -Jobs 1
+```
+
 For an unreleased local BriteKit:
 
 ```powershell

@@ -3,6 +3,7 @@
 import logging
 from pathlib import Path
 import sys
+import traceback
 
 from hawkears.gui.diagnostics import configure_diagnostics
 
@@ -10,7 +11,14 @@ from hawkears.gui.diagnostics import configure_diagnostics
 def main(argv: list[str] | None = None) -> int:
     application_arguments = sys.argv if argv is None else argv
     if application_arguments[1:] == ["--packaging-smoke-test"]:
-        return _run_packaging_smoke_test()
+        try:
+            return _run_packaging_smoke_test()
+        except BaseException:
+            smoke_log = Path(sys.executable).with_name(
+                "hawkears-packaging-smoke-test.log"
+            )
+            smoke_log.write_text(traceback.format_exc(), encoding="utf-8")
+            return 1
 
     log_path = configure_diagnostics()
     logger = logging.getLogger(__name__)
@@ -108,19 +116,48 @@ def _initial_project_path(arguments: list[str]) -> Path | None:
 
 
 def _run_packaging_smoke_test() -> int:
-    """Import native dependencies and required packaged resources."""
+    """Import inference dependencies and required packaged resources."""
+    import importlib
+    import sys
+
     import torch
     from PySide6.QtCore import qVersion
     from PySide6.QtSvg import QSvgRenderer
 
+    from britekit.models import (
+        bknet,
+        dla,
+        effnet,
+        gernet,
+        hgnet,
+        model_loader,
+        nfnet,
+        timm_model,
+        vovnet,
+    )
+    from britekit.core.audio import Audio
     from hawkears.core.initializer import installation_resources
+    from hawkears.core.config_loader import get_config
     from hawkears.gui.ui.resources import brand_icon_path
+
+    model_modules = (bknet, dla, effnet, gernet, hgnet, nfnet, timm_model, vovnet)
+    if not callable(model_loader.load_from_checkpoint) or not all(model_modules):
+        raise RuntimeError("BriteKit inference models are unavailable.")
+    if "lightning" in sys.modules or "torchmetrics" in sys.modules:
+        raise RuntimeError("Training dependencies leaked into the inference bundle.")
+    heuristics_path = get_config().hawkears.heuristics_manager
+    if heuristics_path:
+        module_name, class_name = heuristics_path.rsplit(".", 1)
+        heuristics_class = getattr(importlib.import_module(module_name), class_name)
+        if not callable(heuristics_class):
+            raise RuntimeError("Configured heuristics manager is unavailable.")
 
     resources = installation_resources()
     required_resources = (
         resources.joinpath("yaml", "default.yaml"),
         resources.joinpath("data", "classes.csv"),
         resources.joinpath("data", "locations.db"),
+        resources.joinpath("recordings", "CommonYellowthroat.mp3"),
     )
     if not all(resource.is_file() for resource in required_resources):
         raise RuntimeError("Required HawkEars packaged resources are missing.")
@@ -129,6 +166,14 @@ def _run_packaging_smoke_test() -> int:
         raise RuntimeError("The HawkEars application icon is missing.")
     if not QSvgRenderer(str(icon_path)).isValid():
         raise RuntimeError("Qt cannot decode the HawkEars application icon.")
+    audio = Audio(device="cpu", cfg=get_config())
+    signal, _ = audio.load(
+        str(resources.joinpath("recordings", "CommonYellowthroat.mp3"))
+    )
+    if signal is None or audio.seconds() < 5:
+        raise RuntimeError(
+            f"Packaged MP3 decoding failed: {getattr(audio, 'load_error', None)}"
+        )
     print(
         f"HawkEars packaging smoke test passed: Qt {qVersion()}, "
         f"torch {torch.__version__}, CUDA runtime {torch.version.cuda}"
