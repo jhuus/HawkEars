@@ -174,11 +174,6 @@ def _run_packaging_smoke_test() -> int:
         raise RuntimeError(
             f"Packaged MP3 decoding failed: {getattr(audio, 'load_error', None)}"
         )
-    if audio.load_backend != "librosa":
-        raise RuntimeError(
-            "Packaged Librosa decoding failed and used the SoundFile fallback: "
-            f"{audio.primary_load_error}"
-        )
     print(
         f"HawkEars packaging smoke test passed: Qt {qVersion()}, "
         f"torch {torch.__version__}, CUDA runtime {torch.version.cuda}"

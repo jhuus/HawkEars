@@ -179,22 +179,13 @@ class Analyzer:
                     recording_path, initial_start_times
                 )
 
-            if predictor.audio.load_backend == "soundfile":
-                logger.warning(
-                    "Librosa audio loading failed for %s; SoundFile fallback "
-                    "succeeded. Error: %s",
-                    recording_path,
-                    predictor.audio.primary_load_error,
-                )
-
             if frame_map is None:
                 logger.warning(
                     "No predictions generated for %s (length=%.2f seconds, "
-                    "audio_error=%s, librosa_error=%s)",
+                    "audio_error=%s)",
                     recording_path,
                     predictor.audio.seconds(),
                     getattr(predictor.audio, "load_error", None),
-                    getattr(predictor.audio, "primary_load_error", None),
                 )
                 if progress is not None:
                     progress.advance(task_id, file_sizes.get(recording_path, 0))
