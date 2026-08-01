@@ -22,6 +22,7 @@ from hawkears.core.analysis_result import (
     InferenceDetection,
 )
 from hawkears.core.occurrence_manager import OccurrenceManager
+from hawkears.core.raven import write_raven_selection_table
 from hawkears.heuristics.base import HeuristicsManager
 
 logger = logging.getLogger(__name__)
@@ -256,7 +257,7 @@ class Analyzer:
                 file_path = str(
                     Path(output_path) / f"{recording_stem}.HawkEars.selection.table.txt"
                 )
-                self._save_raven_table(dataframe, file_path, recording_name)
+                self._save_raven_table(dataframe, file_path, Path(recording_path))
 
             if progress is not None:
                 progress.advance(task_id, file_sizes.get(recording_path, 0))
@@ -409,32 +410,34 @@ class Analyzer:
 
         return pd.DataFrame(rows, columns=dataframe.columns).reset_index(drop=True)
 
-    def _save_raven_table(self, dataframe, file_path: str, recording_name: str) -> None:
+    def _save_raven_table(
+        self, dataframe, file_path: str, recording_path: Path
+    ) -> None:
         """
         Save detection results in Raven selection table format (tab-delimited).
 
         Args:
         - dataframe: Pandas DataFrame with columns ['recording', 'name', 'start_time', 'end_time', 'score'].
         - file_path (str): Output path for the Raven selection table.
-        - recording_name (str): Name of the audio file.
+        - recording_path (Path): Path of the source audio file.
         """
-        df = pl.from_pandas(dataframe)
-        df = df.sort(["name", "start_time"])
-        raven_df = pl.DataFrame(
-            {
-                "Selection": range(1, len(df) + 1),
-                "View": ["Spectrogram 1"] * len(df),
-                "Channel": [1] * len(df),
-                "Begin File": [recording_name] * len(df),
-                "Begin Time (s)": df["start_time"],
-                "End Time (s)": df["end_time"],
-                "Low Freq (Hz)": [self.cfg.audio.min_freq] * len(df),
-                "High Freq (Hz)": [self.cfg.audio.max_freq] * len(df),
-                "Species": df["name"],
-                "Confidence": df["score"],
-            }
+
+        def species_metadata(
+            label: str,
+        ) -> tuple[str, str | None, str | None, str | None]:
+            info = self.class_mgr.class_info_by_label_field(label)
+            if info is None:
+                return label, None, None, None
+            return info.name, info.alt_name, info.code, info.alt_code
+
+        write_raven_selection_table(
+            dataframe,
+            Path(file_path),
+            recording_path,
+            low_frequency=self.cfg.audio.min_freq,
+            high_frequency=self.cfg.audio.max_freq,
+            species_metadata=species_metadata,
         )
-        raven_df.write_csv(file_path, separator="\t", float_precision=4)
 
     def _get_recording_paths(self, input_path, recurse):
         return find_recording_paths(input_path, recurse)
