@@ -73,11 +73,12 @@ class LabelExportRunner(QObject):
                     output_path = self.output_directory / f"{stem}_scores.txt"
                 else:
                     output_path = (
-                        self.output_directory
-                        / f"{stem}.HawkEars.selection.table.txt"
+                        self.output_directory / f"{stem}.HawkEars.selection.table.txt"
                     )
                 plans.append((recording, grouped[recording_id], output_path))
-            existing = [output_path for _, _, output_path in plans if output_path.exists()]
+            existing = [
+                output_path for _, _, output_path in plans if output_path.exists()
+            ]
             if existing:
                 raise FileExistsError(
                     f"Export would overwrite {len(existing)} existing label file(s), "

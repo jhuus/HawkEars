@@ -112,13 +112,13 @@ class AnalysisRunner(QObject):
                     if location.get("mode") == "filelist"
                     else None
                 ),
-                min_score=float(self.settings.get("min_score", 0.6)),
-                num_threads=int(self.settings.get("num_threads", 3)),
+                min_score=float(str(self.settings.get("min_score", 0.6))),
+                num_threads=int(str(self.settings.get("num_threads", 3))),
                 segment_len=self._optional_float(self.settings.get("segment_len")),
                 max_label_length=self._optional_float(
                     self.settings.get("max_label_length")
                 ),
-                max_models=int(self.settings.get("max_models", 6)),
+                max_models=int(str(self.settings.get("max_models", 6))),
                 label_field="names",
                 recurse=self.recurse,
                 quiet=True,
@@ -261,7 +261,7 @@ class AnalysisRunner(QObject):
 
     @staticmethod
     def _optional_float(value: object) -> float | None:
-        return float(value) if value is not None else None
+        return float(str(value)) if value is not None else None
 
     def _report_progress(self, progress: AnalysisProgress) -> None:
         recording = progress.recording_path.name if progress.recording_path else ""

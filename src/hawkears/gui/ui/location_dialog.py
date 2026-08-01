@@ -34,8 +34,8 @@ def location_summary(
     mode = settings.get("mode", "none")
     if mode == "coordinates":
         try:
-            latitude = float(settings["latitude"])
-            longitude = float(settings["longitude"])
+            latitude = float(str(settings["latitude"]))
+            longitude = float(str(settings["longitude"]))
         except (KeyError, TypeError, ValueError):
             return QCoreApplication.translate(
                 "LocationDialog", "Global coordinates are incomplete"
@@ -239,8 +239,8 @@ class LocationDialog(QDialog):
         index = self.mode.findData(mode)
         self.mode.setCurrentIndex(max(0, index))
         try:
-            self.latitude.setText(str(float(initial.get("latitude", 0.0))))
-            self.longitude.setText(str(float(initial.get("longitude", 0.0))))
+            self.latitude.setText(str(float(str(initial.get("latitude", 0.0)))))
+            self.longitude.setText(str(float(str(initial.get("longitude", 0.0)))))
         except (TypeError, ValueError):
             pass
         self._update_coordinate_region()

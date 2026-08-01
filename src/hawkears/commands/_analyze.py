@@ -125,7 +125,7 @@ def analyze(
             if raise_errors:
                 raise InferenceError(message)
             logging.error(message)
-            return
+            return None
 
         # Process parameters
         rtypes = rtype.split("+") if rtype else []
@@ -134,7 +134,7 @@ def analyze(
                 val.startswith("aud") or val.startswith("csv") or val.startswith("rav")
             ):
                 logging.error(f"Error. invalid rtype value: {val}")
-                return
+                return None
 
         valid_labels = {"codes", "names", "alt_codes", "alt_names"}
         label_map = {
@@ -157,7 +157,7 @@ def analyze(
                 cfg.infer.label_field = label_field
             else:
                 logging.error(f"Error. invalid label field: {label_field}")
-                return
+                return None
 
         if output_path:
             os.makedirs(output_path, exist_ok=True)
@@ -284,6 +284,7 @@ def analyze(
         if raise_errors:
             raise
         logging.error(e)
+        return None
 
 
 @click.command(

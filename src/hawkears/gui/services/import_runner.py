@@ -169,7 +169,7 @@ class HawkEarsImportRunner(QObject):
     ) -> dict[int, dict[str, object]]:
         if location.get("date_mode") != "filename":
             return {}
-        metadata = {}
+        metadata: dict[int, dict[str, object]] = {}
         for recording in recordings:
             match = re.search(r"(?<!\d)((?:19|20)\d{6})(?!\d)", recording.display_name)
             if match:

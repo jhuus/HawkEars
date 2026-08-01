@@ -1,5 +1,7 @@
 """Dialog for choosing a project's HawkEars target classes."""
 
+# mypy: disable-error-code="union-attr"
+
 from collections.abc import Sequence
 
 from PySide6.QtCore import Qt
@@ -54,21 +56,25 @@ class SpeciesDialog(QDialog):
         self.table.setHorizontalHeaderLabels(
             [self.tr("Common name"), self.tr("Scientific name"), self.tr("Code")]
         )
-        self.table.setSelectionMode(QAbstractItemView.NoSelection)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeToContents
+            0, QHeaderView.ResizeMode.Stretch
+        )
+        self.table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        self.table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.ResizeToContents
         )
         for row, definition in enumerate(self._definitions):
             common_name = QTableWidgetItem(definition.common_name)
-            common_name.setFlags(common_name.flags() | Qt.ItemIsUserCheckable)
+            common_name.setFlags(common_name.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             common_name.setCheckState(
-                Qt.Checked
+                Qt.CheckState.Checked
                 if definition.canonical_key in selected_keys
-                else Qt.Unchecked
+                else Qt.CheckState.Unchecked
             )
             self.table.setItem(row, 0, common_name)
             self.table.setItem(
@@ -79,9 +85,13 @@ class SpeciesDialog(QDialog):
 
         selection_row = QHBoxLayout()
         select_visible = QPushButton(self.tr("Select visible"))
-        select_visible.clicked.connect(lambda: self._check_visible(Qt.Checked))
+        select_visible.clicked.connect(
+            lambda: self._check_visible(Qt.CheckState.Checked)
+        )
         clear_visible = QPushButton(self.tr("Clear visible"))
-        clear_visible.clicked.connect(lambda: self._check_visible(Qt.Unchecked))
+        clear_visible.clicked.connect(
+            lambda: self._check_visible(Qt.CheckState.Unchecked)
+        )
         self.selection_count = QLabel()
         self.selection_count.setObjectName("muted")
         selection_row.addWidget(select_visible)
@@ -91,7 +101,10 @@ class SpeciesDialog(QDialog):
         layout.addLayout(selection_row)
 
         self.table.itemChanged.connect(self._update_count)
-        self.buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+        )
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
@@ -101,7 +114,7 @@ class SpeciesDialog(QDialog):
         return [
             definition
             for row, definition in enumerate(self._definitions)
-            if self.table.item(row, 0).checkState() == Qt.Checked
+            if self.table.item(row, 0).checkState() == Qt.CheckState.Checked
         ]
 
     def _filter_rows(self, text: str) -> None:
@@ -126,8 +139,8 @@ class SpeciesDialog(QDialog):
 
     def _update_count(self) -> None:
         count = sum(
-            self.table.item(row, 0).checkState() == Qt.Checked
+            self.table.item(row, 0).checkState() == Qt.CheckState.Checked
             for row in range(self.table.rowCount())
         )
         self.selection_count.setText(self.tr("%n selected", None, count))
-        self.buttons.button(QDialogButtonBox.Save).setEnabled(count > 0)
+        self.buttons.button(QDialogButtonBox.StandardButton.Save).setEnabled(count > 0)

@@ -10,6 +10,7 @@ import threading
 from typing import Callable, Collection, Optional
 
 import polars as pl
+import pandas as pd
 
 from britekit import util
 from britekit import Predictor
@@ -54,7 +55,7 @@ class Analyzer:
         self.cfg = cfg
         self.dataframes: list = []
         self.rarities_dataframes: list = []
-        self.result_dataframes: list[tuple[Path, object]] = []
+        self.result_dataframes: list[tuple[Path, pd.DataFrame]] = []
         self._dataframes_lock = threading.Lock()
         self._progress_lock = threading.Lock()
         self.class_mgr = ClassManager(cfg, include_names)

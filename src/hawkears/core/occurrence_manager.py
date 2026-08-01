@@ -32,6 +32,7 @@ class OccurrenceManager:
 
         self.provider = OccurrencePickleProvider(cfg.hawkears.occurrence_pickle)
         self.class_name_set = self.provider.class_names
+        self._region_has_data_cache: dict[str, bool] = {}
         self.logged_location_error = False
 
         if date is None:
@@ -205,7 +206,34 @@ class OccurrenceManager:
 
             return 1.0
 
+        assert region is not None
+        if not self._region_has_data(region):
+            # The location is valid, but no occurrence records exist for any
+            # county it contains. Filtering would otherwise suppress every
+            # modeled species.
+            return 1.0
+
         if class_found:
             return occurrence
         else:
             return 0.0
+
+    def _region_has_data(self, region_code: str) -> bool:
+        """Return whether any county in a known region has occurrence records."""
+
+        if region_code in self._region_has_data_cache:
+            return self._region_has_data_cache[region_code]
+
+        counties = self.provider.find_counties(region_code)
+        if self.provider.format_version == 1:
+            occurrences = self.provider.data["occurrences"]
+            has_data = any(bool(occurrences.get(county.code)) for county in counties)
+        else:
+            has_data = any(
+                self.provider.area_offsets[county.index]
+                < self.provider.area_offsets[county.index + 1]
+                for county in counties
+            )
+
+        self._region_has_data_cache[region_code] = has_data
+        return has_data

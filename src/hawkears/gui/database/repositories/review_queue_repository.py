@@ -7,7 +7,7 @@ from math import ceil
 from pathlib import Path
 import random
 import re
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from hawkears.gui.database.connection import connect, transaction
 from hawkears.gui.database.records import ReviewQueueSummary
@@ -410,7 +410,7 @@ class ReviewQueueRepository:
         min_spacing_ms: int,
     ) -> list:
         """Select the earliest detections within each location and date."""
-        groups: dict[tuple[str, str], list[tuple[int, object]]] = defaultdict(list)
+        groups: dict[tuple[str, str], list[tuple[int, Any]]] = defaultdict(list)
         for row in candidates:
             recording_start = cls._recording_start_seconds(row)
             recorded_date = row["recorded_date"]
@@ -523,7 +523,7 @@ class ReviewQueueRepository:
         selected = []
         for rows in by_recording.values():
             rows.sort(key=lambda row: (-row["score"], row["start_ms"], row["id"]))
-            recording_selected = []
+            recording_selected: list[Any] = []
             for row in rows:
                 if all(
                     abs(row["start_ms"] - existing["start_ms"]) >= min_spacing_ms
@@ -574,7 +574,7 @@ class ReviewQueueRepository:
                 recordings[recording_id],
                 key=lambda row: (-row["score"], row["start_ms"], row["id"]),
             )
-            recording_selected = []
+            recording_selected: list[Any] = []
             for row in rows:
                 if all(
                     abs(row["start_ms"] - existing["start_ms"]) >= min_spacing_ms
@@ -614,7 +614,7 @@ class ReviewQueueRepository:
                 recordings[recording_id],
                 key=lambda row: (-row["score"], row["start_ms"], row["id"]),
             )
-            recording_selected = []
+            recording_selected: list[Any] = []
             for row in rows:
                 if all(
                     abs(row["start_ms"] - existing["start_ms"]) >= min_spacing_ms
@@ -654,7 +654,7 @@ class ReviewQueueRepository:
                 recordings[recording_id],
                 key=lambda row: (-row["score"], row["start_ms"], row["id"]),
             )
-            recording_selected = []
+            recording_selected: list[Any] = []
             for row in rows:
                 if all(
                     abs(row["start_ms"] - existing["start_ms"]) >= min_spacing_ms
@@ -766,7 +766,7 @@ class ReviewQueueRepository:
             )
             point_count = min(percentile_points, max_per_recording, len(rows))
             available = list(rows)
-            recording_selected = []
+            recording_selected: list[Any] = []
             for index in range(point_count):
                 rank = (
                     0
@@ -843,7 +843,7 @@ class ReviewQueueRepository:
         selected = []
         for rows in ranked:
             rows.sort(key=lambda row: (row["start_ms"], -row["score"], row["id"]))
-            recording_selected = []
+            recording_selected: list[Any] = []
             for row in rows:
                 if all(
                     abs(row["start_ms"] - existing["start_ms"]) >= min_spacing_ms
@@ -901,7 +901,7 @@ class ReviewQueueRepository:
                 rows.sort(key=lambda row: (-row["score"], row["start_ms"]))
             else:
                 rows.sort(key=lambda row: row["start_ms"])
-            recording_selected = []
+            recording_selected: list[Any] = []
             for row in rows:
                 if all(
                     abs(row["start_ms"] - existing["start_ms"]) >= min_spacing_ms

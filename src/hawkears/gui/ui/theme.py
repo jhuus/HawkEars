@@ -2,7 +2,6 @@
 
 from hawkears.gui.ui.resources import image_path
 
-
 STYLESHEET = """
 QWidget {
     color: #2f211f;

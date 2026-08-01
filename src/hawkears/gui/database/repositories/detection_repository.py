@@ -2,7 +2,7 @@
 
 from pathlib import Path
 import sqlite3
-from typing import Optional
+from typing import Optional, Sequence
 
 from hawkears.gui.database.connection import connect, transaction
 from hawkears.gui.database.records import (
@@ -142,7 +142,7 @@ class DetectionRepository:
     def create_cli_imported_many(
         self,
         import_batch_id: int,
-        detections: list[tuple[object, ...]],
+        detections: Sequence[tuple[object, ...]],
     ) -> int:
         """Create CLI inference detections with per-row import provenance.
 
@@ -169,9 +169,9 @@ class DetectionRepository:
                 ) = values
                 self._validate_bounds(
                     connection,
-                    int(recording_id),
-                    int(start_ms),
-                    int(end_ms),
+                    int(str(recording_id)),
+                    int(str(start_ms)),
+                    int(str(end_ms)),
                     None,
                     None,
                 )
@@ -1055,9 +1055,7 @@ class DetectionRepository:
                 # Adding a species is an explicit accepted annotation even when
                 # the original primary identification was rejected.
                 additional_review.append("review.verdict = 'incorrect'")
-                additional_conditions.append(
-                    "(" + " OR ".join(additional_review) + ")"
-                )
+                additional_conditions.append("(" + " OR ".join(additional_review) + ")")
                 additional_where = "WHERE " + " AND ".join(additional_conditions)
                 additional_query = f"""
                     SELECT detection.id AS detection_id,
@@ -1139,12 +1137,10 @@ class DetectionRepository:
                     (run_id,),
                 )
             else:
-                rows = connection.execute(
-                    """
+                rows = connection.execute("""
                     SELECT DISTINCT recording_id FROM detection
                     ORDER BY recording_id
-                    """
-                )
+                    """)
             return tuple(row["recording_id"] for row in rows)
         finally:
             connection.close()

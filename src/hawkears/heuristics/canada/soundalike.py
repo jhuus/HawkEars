@@ -254,7 +254,9 @@ class SoundAlikeHeuristics:
                         np.ones(window),
                         mode="full",
                     )
-                    soundalike_count = full_count[defn.frame_distance : defn.frame_distance + n]
+                    soundalike_count = full_count[
+                        defn.frame_distance : defn.frame_distance + n
+                    ]
 
                     # soundalike_mask will be True for every entry where there
                     # are "too many" soundalike frames above the

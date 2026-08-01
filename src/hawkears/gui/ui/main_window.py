@@ -1,5 +1,7 @@
 """Main window and the first-pass HawkEars desktop workflow."""
 
+# mypy: disable-error-code="arg-type,call-overload,union-attr,assignment,attr-defined"
+
 import csv
 import importlib.util
 from pathlib import Path
@@ -131,11 +133,11 @@ class NumericTableWidgetItem(QTableWidgetItem):
 
     def __init__(self, value: float, decimals: int = 1) -> None:
         super().__init__(f"{value:.{decimals}f}")
-        self.setData(Qt.UserRole, value)
+        self.setData(Qt.ItemDataRole.UserRole, value)
 
     def __lt__(self, other: QTableWidgetItem) -> bool:
-        left = self.data(Qt.UserRole)
-        right = other.data(Qt.UserRole)
+        left = self.data(Qt.ItemDataRole.UserRole)
+        right = other.data(Qt.ItemDataRole.UserRole)
         if left is not None and right is not None:
             return float(left) < float(right)
         return super().__lt__(other)
@@ -452,9 +454,7 @@ class AnalysisPage(QWidget):
         self.segment_length_label = QLabel(self.tr("Fixed segment length"))
         self.segment_length_label.setEnabled(False)
         form.addRow(self.segment_length_label, self.segment_length)
-        self.max_label_length_label = QLabel(
-            self.tr("Maximum variable label length")
-        )
+        self.max_label_length_label = QLabel(self.tr("Maximum variable label length"))
         form.addRow(self.max_label_length_label, self.max_label_length)
         settings.addLayout(form)
         settings.addWidget(section_title(self.tr("Location")))
@@ -611,9 +611,7 @@ class AnalysisPage(QWidget):
             "max_models": self.models.value(),
             "num_threads": self.threads.value(),
             "segment_len": self.segment_length.value() if fixed_length else None,
-            "max_label_length": (
-                maximum if not fixed_length and maximum > 0 else None
-            ),
+            "max_label_length": (maximum if not fixed_length and maximum > 0 else None),
             "location": dict(self._location_settings),
         }
 
@@ -666,12 +664,8 @@ class AnalysisPage(QWidget):
         fixed_length = self.output.currentData() == "fixed"
         self.segment_length.setEnabled(self._editable and fixed_length)
         self.segment_length_label.setEnabled(self._editable and fixed_length)
-        self.max_label_length.setEnabled(
-            self._editable and not fixed_length
-        )
-        self.max_label_length_label.setEnabled(
-            self._editable and not fixed_length
-        )
+        self.max_label_length.setEnabled(self._editable and not fixed_length)
+        self.max_label_length_label.setEnabled(self._editable and not fixed_length)
 
     def _start_run(self) -> None:
         if not self._scope_ready or self._running:
@@ -903,9 +897,9 @@ class ResultsPage(QWidget):
             ]
         )
         self.table.setAlternatingRowColors(True)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSortingEnabled(True)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
@@ -1072,7 +1066,7 @@ class ResultsPage(QWidget):
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                item.setData(Qt.UserRole, detection.detection_id)
+                item.setData(Qt.ItemDataRole.UserRole, detection.detection_id)
                 self.table.setItem(row, column, item)
         self.table.setSortingEnabled(not preserve_order)
         if not preserve_order:
@@ -1147,11 +1141,11 @@ class ResultsPage(QWidget):
                 return
             row = visible_rows[0]
         item = self.table.item(row, 0)
-        self.review_requested.emit(int(item.data(Qt.UserRole)))
+        self.review_requested.emit(int(item.data(Qt.ItemDataRole.UserRole)))
 
     def next_visible_detection_id(self, detection_id: int) -> int | None:
         visible_ids = [
-            int(self.table.item(row, 0).data(Qt.UserRole))
+            int(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole))
             for row in range(self.table.rowCount())
             if not self.table.isRowHidden(row)
         ]
@@ -1166,7 +1160,7 @@ class ResultsPage(QWidget):
     def first_visible_detection_id(self) -> int | None:
         for row in range(self.table.rowCount()):
             if not self.table.isRowHidden(row):
-                return int(self.table.item(row, 0).data(Qt.UserRole))
+                return int(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole))
         return None
 
 
@@ -1213,7 +1207,7 @@ class SpectrogramView(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setMinimumHeight(280)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._pixmap: QPixmap | None = None
         self._data: ReviewSpectrogram | None = None
         self._detection_start = 0.0
@@ -2080,9 +2074,7 @@ class ReportsPage(QWidget):
         self.label_export_button.setEnabled(False)
         self.label_export_button.clicked.connect(self.label_export_requested)
         filters.addWidget(self.label_export_button)
-        self.review_export_button = QPushButton(
-            self.tr("Export reviewed detections…")
-        )
+        self.review_export_button = QPushButton(self.tr("Export reviewed detections…"))
         self.review_export_button.setEnabled(False)
         self.review_export_button.clicked.connect(self.review_export_requested)
         filters.addWidget(self.review_export_button)
@@ -2131,10 +2123,12 @@ class ReportsPage(QWidget):
             ]
         )
         self.processing_table.setAlternatingRowColors(True)
-        self.processing_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.processing_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
         self.processing_table.setSortingEnabled(True)
         self.processing_table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.Stretch
+            0, QHeaderView.ResizeMode.Stretch
         )
         self.processing_table.setColumnWidth(2, 125)
         processing_layout.addWidget(self.processing_table)
@@ -2154,11 +2148,15 @@ class ReportsPage(QWidget):
                 self.tr("Remaining"),
             ]
         )
-        self.queue_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.queue_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.queue_table.setAlternatingRowColors(True)
         self.queue_table.setSortingEnabled(True)
-        self.queue_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.queue_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.queue_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch
+        )
+        self.queue_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
         queue_layout.addWidget(self.queue_table)
         self.queue_report.setVisible(False)
         outer.addWidget(self.queue_report)
@@ -2189,8 +2187,10 @@ class ReportsPage(QWidget):
         )
         self.table.setAlternatingRowColors(True)
         self.table.setSortingEnabled(True)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch
+        )
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         report_layout.addWidget(self.table)
         validated, validated_layout = card_layout()
         validated_header = QHBoxLayout()
@@ -2235,7 +2235,9 @@ class ReportsPage(QWidget):
         validated_layout.addWidget(validated_note)
         self.validated_table = QTableWidget(0, 0)
         self.validated_table.setAlternatingRowColors(True)
-        self.validated_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.validated_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
         self.validated_table.setSortingEnabled(True)
         validated_layout.addWidget(self.validated_table)
 
@@ -2325,11 +2327,11 @@ class ReportsPage(QWidget):
                     item = NumericTableWidgetItem(float(value), decimal_columns[column])
                 else:
                     item = QTableWidgetItem()
-                    item.setData(Qt.DisplayRole, value)
+                    item.setData(Qt.ItemDataRole.DisplayRole, value)
                 self.validated_table.setItem(row_number, column_number, item)
         if report.columns:
             self.validated_table.horizontalHeader().setSectionResizeMode(
-                0, QHeaderView.Stretch
+                0, QHeaderView.ResizeMode.Stretch
             )
         self.validated_table.setSortingEnabled(True)
         self.validated_export_button.setEnabled(bool(report.rows))
@@ -2367,7 +2369,7 @@ class ReportsPage(QWidget):
                     table_item = NumericTableWidgetItem(float(value))
                 else:
                     table_item = QTableWidgetItem()
-                    table_item.setData(Qt.DisplayRole, value)
+                    table_item.setData(Qt.ItemDataRole.DisplayRole, value)
                 self.table.setItem(row, column, table_item)
         self.table.setSortingEnabled(True)
         self.export_button.setEnabled(bool(summary.species))
@@ -2397,7 +2399,7 @@ class ReportsPage(QWidget):
                     table_item = NumericTableWidgetItem(float(value))
                 else:
                     table_item = QTableWidgetItem()
-                    table_item.setData(Qt.DisplayRole, value)
+                    table_item.setData(Qt.ItemDataRole.DisplayRole, value)
                 self.processing_table.setItem(row, column, table_item)
         self.processing_table.setSortingEnabled(True)
         self.processing_report.setVisible(bool(summaries))
@@ -2416,7 +2418,7 @@ class ReportsPage(QWidget):
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem()
-                item.setData(Qt.DisplayRole, value)
+                item.setData(Qt.ItemDataRole.DisplayRole, value)
                 self.queue_table.setItem(row, column, item)
         self.queue_table.setSortingEnabled(True)
         self.queue_report.setVisible(bool(queues))
@@ -2487,7 +2489,9 @@ class ReportsPage(QWidget):
                     values = []
                     for column in range(self.validated_table.columnCount()):
                         item = self.validated_table.item(row, column)
-                        numeric_value = item.data(Qt.UserRole) if item else None
+                        numeric_value = (
+                            item.data(Qt.ItemDataRole.UserRole) if item else None
+                        )
                         values.append(
                             numeric_value
                             if numeric_value is not None
@@ -2715,11 +2719,7 @@ class MainWindow(QMainWindow):
         directory = self._application_paths.projects_directory
         if create:
             directory.mkdir(parents=True, exist_ok=True)
-        return (
-            directory
-            if directory.is_dir()
-            else self._application_paths.data_root
-        )
+        return directory if directory.is_dir() else self._application_paths.data_root
 
     def _activate_project(self, name: str, *, database: ProjectDatabase) -> None:
         self._project_open = True
@@ -3336,9 +3336,7 @@ class MainWindow(QMainWindow):
     def _export_audio_labels(self) -> None:
         if self._database is None or self._export_thread is not None:
             return
-        dialog = LabelExportDialog(
-            self.reports_page.current_run_label(), parent=self
-        )
+        dialog = LabelExportDialog(self.reports_page.current_run_label(), parent=self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         output_directory = QFileDialog.getExistingDirectory(

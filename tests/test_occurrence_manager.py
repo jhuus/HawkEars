@@ -1,6 +1,8 @@
 from pathlib import Path
+from types import SimpleNamespace
 import zipfile
 
+import numpy as np
 from britekit.core.util import set_logging
 
 from hawkears.core.class_manager import ClassManager
@@ -72,3 +74,46 @@ def test_compact_packaged_occurrence_data(tmp_path):
     assert occurrence_manager.provider.format_version == 2
     value = occurrence_manager.get_value("recording.mp3", "Ovenbird")
     assert 0 < value < 1
+
+
+class _EmptyRegionProvider:
+    format_version = 2
+    class_names = {"Test species"}
+    counties = [
+        SimpleNamespace(index=0, code="XX-EMPTY"),
+        SimpleNamespace(index=1, code="XX-FULL"),
+    ]
+    area_offsets = np.array([0, 0, 1])
+
+    def find_counties(self, region_code):
+        return [
+            county for county in self.counties if county.code.startswith(region_code)
+        ]
+
+    def occurrence_value(self, class_name, region_code, week_num):
+        return True, False, None
+
+
+def _occurrence_manager_for_region(region):
+    manager = OccurrenceManager.__new__(OccurrenceManager)
+    manager.cfg = SimpleNamespace(hawkears=SimpleNamespace(region=region, date=None))
+    manager.class_mgr = SimpleNamespace(name_dict={"Test species": object()})
+    manager.provider = _EmptyRegionProvider()
+    manager.class_name_set = manager.provider.class_names
+    manager._region_has_data_cache = {}
+    manager.logged_location_error = False
+    manager.file_info = None
+    manager.week_num = None
+    return manager
+
+
+def test_species_is_allowed_when_region_has_no_occurrence_data():
+    manager = _occurrence_manager_for_region("XX-EMPTY")
+
+    assert manager.get_value("recording.mp3", "Test species") == 1.0
+
+
+def test_absent_species_is_filtered_when_region_has_other_occurrence_data():
+    manager = _occurrence_manager_for_region("XX-FULL")
+
+    assert manager.get_value("recording.mp3", "Test species") == 0.0

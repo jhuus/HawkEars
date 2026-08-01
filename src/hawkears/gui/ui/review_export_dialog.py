@@ -54,8 +54,8 @@ class ReviewExportDialog(QDialog):
 
         self.queue = QComboBox()
         self.queue.addItem(self.tr("Any queue (no filter)"), None)
-        for item in queues:
-            self.queue.addItem(item.name, item.id)
+        for queue in queues:
+            self.queue.addItem(queue.name, queue.id)
         form.addRow(self.tr("Review queue"), self.queue)
         layout.addLayout(form)
 

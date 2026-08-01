@@ -6,7 +6,6 @@ from typing import Callable
 import pandas as pd
 import soundfile as sf
 
-
 SpeciesMetadata = tuple[str, str | None, str | None, str | None]
 
 
@@ -38,22 +37,16 @@ def write_raven_selection_table(
         label = str(row.name)
         row_low_frequency = getattr(row, "low_frequency_hz", None)
         row_high_frequency = getattr(row, "high_frequency_hz", None)
-        effective_low = (
-            row_low_frequency
-            if pd.notna(row_low_frequency)
-            else low_frequency
+        effective_low = float(
+            str(row_low_frequency if pd.notna(row_low_frequency) else low_frequency)
         )
-        effective_high = (
-            row_high_frequency
-            if pd.notna(row_high_frequency)
-            else high_frequency
+        effective_high = float(
+            str(row_high_frequency if pd.notna(row_high_frequency) else high_frequency)
         )
         if nyquist:
             effective_high = min(effective_high, nyquist)
         common_name, scientific_name, species_code, ebird_code = (
-            species_metadata(label)
-            if species_metadata
-            else (label, None, None, None)
+            species_metadata(label) if species_metadata else (label, None, None, None)
         )
         rows.append(
             {

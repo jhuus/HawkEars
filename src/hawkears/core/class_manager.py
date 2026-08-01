@@ -21,6 +21,7 @@ class ClassManager:
         and dicts from name/code/alt_name, alt_code to ClassInfo.
         """
         self.cfg = cfg
+        self.include_set: set[str] | None
 
         try:
             if include_names is not None:
