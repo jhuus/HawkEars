@@ -12,6 +12,11 @@ def brand_icon_path() -> str:
     return str(files(__package__).joinpath("hawkears-icon.svg"))
 
 
+def image_path(name: str) -> str:
+    """Return a stylesheet-safe path to a packaged interface image."""
+    return str(files(__package__).joinpath(name)).replace("\\", "/")
+
+
 def brand_pixmap(width: int, height: int) -> QPixmap:
     """Render the brand SVG without relying on an image-format plugin."""
     renderer = QSvgRenderer(brand_icon_path())

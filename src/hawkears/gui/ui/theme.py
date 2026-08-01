@@ -1,5 +1,8 @@
 """Application-wide visual styling."""
 
+from hawkears.gui.ui.resources import image_path
+
+
 STYLESHEET = """
 QWidget {
     color: #2f211f;
@@ -127,6 +130,16 @@ QSpinBox::down-button, QDoubleSpinBox::down-button {
     border-left: 1px solid #d5c9c2;
     border-bottom-right-radius: 6px;
 }
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+    image: url("__SPIN_UP__");
+    width: 9px;
+    height: 6px;
+}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+    image: url("__SPIN_DOWN__");
+    width: 9px;
+    height: 6px;
+}
 QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
     border-color: #4f1612;
 }
@@ -156,3 +169,7 @@ QProgressBar {
 QProgressBar::chunk { background: #fbb040; border-radius: 5px; }
 QSplitter::handle { background: #e3d9d2; width: 1px; }
 """
+
+STYLESHEET = STYLESHEET.replace("__SPIN_UP__", image_path("spin-up.svg")).replace(
+    "__SPIN_DOWN__", image_path("spin-down.svg")
+)

@@ -409,8 +409,8 @@ class AnalysisPage(QWidget):
         self.threshold.setValue(0.6)
         self.threshold.setDecimals(2)
         self.models = QSpinBox()
-        self.models.setRange(1, 20)
-        self.models.setValue(9)
+        self.models.setRange(1, 9)
+        self.models.setValue(6)
         self.threads = QSpinBox()
         self.threads.setRange(1, 32)
         self.threads.setValue(3)
@@ -511,7 +511,7 @@ class AnalysisPage(QWidget):
     ) -> None:
         self._loading = True
         self.threshold.setValue(float(settings.get("min_score", 0.6)))
-        self.models.setValue(int(settings.get("max_models", 9)))
+        self.models.setValue(int(settings.get("max_models", 6)))
         self.threads.setValue(int(settings.get("num_threads", 3)))
         segment_len = settings.get("segment_len")
         output_index = self.output.findData(segment_len)

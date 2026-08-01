@@ -118,7 +118,7 @@ class AnalysisRunner(QObject):
                 max_label_length=self._optional_float(
                     self.settings.get("max_label_length")
                 ),
-                max_models=int(self.settings.get("max_models", 9)),
+                max_models=int(self.settings.get("max_models", 6)),
                 label_field="names",
                 recurse=self.recurse,
                 quiet=True,
