@@ -35,6 +35,8 @@ Assert-LastExitCode "Upgrading pip"
     torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 `
     --index-url https://download.pytorch.org/whl/cu126
 Assert-LastExitCode "Installing CUDA 12.6 PyTorch"
+& $Python -m pip install openvino==2026.2.1
+Assert-LastExitCode "Installing OpenVINO"
 
 if ($BriteKitPath) {
     & $Python -m pip install $BriteKitPath
@@ -90,6 +92,7 @@ Assert-LastExitCode "Recording the Windows build environment"
     --include-package=scipy._external.array_api_compat `
     --include-package=librosa.util.example_data `
     --include-package-data=librosa.util.example_data `
+    --include-package=openvino `
     --include-package-data=hawkears `
     --windows-console-mode=disable `
     --windows-icon-from-ico=$Icon `

@@ -67,7 +67,7 @@ def location_summary(
         return QCoreApplication.translate(
             "LocationDialog", "Per-recording locations: %1"
         ).replace("%1", filename)
-    return QCoreApplication.translate("LocationDialog", "No location filtering")
+    return QCoreApplication.translate("LocationDialog", "No location logic")
 
 
 def _date_summary(settings: Mapping[str, object]) -> str:
@@ -109,7 +109,7 @@ class LocationDialog(QDialog):
 
         source_form = QFormLayout()
         self.mode = QComboBox()
-        self.mode.addItem(self.tr("No location filtering"), "none")
+        self.mode.addItem(self.tr("No location logic"), "none")
         self.mode.addItem(self.tr("Global latitude and longitude"), "coordinates")
         self.mode.addItem(self.tr("eBird region"), "region")
         self.mode.addItem(self.tr("Per-recording file list"), "filelist")

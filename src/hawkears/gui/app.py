@@ -121,6 +121,7 @@ def _run_packaging_smoke_test() -> int:
     import sys
 
     import torch
+    import openvino as ov
     from PySide6.QtCore import qVersion
     from PySide6.QtSvg import QSvgRenderer
 
@@ -145,6 +146,9 @@ def _run_packaging_smoke_test() -> int:
         raise RuntimeError("BriteKit inference models are unavailable.")
     if "lightning" in sys.modules or "torchmetrics" in sys.modules:
         raise RuntimeError("Training dependencies leaked into the inference bundle.")
+    openvino_core = ov.Core()
+    if "CPU" not in openvino_core.available_devices:
+        raise RuntimeError("OpenVINO cannot access a CPU inference device.")
     heuristics_path = get_config().hawkears.heuristics_manager
     if heuristics_path:
         module_name, class_name = heuristics_path.rsplit(".", 1)
@@ -176,7 +180,8 @@ def _run_packaging_smoke_test() -> int:
         )
     print(
         f"HawkEars packaging smoke test passed: Qt {qVersion()}, "
-        f"torch {torch.__version__}, CUDA runtime {torch.version.cuda}"
+        f"torch {torch.__version__}, CUDA runtime {torch.version.cuda}, "
+        f"OpenVINO {ov.__version__}"
     )
     return 0
 

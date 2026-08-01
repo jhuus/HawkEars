@@ -30,7 +30,7 @@ def test_canadian_location_catalog_hierarchy():
 def test_location_summaries():
     catalog = LocationCatalog(Path("data/locations.db"))
 
-    assert location_summary({"mode": "none"}, catalog) == "No location filtering"
+    assert location_summary({"mode": "none"}, catalog) == "No location logic"
     assert (
         location_summary(
             {"mode": "coordinates", "latitude": 45.4215, "longitude": -75.6972},

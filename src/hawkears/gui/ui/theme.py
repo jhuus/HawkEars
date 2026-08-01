@@ -59,6 +59,7 @@ QPushButton[nav="true"]:disabled {
 #metricValue { color: #4f1612; font-size: 19pt; font-weight: 700; }
 #muted { color: #786b67; }
 QLabel:disabled { color: #a39792; }
+QMenu::item:disabled { color: #a39792; }
 QFrame[card="true"] {
     background: white;
     border: 1px solid #e5dcd4;
@@ -140,6 +141,17 @@ QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
     width: 9px;
     height: 6px;
 }
+QSpinBox:disabled, QDoubleSpinBox:disabled {
+    background: #eee9e5;
+    border-color: #ddd4ce;
+    color: #9b918c;
+}
+QSpinBox::up-arrow:disabled, QDoubleSpinBox::up-arrow:disabled {
+    image: url("__SPIN_UP_DISABLED__");
+}
+QSpinBox::down-arrow:disabled, QDoubleSpinBox::down-arrow:disabled {
+    image: url("__SPIN_DOWN_DISABLED__");
+}
 QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
     border-color: #4f1612;
 }
@@ -170,6 +182,9 @@ QProgressBar::chunk { background: #fbb040; border-radius: 5px; }
 QSplitter::handle { background: #e3d9d2; width: 1px; }
 """
 
-STYLESHEET = STYLESHEET.replace("__SPIN_UP__", image_path("spin-up.svg")).replace(
-    "__SPIN_DOWN__", image_path("spin-down.svg")
+STYLESHEET = (
+    STYLESHEET.replace("__SPIN_UP__", image_path("spin-up.svg"))
+    .replace("__SPIN_DOWN__", image_path("spin-down.svg"))
+    .replace("__SPIN_UP_DISABLED__", image_path("spin-up-disabled.svg"))
+    .replace("__SPIN_DOWN_DISABLED__", image_path("spin-down-disabled.svg"))
 )

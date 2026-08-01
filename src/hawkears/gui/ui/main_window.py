@@ -1,6 +1,7 @@
 """Main window and the first-pass HawkEars desktop workflow."""
 
 import csv
+import importlib.util
 from pathlib import Path
 import json
 import logging
@@ -59,6 +60,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from britekit.core import util
 from hawkears.gui.database import InvalidProjectError, MigrationError, ProjectDatabase
 from hawkears.core.app_paths import ApplicationPaths, resolve_application_paths
 from hawkears.gui.database.records import (
@@ -403,6 +405,17 @@ class AnalysisPage(QWidget):
         settings_card, settings = card_layout()
         settings.addWidget(section_title(self.tr("Inference settings")))
         form = QFormLayout()
+        device = util.get_device()
+        if device == "cuda":
+            device_name = self.tr("GPU (CUDA)")
+        elif device == "mps":
+            device_name = self.tr("Apple MPS")
+        elif importlib.util.find_spec("openvino") is not None:
+            device_name = self.tr("CPU (OpenVINO)")
+        else:
+            device_name = self.tr("CPU (PyTorch)")
+        self.inference_device = QLabel(device_name)
+        self.inference_device.setObjectName("muted")
         self.threshold = QDoubleSpinBox()
         self.threshold.setRange(0, 1)
         self.threshold.setSingleStep(0.05)
@@ -416,21 +429,34 @@ class AnalysisPage(QWidget):
         self.threads.setValue(3)
         self.output = QComboBox()
         self.output.addItem(self.tr("Variable-length labels"), None)
-        self.output.addItem(self.tr("3-second segments"), 3.0)
-        self.output.addItem(self.tr("5-second segments"), 5.0)
+        self.output.addItem(self.tr("Fixed-length segments"), "fixed")
+        self.segment_length = QDoubleSpinBox()
+        self.segment_length.setRange(0.5, 600)
+        self.segment_length.setSingleStep(0.5)
+        self.segment_length.setDecimals(1)
+        self.segment_length.setValue(3.0)
+        self.segment_length.setSuffix(self.tr(" seconds"))
+        self.segment_length.setEnabled(False)
         self.max_label_length = QDoubleSpinBox()
         self.max_label_length.setRange(0, 600)
         self.max_label_length.setDecimals(0)
         self.max_label_length.setSuffix(self.tr(" seconds"))
         self.max_label_length.setSpecialValueText(self.tr("No limit"))
+        form.addRow(self.tr("Inference device"), self.inference_device)
         form.addRow(self.tr("Minimum score"), self.threshold)
         form.addRow(self.tr("Ensemble models"), self.models)
         form.addRow(self.tr("Worker threads"), self.threads)
         form.addRow(self.tr("Label format"), self.output)
-        form.addRow(self.tr("Maximum variable label length"), self.max_label_length)
+        self.segment_length_label = QLabel(self.tr("Fixed segment length"))
+        self.segment_length_label.setEnabled(False)
+        form.addRow(self.segment_length_label, self.segment_length)
+        self.max_label_length_label = QLabel(
+            self.tr("Maximum variable label length")
+        )
+        form.addRow(self.max_label_length_label, self.max_label_length)
         settings.addLayout(form)
         settings.addWidget(section_title(self.tr("Location")))
-        self.location_summary = QLabel(self.tr("No location filtering"))
+        self.location_summary = QLabel(self.tr("No location logic"))
         self.location_summary.setWordWrap(True)
         self.location_summary.setObjectName("muted")
         settings.addWidget(self.location_summary)
@@ -444,6 +470,7 @@ class AnalysisPage(QWidget):
             self.models,
             self.threads,
             self.output,
+            self.segment_length,
             self.max_label_length,
             self.location_button,
         )
@@ -497,6 +524,7 @@ class AnalysisPage(QWidget):
         self.models.valueChanged.connect(self._emit_settings)
         self.threads.valueChanged.connect(self._emit_settings)
         self.output.currentIndexChanged.connect(self._label_format_changed)
+        self.segment_length.valueChanged.connect(self._emit_settings)
         self.max_label_length.valueChanged.connect(self._emit_settings)
 
     def configure(
@@ -514,8 +542,10 @@ class AnalysisPage(QWidget):
         self.models.setValue(int(settings.get("max_models", 6)))
         self.threads.setValue(int(settings.get("num_threads", 3)))
         segment_len = settings.get("segment_len")
-        output_index = self.output.findData(segment_len)
-        self.output.setCurrentIndex(max(0, output_index))
+        self.output.setCurrentIndex(1 if segment_len is not None else 0)
+        self.segment_length.setValue(
+            float(segment_len) if segment_len is not None else 3.0
+        )
         maximum = settings.get("max_label_length")
         self.max_label_length.setValue(float(maximum) if maximum is not None else 0)
         location = settings.get("location", {"mode": "none"})
@@ -530,7 +560,7 @@ class AnalysisPage(QWidget):
         self._editable = editable
         for control in self.settings_controls:
             control.setEnabled(editable)
-        self._update_max_label_control()
+        self._update_label_controls()
 
         missing: list[str] = []
         if recording_directory is None:
@@ -573,13 +603,14 @@ class AnalysisPage(QWidget):
 
     def current_settings(self) -> dict[str, object]:
         maximum = self.max_label_length.value()
+        fixed_length = self.output.currentData() == "fixed"
         return {
             "min_score": self.threshold.value(),
             "max_models": self.models.value(),
             "num_threads": self.threads.value(),
-            "segment_len": self.output.currentData(),
+            "segment_len": self.segment_length.value() if fixed_length else None,
             "max_label_length": (
-                maximum if self.output.currentData() is None and maximum > 0 else None
+                maximum if not fixed_length and maximum > 0 else None
             ),
             "location": dict(self._location_settings),
         }
@@ -626,12 +657,18 @@ class AnalysisPage(QWidget):
             self.settings_changed.emit(self.current_settings())
 
     def _label_format_changed(self) -> None:
-        self._update_max_label_control()
+        self._update_label_controls()
         self._emit_settings()
 
-    def _update_max_label_control(self) -> None:
+    def _update_label_controls(self) -> None:
+        fixed_length = self.output.currentData() == "fixed"
+        self.segment_length.setEnabled(self._editable and fixed_length)
+        self.segment_length_label.setEnabled(self._editable and fixed_length)
         self.max_label_length.setEnabled(
-            self._editable and self.output.currentData() is None
+            self._editable and not fixed_length
+        )
+        self.max_label_length_label.setEnabled(
+            self._editable and not fixed_length
         )
 
     def _start_run(self) -> None:
@@ -2582,12 +2619,13 @@ class MainWindow(QMainWindow):
         open_action = QAction(self.tr("Open project…"), self)
         open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self._open_project)
-        close_action = QAction(self.tr("Close project"), self)
-        close_action.triggered.connect(self._close_project)
+        self.close_project_action = QAction(self.tr("Close project"), self)
+        self.close_project_action.setEnabled(False)
+        self.close_project_action.triggered.connect(self._close_project)
         quit_action = QAction(self.tr("Quit"), self)
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(QApplication.quit)
-        file_menu.addActions([new_action, open_action, close_action])
+        file_menu.addActions([new_action, open_action, self.close_project_action])
         file_menu.addSeparator()
         file_menu.addAction(quit_action)
 
@@ -2667,6 +2705,7 @@ class MainWindow(QMainWindow):
 
     def _activate_project(self, name: str, *, database: ProjectDatabase) -> None:
         self._project_open = True
+        self.close_project_action.setEnabled(True)
         self._database = database
         self._remember_project(database.path)
         self._refresh_welcome_recent_projects()
@@ -2915,6 +2954,7 @@ class MainWindow(QMainWindow):
         if not self._project_open:
             return
         self._project_open = False
+        self.close_project_action.setEnabled(False)
         self._database = None
         self.setWindowTitle("HawkEars")
         self.project_chip.setText(self.tr("NO PROJECT\nCreate or open…"))
