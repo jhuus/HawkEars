@@ -31,12 +31,25 @@ def write_raven_selection_table(
     """Write one recording's detections as a Raven-compatible selection table."""
     source_path = recording_path.expanduser().resolve()
     nyquist = recording_nyquist(source_path)
-    upper_frequency = min(high_frequency, nyquist) if nyquist else high_frequency
     df = dataframe.sort_values(["name", "start_time"], kind="stable")
 
     rows: list[dict[str, object]] = []
     for selection, row in enumerate(df.itertuples(index=False), start=1):
         label = str(row.name)
+        row_low_frequency = getattr(row, "low_frequency_hz", None)
+        row_high_frequency = getattr(row, "high_frequency_hz", None)
+        effective_low = (
+            row_low_frequency
+            if pd.notna(row_low_frequency)
+            else low_frequency
+        )
+        effective_high = (
+            row_high_frequency
+            if pd.notna(row_high_frequency)
+            else high_frequency
+        )
+        if nyquist:
+            effective_high = min(effective_high, nyquist)
         common_name, scientific_name, species_code, ebird_code = (
             species_metadata(label)
             if species_metadata
@@ -56,8 +69,8 @@ def write_raven_selection_table(
                 "Species": label,
                 "Confidence": row.score,
                 "File Offset (s)": row.start_time,
-                "Low Freq (Hz)": low_frequency,
-                "High Freq (Hz)": upper_frequency,
+                "Low Freq (Hz)": effective_low,
+                "High Freq (Hz)": effective_high,
                 "Begin File": source_path.name,
                 "Begin Path": str(source_path),
             }

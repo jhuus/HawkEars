@@ -518,6 +518,91 @@ def test_validated_reports_include_confirmed_corrections(tmp_path: Path):
     assert {row[0] for row in queue_reviews.rows} == {accepted.id, correction.id}
 
 
+def test_label_export_applies_current_reviews_and_preserves_originals(tmp_path: Path):
+    database = create_project(tmp_path)
+    predicted = database.species.add("Alder Flycatcher", species_code="ALFL")
+    corrected = database.species.add(
+        "Common Nighthawk",
+        scientific_name="Chordeiles minor",
+        species_code="CONI",
+        ebird_code="comnig",
+    )
+    additional = database.species.add("Common Yellowthroat", species_code="COYE")
+    recording = database.recordings.add(
+        tmp_path / "night.wav", sample_rate=16_000
+    )
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {"min_score": 0.6},
+        species_ids=[predicted.id, corrected.id],
+        recording_ids=[recording.id],
+    )
+    item_id = database.analysis.item_ids(run_id)[recording.id]
+
+    accepted = database.detections.create_inferred(
+        recording.id, item_id, corrected.id, 1_000, 4_000, 0.91
+    )
+    correction = database.detections.create_inferred(
+        recording.id, item_id, predicted.id, 5_000, 8_000, 0.74
+    )
+    rejected = database.detections.create_inferred(
+        recording.id, item_id, predicted.id, 9_000, 12_000, 0.72
+    )
+    uncertain = database.detections.create_inferred(
+        recording.id, item_id, predicted.id, 13_000, 16_000, 0.68
+    )
+    unreviewed = database.detections.create_inferred(
+        recording.id, item_id, predicted.id, 17_000, 20_000, 0.66
+    )
+    database.detections.set_review(accepted.id, ReviewVerdict.CORRECT)
+    database.detections.revise(
+        correction.id,
+        species_id=corrected.id,
+        start_ms=4_900,
+        frequency_bounds=(1_000, 7_000),
+    )
+    database.detections.set_review(correction.id, ReviewVerdict.INCORRECT)
+    database.detections.set_review(rejected.id, ReviewVerdict.INCORRECT)
+    database.detections.add_additional_species(rejected.id, additional.id)
+    database.detections.set_review(uncertain.id, ReviewVerdict.UNCERTAIN)
+
+    current = database.detections.label_export(run_id=run_id)
+    assert {(row.detection_id, row.species_name) for row in current} == {
+        (accepted.id, "Common Nighthawk"),
+        (correction.id, "Common Nighthawk"),
+        (rejected.id, "Common Yellowthroat"),
+        (uncertain.id, "Alder Flycatcher"),
+        (unreviewed.id, "Alder Flycatcher"),
+    }
+    corrected_row = next(row for row in current if row.detection_id == correction.id)
+    assert corrected_row.start_ms == 4_900
+    assert corrected_row.score is None
+    assert corrected_row.high_frequency_hz == 7_000
+    additional_row = next(row for row in current if row.additional_species)
+    assert additional_row.score is None
+
+    original = database.detections.label_export(
+        run_id=run_id,
+        revision_mode="original",
+        include_unreviewed=False,
+        include_uncertain=False,
+        include_rejected=False,
+    )
+    assert {row.detection_id for row in original} == {
+        accepted.id,
+        correction.id,
+        rejected.id,
+        uncertain.id,
+        unreviewed.id,
+    }
+    original_correction = next(
+        row for row in original if row.detection_id == correction.id
+    )
+    assert original_correction.species_name == "Alder Flycatcher"
+    assert original_correction.start_ms == 5_000
+    assert original_correction.score == 0.74
+
+
 def test_review_queue_applies_score_spacing_and_recording_limit(tmp_path: Path):
     database = create_project(tmp_path)
     species = database.species.add("Common Nighthawk")

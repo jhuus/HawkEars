@@ -39,6 +39,8 @@ def test_raven_table_has_file_and_species_metadata_and_clamps_frequency(
                 "start_time": 1.25,
                 "end_time": 4.25,
                 "score": 0.912345,
+                "low_frequency_hz": 500,
+                "high_frequency_hz": 9000,
             }
         ]
     )
@@ -63,6 +65,7 @@ def test_raven_table_has_file_and_species_metadata_and_clamps_frequency(
     assert result.loc[0, "Selection"] == 1
     assert result.loc[0, "View"] == "Spectrogram 1"
     assert result.loc[0, "File Offset (s)"] == 1.25
+    assert result.loc[0, "Low Freq (Hz)"] == 500
     assert result.loc[0, "High Freq (Hz)"] == 8000
     assert result.loc[0, "Common Name"] == "Common Yellowthroat"
     assert result.loc[0, "Scientific Name"] == "Geothlypis trichas"

@@ -261,3 +261,25 @@ class ReviewedDetectionExport:
 
     columns: tuple[str, ...]
     rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class LabelExportDetection:
+    """One resolved annotation row for Audacity or Raven export."""
+
+    detection_id: int
+    recording_id: int
+    recording_path: str
+    recording_path_type: PathType
+    recording_name: str
+    sample_rate: Optional[int]
+    species_name: str
+    scientific_name: Optional[str]
+    species_code: Optional[str]
+    ebird_code: Optional[str]
+    score: Optional[float]
+    start_ms: int
+    end_ms: int
+    low_frequency_hz: Optional[int]
+    high_frequency_hz: Optional[int]
+    additional_species: bool

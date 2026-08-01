@@ -10,6 +10,8 @@ from hawkears.gui.database.records import (
     DetectionResult,
     DetectionRevision,
     DetectionSource,
+    LabelExportDetection,
+    PathType,
     ReportSummary,
     ReviewedDetectionExport,
     ReviewVerdict,
@@ -954,6 +956,196 @@ class DetectionRepository:
                 for row in connection.execute(query, parameters)
             )
             return ReviewedDetectionExport(columns, rows)
+        finally:
+            connection.close()
+
+    def label_export(
+        self,
+        *,
+        run_id: Optional[int] = None,
+        revision_mode: str = "current",
+        include_unreviewed: bool = True,
+        include_uncertain: bool = True,
+        include_rejected: bool = False,
+    ) -> tuple[LabelExportDetection, ...]:
+        """Return normalized annotations for Audacity and Raven exports."""
+        if revision_mode not in {"current", "original"}:
+            raise ValueError(f"Unknown label export revision mode: {revision_mode}")
+
+        selected_join = (
+            "JOIN detection_revision AS selected "
+            "ON selected.id = detection.current_revision_id"
+            if revision_mode == "current"
+            else "JOIN detection_revision AS selected "
+            "ON selected.detection_id = detection.id "
+            "AND selected.revision_number = 1"
+        )
+        conditions: list[str] = []
+        parameters: list[object] = []
+        if run_id is not None:
+            conditions.append("analysis_item.analysis_run_id = ?")
+            parameters.append(run_id)
+        if revision_mode == "current":
+            review_conditions = ["review.verdict = 'correct'"]
+            if include_unreviewed:
+                review_conditions.append("review.id IS NULL")
+            if include_uncertain:
+                review_conditions.append("review.verdict = 'uncertain'")
+            if include_rejected:
+                review_conditions.append("review.verdict = 'incorrect'")
+            else:
+                review_conditions.append(
+                    "(review.verdict = 'incorrect' "
+                    "AND selected.species_id != original.species_id)"
+                )
+            conditions.append("(" + " OR ".join(review_conditions) + ")")
+        where_clause = ""
+        if conditions:
+            where_clause = "WHERE " + " AND ".join(conditions)
+
+        score_expression = (
+            "CASE WHEN selected.species_id = original.species_id "
+            "THEN detection.score END"
+            if revision_mode == "current"
+            else "detection.score"
+        )
+        query = f"""
+            SELECT detection.id AS detection_id,
+                   recording.id AS recording_id,
+                   recording.path AS recording_path,
+                   recording.path_type AS recording_path_type,
+                   recording.display_name AS recording_name,
+                   recording.sample_rate,
+                   species.common_name AS species_name,
+                   species.scientific_name,
+                   species.species_code,
+                   species.ebird_code,
+                   {score_expression} AS score,
+                   selected.start_ms,
+                   selected.end_ms,
+                   selected.low_frequency_hz,
+                   selected.high_frequency_hz,
+                   0 AS additional_species
+            FROM detection
+            {selected_join}
+            JOIN detection_revision AS original
+              ON original.detection_id = detection.id
+             AND original.revision_number = 1
+            JOIN species ON species.id = selected.species_id
+            JOIN recording ON recording.id = detection.recording_id
+            LEFT JOIN analysis_item ON analysis_item.id = detection.analysis_item_id
+            LEFT JOIN review ON review.detection_id = detection.id
+            {where_clause}
+        """
+
+        connection = connect(self.database_path, readonly=True)
+        try:
+            rows = list(connection.execute(query, parameters))
+            if revision_mode == "current":
+                additional_conditions: list[str] = []
+                additional_parameters: list[object] = []
+                if run_id is not None:
+                    additional_conditions.append("analysis_item.analysis_run_id = ?")
+                    additional_parameters.append(run_id)
+                additional_review = ["review.verdict = 'correct'"]
+                if include_unreviewed:
+                    additional_review.append("review.id IS NULL")
+                if include_uncertain:
+                    additional_review.append("review.verdict = 'uncertain'")
+                # Adding a species is an explicit accepted annotation even when
+                # the original primary identification was rejected.
+                additional_review.append("review.verdict = 'incorrect'")
+                additional_conditions.append(
+                    "(" + " OR ".join(additional_review) + ")"
+                )
+                additional_where = "WHERE " + " AND ".join(additional_conditions)
+                additional_query = f"""
+                    SELECT detection.id AS detection_id,
+                           recording.id AS recording_id,
+                           recording.path AS recording_path,
+                           recording.path_type AS recording_path_type,
+                           recording.display_name AS recording_name,
+                           recording.sample_rate,
+                           species.common_name AS species_name,
+                           species.scientific_name,
+                           species.species_code,
+                           species.ebird_code,
+                           NULL AS score,
+                           selected.start_ms,
+                           selected.end_ms,
+                           selected.low_frequency_hz,
+                           selected.high_frequency_hz,
+                           1 AS additional_species
+                    FROM detection_additional_species
+                    JOIN detection
+                      ON detection.id = detection_additional_species.detection_id
+                    JOIN detection_revision AS selected
+                      ON selected.id = detection.current_revision_id
+                    JOIN species
+                      ON species.id = detection_additional_species.species_id
+                    JOIN recording ON recording.id = detection.recording_id
+                    LEFT JOIN analysis_item
+                      ON analysis_item.id = detection.analysis_item_id
+                    LEFT JOIN review ON review.detection_id = detection.id
+                    {additional_where}
+                """
+                rows.extend(connection.execute(additional_query, additional_parameters))
+
+            exports = [
+                LabelExportDetection(
+                    detection_id=row["detection_id"],
+                    recording_id=row["recording_id"],
+                    recording_path=row["recording_path"],
+                    recording_path_type=PathType(row["recording_path_type"]),
+                    recording_name=row["recording_name"],
+                    sample_rate=row["sample_rate"],
+                    species_name=row["species_name"],
+                    scientific_name=row["scientific_name"],
+                    species_code=row["species_code"],
+                    ebird_code=row["ebird_code"],
+                    score=row["score"],
+                    start_ms=row["start_ms"],
+                    end_ms=row["end_ms"],
+                    low_frequency_hz=row["low_frequency_hz"],
+                    high_frequency_hz=row["high_frequency_hz"],
+                    additional_species=bool(row["additional_species"]),
+                )
+                for row in rows
+            ]
+            exports.sort(
+                key=lambda item: (
+                    item.recording_name.casefold(),
+                    item.recording_id,
+                    item.start_ms,
+                    item.species_name.casefold(),
+                )
+            )
+            return tuple(exports)
+        finally:
+            connection.close()
+
+    def label_export_recording_ids(
+        self, run_id: Optional[int] = None
+    ) -> tuple[int, ...]:
+        """Return recordings that should receive a label file for an export."""
+        connection = connect(self.database_path, readonly=True)
+        try:
+            if run_id is not None:
+                rows = connection.execute(
+                    """
+                    SELECT recording_id FROM analysis_item
+                    WHERE analysis_run_id = ? ORDER BY recording_id
+                    """,
+                    (run_id,),
+                )
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT DISTINCT recording_id FROM detection
+                    ORDER BY recording_id
+                    """
+                )
+            return tuple(row["recording_id"] for row in rows)
         finally:
             connection.close()
 

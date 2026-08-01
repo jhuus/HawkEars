@@ -80,6 +80,7 @@ from hawkears.gui.services.location_catalog import (
 )
 from hawkears.gui.services.analysis_runner import AnalysisRunner
 from hawkears.gui.services.import_runner import HawkEarsImportRunner
+from hawkears.gui.services.label_export_runner import LabelExportRunner
 from hawkears.gui.services.spectrogram import (
     ReviewSpectrogram,
     colorize_spectrogram,
@@ -87,6 +88,7 @@ from hawkears.gui.services.spectrogram import (
     generate_review_spectrogram,
 )
 from hawkears.gui.ui.location_dialog import LocationDialog, location_summary
+from hawkears.gui.ui.label_export_dialog import LabelExportDialog
 from hawkears.gui.ui.resources import brand_icon, brand_pixmap
 from hawkears.gui.ui.review_queue_dialog import ReviewQueueDialog
 from hawkears.gui.ui.review_export_dialog import ReviewExportDialog
@@ -2056,6 +2058,7 @@ class ReportsPage(QWidget):
     run_changed = Signal(object)
     validated_report_changed = Signal(str)
     review_export_requested = Signal()
+    label_export_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -2073,7 +2076,13 @@ class ReportsPage(QWidget):
         self.run.currentIndexChanged.connect(self._analysis_run_changed)
         filters.addWidget(self.run, 1)
         filters.addStretch()
-        self.review_export_button = QPushButton(self.tr("Export reviewed detections…"))
+        self.label_export_button = QPushButton(self.tr("Export audio labels…"))
+        self.label_export_button.setEnabled(False)
+        self.label_export_button.clicked.connect(self.label_export_requested)
+        filters.addWidget(self.label_export_button)
+        self.review_export_button = QPushButton(
+            self.tr("Export reviewed detections…")
+        )
         self.review_export_button.setEnabled(False)
         self.review_export_button.clicked.connect(self.review_export_requested)
         filters.addWidget(self.review_export_button)
@@ -2337,6 +2346,7 @@ class ReportsPage(QWidget):
         self.corrections_value.setText(str(summary.correction_count))
         self.additional_value.setText(str(summary.additional_annotation_count))
         self.review_export_button.setEnabled(summary.reviewed_count > 0)
+        self.label_export_button.setEnabled(summary.detection_count > 0)
         self.table.setSortingEnabled(False)
         self.table.setRowCount(len(summary.species))
         for row, item in enumerate(summary.species):
@@ -2364,6 +2374,11 @@ class ReportsPage(QWidget):
 
     def set_export_directory(self, directory: Path) -> None:
         self._export_directory = directory
+
+    def set_label_export_busy(self, busy: bool) -> None:
+        self.label_export_button.setEnabled(
+            not busy and self._summary.detection_count > 0
+        )
 
     def set_processing_summary(self, summaries: list[SpeciesProcessingSummary]) -> None:
         self.processing_table.setSortingEnabled(False)
@@ -2548,6 +2563,7 @@ class MainWindow(QMainWindow):
         self.reports_page.review_export_requested.connect(
             self._export_reviewed_detections
         )
+        self.reports_page.label_export_requested.connect(self._export_audio_labels)
         self.review_page.save_requested.connect(self._save_review)
         self.review_page.bounds_requested.connect(self._apply_detection_bounds)
         self.project_page.recording_scope_changed.connect(self._save_recording_scope)
@@ -2558,6 +2574,8 @@ class MainWindow(QMainWindow):
         self.analysis_page.cancel_requested.connect(self._cancel_analysis)
         self._analysis_thread: QThread | None = None
         self._analysis_runner: AnalysisRunner | HawkEarsImportRunner | None = None
+        self._export_thread: QThread | None = None
+        self._export_runner: LabelExportRunner | None = None
         self._build_menu()
         self._refresh_welcome_recent_projects()
         if initial_project is not None:
@@ -2630,8 +2648,8 @@ class MainWindow(QMainWindow):
         file_menu.addAction(quit_action)
 
     def _create_project(self) -> None:
-        if self._analysis_thread is not None:
-            self._show_analysis_busy_message()
+        if self._analysis_thread is not None or self._export_thread is not None:
+            self._show_project_busy_message()
             return
         project_directory = self._project_directory(create=True)
         path, _ = QFileDialog.getSaveFileName(
@@ -2654,8 +2672,8 @@ class MainWindow(QMainWindow):
             self._activate_project(database.project.get().name, database=database)
 
     def _open_project(self) -> None:
-        if self._analysis_thread is not None:
-            self._show_analysis_busy_message()
+        if self._analysis_thread is not None or self._export_thread is not None:
+            self._show_project_busy_message()
             return
         project_directory = self._project_directory()
         path, _ = QFileDialog.getOpenFileName(
@@ -2669,8 +2687,8 @@ class MainWindow(QMainWindow):
 
     def _open_project_path(self, path: Path) -> None:
         logger.info("Opening project: %s", path)
-        if self._analysis_thread is not None:
-            self._show_analysis_busy_message()
+        if self._analysis_thread is not None or self._export_thread is not None:
+            self._show_project_busy_message()
             return
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         QApplication.processEvents()
@@ -2948,8 +2966,8 @@ class MainWindow(QMainWindow):
             self._load_recording_scope()
 
     def _close_project(self) -> None:
-        if self._analysis_thread is not None:
-            self._show_analysis_busy_message()
+        if self._analysis_thread is not None or self._export_thread is not None:
+            self._show_project_busy_message()
             return
         if not self._project_open:
             return
@@ -2979,13 +2997,16 @@ class MainWindow(QMainWindow):
             button.setChecked(False)
         self.pages.setCurrentIndex(0)
 
-    def _show_analysis_busy_message(self) -> None:
+    def _show_project_busy_message(self) -> None:
+        title = (
+            self.tr("Analysis is running")
+            if self._analysis_thread is not None
+            else self.tr("Export is running")
+        )
         QMessageBox.information(
             self,
-            self.tr("Analysis is running"),
-            self.tr(
-                "Wait for the current analysis to finish before changing projects."
-            ),
+            title,
+            self.tr("Wait for the current task to finish before changing projects."),
         )
 
     def _show_page(self, index: int) -> None:
@@ -3312,6 +3333,71 @@ class MainWindow(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
 
+    def _export_audio_labels(self) -> None:
+        if self._database is None or self._export_thread is not None:
+            return
+        dialog = LabelExportDialog(
+            self.reports_page.current_run_label(), parent=self
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        output_directory = QFileDialog.getExistingDirectory(
+            self,
+            self.tr("Choose audio label export folder"),
+            str(self._database.path.parent),
+        )
+        if not output_directory:
+            return
+        values = dialog.values()
+        thread = QThread(self)
+        runner = LabelExportRunner(
+            self._database.path,
+            Path(output_directory),
+            output_format=str(values["output_format"]),
+            run_id=self.reports_page.current_run_id(),
+            revision_mode=str(values["revision_mode"]),
+            include_unreviewed=bool(values["include_unreviewed"]),
+            include_uncertain=bool(values["include_uncertain"]),
+            include_rejected=bool(values["include_rejected"]),
+            data_root=self._application_paths.data_root,
+        )
+        runner.moveToThread(thread)
+        thread.started.connect(runner.run)
+        runner.completed.connect(self._audio_label_export_completed)
+        runner.failed.connect(self._audio_label_export_failed)
+        runner.completed.connect(thread.quit)
+        runner.failed.connect(thread.quit)
+        thread.finished.connect(runner.deleteLater)
+        thread.finished.connect(self._export_thread_finished)
+        self._export_thread = thread
+        self._export_runner = runner
+        self.reports_page.set_label_export_busy(True)
+        thread.start()
+
+    def _audio_label_export_completed(
+        self, detection_count: int, recording_count: int, output_format: str
+    ) -> None:
+        format_name = (
+            self.tr("Audacity") if output_format == "audacity" else self.tr("Raven")
+        )
+        QMessageBox.information(
+            self,
+            self.tr("Audio labels exported"),
+            self.tr("Exported %n detections in %1 files as %2.", None, detection_count)
+            .replace("%1", str(recording_count))
+            .replace("%2", format_name),
+        )
+
+    def _audio_label_export_failed(self, message: str) -> None:
+        QMessageBox.critical(self, self.tr("Could not export audio labels"), message)
+
+    def _export_thread_finished(self) -> None:
+        if self._export_thread is not None:
+            self._export_thread.deleteLater()
+        self._export_thread = None
+        self._export_runner = None
+        self.reports_page.set_label_export_busy(False)
+
     def _open_review(self, detection_id: int) -> None:
         logger.info("Opening review: detection_id=%d", detection_id)
         if self._database is None:
@@ -3455,6 +3541,16 @@ class MainWindow(QMainWindow):
                 self.tr("Analysis is running"),
                 self.tr(
                     "Wait for the current analysis to finish before closing HawkEars."
+                ),
+            )
+            event.ignore()
+            return
+        if self._export_thread is not None:
+            QMessageBox.information(
+                self,
+                self.tr("Export is running"),
+                self.tr(
+                    "Wait for the current export to finish before closing HawkEars."
                 ),
             )
             event.ignore()
