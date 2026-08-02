@@ -75,6 +75,7 @@ from hawkears.gui.database.records import (
     SpeciesProcessingSummary,
     ValidatedReport,
 )
+from hawkears.gui.recording_time import detection_time_of_day
 from hawkears.gui.services.class_catalog import catalog_path, load_class_catalog
 from hawkears.gui.services.location_catalog import (
     LocationCatalog,
@@ -884,15 +885,16 @@ class ResultsPage(QWidget):
         filters.addWidget(self.confirmation_toggle)
         outer.addLayout(filters)
 
-        self.table = QTableWidget(0, 7)
+        self.table = QTableWidget(0, 8)
         self.table.setHorizontalHeaderLabels(
             [
                 self.tr("Species"),
                 self.tr("Score"),
                 self.tr("Recording"),
-                self.tr("Time"),
-                self.tr("Date"),
+                self.tr("Recording date"),
+                self.tr("Time of day"),
                 self.tr("Location"),
+                self.tr("Detection offset"),
                 self.tr("Review"),
             ]
         )
@@ -904,7 +906,7 @@ class ResultsPage(QWidget):
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setMinimumSectionSize(55)
-        for column, width in enumerate((180, 75, 240, 115, 95, 150, 105)):
+        for column, width in enumerate((180, 75, 220, 130, 95, 140, 130, 105)):
             header.resizeSection(column, width)
         self.table.doubleClicked.connect(self._open_current)
         outer.addWidget(self.table, 1)
@@ -1051,9 +1053,15 @@ class ResultsPage(QWidget):
                 detection.species_name,
                 score,
                 detection.recording_name,
-                self._time_range(detection.start_ms, detection.end_ms),
                 detection.recorded_at[:10] if detection.recorded_at else "—",
+                detection_time_of_day(
+                    detection.recorded_at,
+                    detection.recording_name,
+                    detection.start_ms,
+                )
+                or "—",
                 self._location(detection),
+                self._time_range(detection.start_ms, detection.end_ms),
                 (
                     self.tr("Skipped")
                     if queue_states.get(detection.detection_id) == "skipped"
@@ -1106,7 +1114,7 @@ class ResultsPage(QWidget):
         state = self.review.currentText()
         visible = 0
         for row in range(self.table.rowCount()):
-            values = [self.table.item(row, col).text() for col in range(7)]
+            values = [self.table.item(row, col).text() for col in range(8)]
             matches = (
                 (
                     not query
@@ -1117,10 +1125,11 @@ class ResultsPage(QWidget):
                 and (species == self.tr("All species") or species == values[0])
                 and (
                     state == self.tr("All review states")
-                    or state == values[6]
+                    or state == values[7]
                     or (
                         state == self.tr("Reviewed")
-                        and values[6] not in {self.tr("Unreviewed"), self.tr("Skipped")}
+                        and values[7]
+                        not in {self.tr("Unreviewed"), self.tr("Skipped")}
                     )
                 )
             )

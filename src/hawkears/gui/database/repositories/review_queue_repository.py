@@ -11,6 +11,7 @@ from typing import Any, Literal, Optional
 
 from hawkears.gui.database.connection import connect, transaction
 from hawkears.gui.database.records import ReviewQueueSummary
+from hawkears.gui.recording_time import recording_start_seconds
 
 
 class ReviewQueueRepository:
@@ -400,9 +401,8 @@ class ReviewQueueRepository:
             return str(row["recording_id"])
         return None
 
-    @classmethod
+    @staticmethod
     def _location_date_first_detection_selection(
-        cls,
         candidates: list,
         *,
         max_per_group: int,
@@ -412,7 +412,9 @@ class ReviewQueueRepository:
         """Select the earliest detections within each location and date."""
         groups: dict[tuple[str, str], list[tuple[int, Any]]] = defaultdict(list)
         for row in candidates:
-            recording_start = cls._recording_start_seconds(row)
+            recording_start = recording_start_seconds(
+                row["recorded_at"], row["display_name"]
+            )
             recorded_date = row["recorded_date"]
             if recorded_date == "Unknown date":
                 match = re.search(
@@ -667,24 +669,7 @@ class ReviewQueueRepository:
         return selected
 
     @staticmethod
-    def _recording_start_seconds(row) -> Optional[int]:
-        recorded_at = str(row["recorded_at"] or "")
-        match = re.search(r"(?:T|\s)(\d{2}):?(\d{2})(?::?(\d{2}))?", recorded_at)
-        if match is None:
-            match = re.search(
-                r"(?<!\d)(?:19|20)\d{6}[_-](\d{2})(\d{2})(\d{2})(?!\d)",
-                row["display_name"],
-            )
-        if match is None:
-            return None
-        hour, minute, second = (int(value or 0) for value in match.groups())
-        if hour > 23 or minute > 59 or second > 59:
-            return None
-        return hour * 3600 + minute * 60 + second
-
-    @classmethod
     def _diel_bin_selection(
-        cls,
         candidates: list,
         *,
         bin_count: int,
@@ -696,7 +681,9 @@ class ReviewQueueRepository:
         bins: dict[int, list] = defaultdict(list)
         seconds_per_bin = 86_400 / bin_count
         for row in candidates:
-            recording_start = cls._recording_start_seconds(row)
+            recording_start = recording_start_seconds(
+                row["recorded_at"], row["display_name"]
+            )
             if recording_start is None:
                 continue
             detection_time = (recording_start + row["start_ms"] / 1000) % 86_400
