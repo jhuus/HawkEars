@@ -23,7 +23,7 @@ If you used the Windows installer, launch the GUI by double-clicking the shortcu
 
 A HawkEars project is stored in a `.hawkears` file. The project contains settings, analysis runs, detections, review queues and review history. It does not contain copies of the audio recordings, so do not move or delete the recordings after adding their directory to a project.
 
-> **Screenshot placeholder:** Main window or Welcome page.
+![](images/GUI-WelcomePage.png)
 
 ## Projects
 
@@ -35,7 +35,7 @@ Create or open a project from the Welcome page, File menu or project menu in the
 
 Each analysis run stores a snapshot of its settings and target species, so you can change project settings and run another analysis without overwriting earlier results.
 
-> **Screenshot placeholder:** Project page with species and recording directory selected.
+![](images/GUI-ProjectPage.png)
 
 ## Analyzing Recordings
 
@@ -46,6 +46,7 @@ The Analyze page provides the main inference settings:
 * **Worker threads** controls how many recordings are processed at the same time. Increasing this value can improve throughput, but also increases memory use.
 * **Label format** selects variable-length labels or fixed-length segments.
 * **Maximum variable label length** to limit the length of variable-length labels.
+* **Fixed segment length** when fixed-length labels are selected.
 
 Location and date information enables geographic occurrence filtering and location-specific heuristics. You can provide one location for all recordings using coordinates or an eBird region, or use a CSV file with per-recording values. The CSV file must include `filename`, `latitude`, `longitude` and `recording_date` columns.
 
@@ -53,7 +54,15 @@ Click **Run analysis** to start a new run. If you click **Cancel**, recordings a
 
 You can also import Audacity or CSV output created by the HawkEars command-line interface using **Import analysis results**.
 
-> **Screenshot placeholder:** Analyze page and location configuration dialog.
+![](images/GUI-AnalyzePage.png)
+
+The location dialog is shown when you click **Configure location**:
+
+<p align="left">
+  <img src="images/GUI-LocationDialog-eBird.png" width="500">
+  <img src="images/GUI-LocationDialog-LatLon.png" width="500">
+  <img src="images/GUI-LocationDialog-FileList.png" width="500">
+</p>
 
 ## Results
 
@@ -63,13 +72,13 @@ To review a single detection, double-click the row or select it and click **Revi
 
 For a small analysis you may review all detections directly. For a large analysis, create a review queue to select a smaller, reproducible subset.
 
-> **Screenshot placeholder:** Results page with filters and a selected detection.
+![](images/GUI-ResultsPage.png)
 
 ## Review Queues
 
 A review queue samples detections for one species from one analysis run. Queue membership and its original sampling order are saved in the project, so a review can be stopped and resumed later.
 
-> **Screenshot placeholder:** Create Review Queue dialog with a sampling strategy selected.
+![](images/GUI-ReviewQueueDialog.png)
 
 ### Common Sampling Parameters
 
@@ -141,7 +150,7 @@ The Review page displays a 10-second spectrogram around the detection. You can:
 
 Edits create a new detection revision. The original species and bounds remain available for reporting and export.
 
-> **Screenshot placeholder:** Review page with spectrogram, playback controls and verdict buttons.
+![](images/GUI-ReviewPage.png)
 
 ## Reports and Exports
 
@@ -149,6 +158,9 @@ The Reports page summarizes analysis coverage, review queues and review progress
 
 **Export reviewed detections** creates a detailed CSV filtered by outcome, species or review queue.
 
-**Export audio labels** creates one Audacity label file or Raven selection table per recording. You can export current reviewed results or the original analysis results, choose species codes, common names or scientific names for labels, and control which review states are included. Existing label files are overwritten by default; clear **Overwrite existing labels** to stop instead when a planned output file already exists.
+**Export audio labels** creates one Audacity label file or Raven selection table per recording. You can export current reviewed results or the original analysis results, choose species codes, common names or scientific names for labels, and control which review states are included. Existing label files are overwritten by default. Clear **Overwrite existing labels** to stop instead when a planned output file already exists.
 
-> **Screenshot placeholder:** Reports page and Export Audio Labels dialog.
+<p align="left">
+  <img src="images/GUI-ReportsPage.png" width="1450">
+</p>
+
