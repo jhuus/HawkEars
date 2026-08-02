@@ -50,6 +50,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QSplitter,
@@ -855,7 +856,9 @@ class ResultsPage(QWidget):
 
         filters = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText(self.tr("Search species or recording…"))
+        self.search.setPlaceholderText(
+            self.tr("Search species, recording, date or location…")
+        )
         self.search.textChanged.connect(self._apply_filters)
         self.species = QComboBox()
         self.species.addItem(self.tr("All species"))
@@ -1120,6 +1123,7 @@ class ResultsPage(QWidget):
                     not query
                     or query in values[0].lower()
                     or query in values[2].lower()
+                    or query in values[3].lower()
                     or query in values[5].lower()
                 )
                 and (species == self.tr("All species") or species == values[0])
@@ -2092,7 +2096,14 @@ class ReportsPage(QWidget):
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(page)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.scroll_area.setWidget(page)
+        layout.addWidget(self.scroll_area)
 
         filters = QHBoxLayout()
         filters.addWidget(QLabel(self.tr("Analysis run")))
@@ -2157,6 +2168,7 @@ class ReportsPage(QWidget):
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
         self.processing_table.setSortingEnabled(True)
+        self.processing_table.setMinimumHeight(150)
         self.processing_table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Stretch
         )
@@ -2181,6 +2193,7 @@ class ReportsPage(QWidget):
         self.queue_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.queue_table.setAlternatingRowColors(True)
         self.queue_table.setSortingEnabled(True)
+        self.queue_table.setMinimumHeight(150)
         self.queue_table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Stretch
         )
@@ -2217,6 +2230,7 @@ class ReportsPage(QWidget):
         )
         self.table.setAlternatingRowColors(True)
         self.table.setSortingEnabled(True)
+        self.table.setMinimumHeight(210)
         self.table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Stretch
         )
@@ -2269,6 +2283,7 @@ class ReportsPage(QWidget):
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
         self.validated_table.setSortingEnabled(True)
+        self.validated_table.setMinimumHeight(210)
         validated_layout.addWidget(self.validated_table)
 
         tabs = QTabWidget()

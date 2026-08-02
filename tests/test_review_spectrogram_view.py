@@ -100,6 +100,43 @@ def test_results_choose_selected_visible_detection_or_first_visible():
     app.processEvents()
 
 
+def test_results_search_matches_partial_recording_date():
+    app = QApplication.instance() or QApplication([])
+    page = ResultsPage()
+    detections = [
+        DetectionResult(
+            detection_id=index,
+            analysis_run_id=1,
+            analysis_run_name="Run 1",
+            species_name="Alder Flycatcher",
+            score=0.8,
+            recording_name=f"recording-{index}.wav",
+            start_ms=1_000,
+            end_ms=4_000,
+            recorded_at=recorded_at,
+            latitude=None,
+            longitude=None,
+            region_code=None,
+            location_name=None,
+            review_verdict=None,
+            review_notes="",
+        )
+        for index, recorded_at in enumerate(("2014-06-15", "2015-06-15"), start=1)
+    ]
+    page.set_detections(detections)
+
+    page.search.setText("2014-06")
+
+    visible_dates = [
+        page.table.item(row, 3).text()
+        for row in range(page.table.rowCount())
+        if not page.table.isRowHidden(row)
+    ]
+    assert visible_dates == ["2014-06-15"]
+    page.close()
+    app.processEvents()
+
+
 def test_spectrogram_selection_maps_to_time_and_frequency_bounds():
     app = QApplication.instance() or QApplication([])
     view = SpectrogramView()
