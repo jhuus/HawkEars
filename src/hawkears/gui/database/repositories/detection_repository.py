@@ -38,6 +38,30 @@ def _revision_from_row(row: sqlite3.Row) -> DetectionRevision:
     )
 
 
+def _result_from_row(row: sqlite3.Row) -> DetectionResult:
+    return DetectionResult(
+        detection_id=row["detection_id"],
+        analysis_run_id=row["analysis_run_id"],
+        analysis_run_name=row["analysis_run_name"],
+        species_name=row["species_name"],
+        score=row["score"],
+        recording_name=row["recording_name"],
+        start_ms=row["start_ms"],
+        end_ms=row["end_ms"],
+        recorded_at=row["recorded_at"],
+        latitude=row["latitude"],
+        longitude=row["longitude"],
+        region_code=row["region_code"],
+        location_name=row["location_name"],
+        review_verdict=(
+            ReviewVerdict(row["review_verdict"])
+            if row["review_verdict"] is not None
+            else None
+        ),
+        review_notes=row["review_notes"],
+    )
+
+
 class DetectionRepository:
     def __init__(self, database_path: Path) -> None:
         self.database_path = database_path
@@ -527,29 +551,110 @@ class DetectionRepository:
                 parameters = (run_id,)
             query += " ORDER BY detection.id"
             return [
-                DetectionResult(
-                    detection_id=row["detection_id"],
-                    analysis_run_id=row["analysis_run_id"],
-                    analysis_run_name=row["analysis_run_name"],
-                    species_name=row["species_name"],
-                    score=row["score"],
-                    recording_name=row["recording_name"],
-                    start_ms=row["start_ms"],
-                    end_ms=row["end_ms"],
-                    recorded_at=row["recorded_at"],
-                    latitude=row["latitude"],
-                    longitude=row["longitude"],
-                    region_code=row["region_code"],
-                    location_name=row["location_name"],
-                    review_verdict=(
-                        ReviewVerdict(row["review_verdict"])
-                        if row["review_verdict"] is not None
-                        else None
-                    ),
-                    review_notes=row["review_notes"],
-                )
+                _result_from_row(row)
                 for row in connection.execute(query, parameters)
             ]
+        finally:
+            connection.close()
+
+    def list_queue_results(
+        self, queue_id: int
+    ) -> tuple[list[DetectionResult], dict[int, str]]:
+        """Return only one queue's ordered results and persisted item states."""
+        connection = connect(self.database_path, readonly=True)
+        try:
+            queue = connection.execute(
+                "SELECT review_order FROM review_queue WHERE id = ?", (queue_id,)
+            ).fetchone()
+            if queue is None:
+                raise LookupError(f"Review queue {queue_id} does not exist.")
+            ordering = {
+                "queue": "review_queue_item.position",
+                "score": (
+                    "detection.score DESC, recording.display_name COLLATE NOCASE, "
+                    "current.start_ms"
+                ),
+                "chronological": (
+                    "recording.display_name COLLATE NOCASE, current.start_ms"
+                ),
+            }[queue["review_order"]]
+            rows = list(
+                connection.execute(
+                    f"""
+                    SELECT detection.id AS detection_id,
+                           analysis_run.id AS analysis_run_id,
+                           analysis_run.name AS analysis_run_name,
+                           species.common_name AS species_name,
+                           detection.score,
+                           recording.display_name AS recording_name,
+                           current.start_ms,
+                           current.end_ms,
+                           coalesce(
+                               analysis_item.recorded_at,
+                               recording.recorded_at,
+                               CASE WHEN json_extract(
+                                   analysis_run.settings_json,
+                                   '$.location.date_mode'
+                               ) = 'specific' THEN json_extract(
+                                   analysis_run.settings_json,
+                                   '$.location.date'
+                               ) END
+                           ) AS recorded_at,
+                           coalesce(
+                               analysis_item.latitude,
+                               recording.latitude,
+                               json_extract(
+                                   analysis_run.settings_json,
+                                   '$.location.latitude'
+                               )
+                           ) AS latitude,
+                           coalesce(
+                               analysis_item.longitude,
+                               recording.longitude,
+                               json_extract(
+                                   analysis_run.settings_json,
+                                   '$.location.longitude'
+                               )
+                           ) AS longitude,
+                           coalesce(
+                               analysis_item.region_code,
+                               recording.region_code,
+                               json_extract(
+                                   analysis_run.settings_json,
+                                   '$.location.region_code'
+                               )
+                           ) AS region_code,
+                           coalesce(
+                               analysis_item.location_name,
+                               recording.location_name
+                           ) AS location_name,
+                           review.verdict AS review_verdict,
+                           coalesce(review.notes, '') AS review_notes,
+                           review_queue_item.state AS queue_state
+                    FROM review_queue_item
+                    JOIN review_queue
+                      ON review_queue.id = review_queue_item.review_queue_id
+                    JOIN analysis_run
+                      ON analysis_run.id = review_queue.analysis_run_id
+                    JOIN detection
+                      ON detection.id = review_queue_item.detection_id
+                    JOIN detection_revision AS current
+                      ON current.id = detection.current_revision_id
+                    JOIN species ON species.id = current.species_id
+                    JOIN recording ON recording.id = detection.recording_id
+                    LEFT JOIN analysis_item
+                      ON analysis_item.id = detection.analysis_item_id
+                    LEFT JOIN review ON review.detection_id = detection.id
+                    WHERE review_queue_item.review_queue_id = ?
+                    ORDER BY {ordering}
+                    """,
+                    (queue_id,),
+                )
+            )
+            return (
+                [_result_from_row(row) for row in rows],
+                {row["detection_id"]: row["queue_state"] for row in rows},
+            )
         finally:
             connection.close()
 

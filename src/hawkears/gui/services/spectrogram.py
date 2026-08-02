@@ -109,59 +109,109 @@ def generate_review_spectrogram(
     *,
     context_seconds: float = 10.0,
 ) -> ReviewSpectrogram:
-    """Generate a decibel-scaled spectrogram centered on a detection."""
-    cfg = deepcopy(get_config())
-    cfg.audio.decibels = True
-    cfg.audio.min_freq = 0
-    midpoint = (detection_start_seconds + detection_end_seconds) / 2
-    start_seconds = max(0.0, midpoint - context_seconds / 2)
-
-    logger.debug("Creating Audio processor for %s", recording_path)
-    audio = Audio(cfg=cfg)
-    logger.debug("Loading review recording %s", recording_path)
-    signal, sample_rate = audio.load(str(recording_path))
-    if signal is None:
-        raise OSError(f"Could not load recording: {recording_path}")
-    logger.debug(
-        "Generating spectrogram: path=%s start=%.3f duration=%.3f rate=%d",
+    """Generate one review spectrogram without retaining decoded audio."""
+    return ReviewSpectrogramGenerator().generate(
         recording_path,
-        start_seconds,
-        context_seconds,
-        sample_rate,
+        detection_start_seconds,
+        detection_end_seconds,
+        context_seconds=context_seconds,
     )
-    specs, _ = audio.get_spectrograms(
-        [start_seconds],
-        spec_duration=context_seconds,
-        decibels=True,
-        skip_cache=True,
-    )
-    if specs is None or len(specs) == 0:
-        raise ValueError("Could not generate a spectrogram for this detection.")
-    logger.debug("Spectrogram generated: path=%s shape=%s", recording_path, specs.shape)
-    try:
-        context_audio, playback_sample_rate = load_playback_audio(
-            recording_path, start_seconds, context_seconds
+
+
+class ReviewSpectrogramGenerator:
+    """Generate review contexts while retaining only the current recording."""
+
+    def __init__(self) -> None:
+        self._audio: Audio | None = None
+        self._recording_key: Path | None = None
+        self._signal: np.ndarray | None = None
+        self._sample_rate = 0
+        self._min_frequency = 0
+        self._max_frequency = 0
+
+    def generate(
+        self,
+        recording_path: Path,
+        detection_start_seconds: float,
+        detection_end_seconds: float,
+        *,
+        context_seconds: float = 10.0,
+    ) -> ReviewSpectrogram:
+        audio = self._audio_processor()
+        recording_key = recording_path.expanduser().resolve()
+        if recording_key != self._recording_key:
+            logger.debug("Loading review recording %s", recording_path)
+            signal, sample_rate = audio.load(str(recording_path))
+            if signal is None:
+                self._recording_key = None
+                self._signal = None
+                self._sample_rate = 0
+                raise OSError(f"Could not load recording: {recording_path}")
+            self._recording_key = recording_key
+            self._signal = signal
+            self._sample_rate = sample_rate
+        else:
+            logger.debug("Reusing decoded review recording %s", recording_path)
+            signal = self._signal
+            sample_rate = self._sample_rate
+            if signal is None:
+                raise RuntimeError("The retained review recording is unavailable.")
+
+        midpoint = (detection_start_seconds + detection_end_seconds) / 2
+        start_seconds = max(0.0, midpoint - context_seconds / 2)
+        logger.debug(
+            "Generating spectrogram: path=%s start=%.3f duration=%.3f rate=%d",
+            recording_path,
+            start_seconds,
+            context_seconds,
+            sample_rate,
         )
-    except Exception:
-        logger.exception(
-            "Could not load native-channel playback audio; using analysis mono"
+        specs, _ = audio.get_spectrograms(
+            [start_seconds],
+            spec_duration=context_seconds,
+            decibels=True,
+            skip_cache=True,
         )
-        start_sample = round(start_seconds * sample_rate)
-        sample_count = round(context_seconds * sample_rate)
-        context_audio = np.asarray(
-            signal[start_sample : start_sample + sample_count], dtype=np.float32
+        if specs is None or len(specs) == 0:
+            raise ValueError("Could not generate a spectrogram for this detection.")
+        logger.debug(
+            "Spectrogram generated: path=%s shape=%s", recording_path, specs.shape
         )
-        if len(context_audio) < sample_count:
-            context_audio = np.pad(
-                context_audio, (0, sample_count - len(context_audio))
+        try:
+            context_audio, playback_sample_rate = load_playback_audio(
+                recording_path, start_seconds, context_seconds
             )
-        playback_sample_rate = int(sample_rate)
-    return ReviewSpectrogram(
-        values=np.asarray(specs[0], dtype=np.float32),
-        audio_samples=context_audio,
-        sample_rate=playback_sample_rate,
-        start_seconds=start_seconds,
-        duration_seconds=context_seconds,
-        min_frequency=int(cfg.audio.min_freq),
-        max_frequency=int(cfg.audio.max_freq),
-    )
+        except Exception:
+            logger.exception(
+                "Could not load native-channel playback audio; using analysis mono"
+            )
+            start_sample = round(start_seconds * sample_rate)
+            sample_count = round(context_seconds * sample_rate)
+            context_audio = np.asarray(
+                signal[start_sample : start_sample + sample_count], dtype=np.float32
+            )
+            if len(context_audio) < sample_count:
+                context_audio = np.pad(
+                    context_audio, (0, sample_count - len(context_audio))
+                )
+            playback_sample_rate = int(sample_rate)
+        return ReviewSpectrogram(
+            values=np.asarray(specs[0], dtype=np.float32),
+            audio_samples=context_audio,
+            sample_rate=playback_sample_rate,
+            start_seconds=start_seconds,
+            duration_seconds=context_seconds,
+            min_frequency=self._min_frequency,
+            max_frequency=self._max_frequency,
+        )
+
+    def _audio_processor(self) -> Audio:
+        if self._audio is None:
+            cfg = deepcopy(get_config())
+            cfg.audio.decibels = True
+            cfg.audio.min_freq = 0
+            self._min_frequency = int(cfg.audio.min_freq)
+            self._max_frequency = int(cfg.audio.max_freq)
+            logger.debug("Creating retained review Audio processor")
+            self._audio = Audio(cfg=cfg)
+        return self._audio

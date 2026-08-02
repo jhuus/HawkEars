@@ -28,6 +28,8 @@ class LabelExportRunner(QObject):
         include_uncertain: bool,
         include_rejected: bool,
         data_root: Path,
+        label_field: str = "code",
+        overwrite_existing: bool = True,
     ) -> None:
         super().__init__()
         self.database_path = database_path
@@ -39,12 +41,16 @@ class LabelExportRunner(QObject):
         self.include_uncertain = include_uncertain
         self.include_rejected = include_rejected
         self.data_root = data_root
+        self.label_field = label_field
+        self.overwrite_existing = overwrite_existing
 
     @Slot()
     def run(self) -> None:
         try:
             if self.output_format not in {"audacity", "raven"}:
                 raise ValueError(f"Unknown label export format: {self.output_format}")
+            if self.label_field not in {"code", "common_name", "scientific_name"}:
+                raise ValueError(f"Unknown label field: {self.label_field}")
             database = ProjectDatabase(self.database_path)
             detections = database.detections.label_export(
                 run_id=self.run_id,
@@ -79,10 +85,11 @@ class LabelExportRunner(QObject):
             existing = [
                 output_path for _, _, output_path in plans if output_path.exists()
             ]
-            if existing:
+            if existing and not self.overwrite_existing:
                 raise FileExistsError(
                     f"Export would overwrite {len(existing)} existing label file(s), "
-                    f"including {existing[0].name}. Choose an empty folder."
+                    f"including {existing[0].name}. Enable overwriting or choose "
+                    "an empty folder."
                 )
             for recording, rows, output_path in plans:
                 if self.output_format == "audacity":
@@ -102,11 +109,12 @@ class LabelExportRunner(QObject):
             counts[Path(recording.display_name).stem.casefold()] += 1
         return {stem for stem, count in counts.items() if count > 1}
 
-    @staticmethod
-    def _write_audacity(rows: list[LabelExportDetection], output_path: Path) -> None:
+    def _write_audacity(
+        self, rows: list[LabelExportDetection], output_path: Path
+    ) -> None:
         with output_path.open("w", encoding="utf-8", newline="") as output:
             for row in rows:
-                label = row.species_name
+                label = self._label(row)
                 if row.score is not None:
                     label += f";{row.score:.3f}"
                 output.write(
@@ -124,7 +132,7 @@ class LabelExportRunner(QObject):
         dataframe = pd.DataFrame(
             [
                 {
-                    "name": row.species_name,
+                    "name": self._label(row),
                     "start_time": row.start_ms / 1000,
                     "end_time": row.end_ms / 1000,
                     "score": row.score,
@@ -149,7 +157,7 @@ class LabelExportRunner(QObject):
             ],
         )
         metadata = {
-            row.species_name: (
+            self._label(row): (
                 row.species_name,
                 row.scientific_name,
                 row.species_code,
@@ -165,3 +173,11 @@ class LabelExportRunner(QObject):
             high_frequency=cfg.audio.max_freq,
             species_metadata=metadata.__getitem__,
         )
+
+    def _label(self, row: LabelExportDetection) -> str:
+        """Return the selected label, falling back for incomplete custom species."""
+        if self.label_field == "code":
+            return row.species_code or row.species_name
+        if self.label_field == "scientific_name":
+            return row.scientific_name or row.species_name
+        return row.species_name

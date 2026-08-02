@@ -35,6 +35,12 @@ class LabelExportDialog(QDialog):
         self.output_format.addItem(self.tr("Raven selection tables"), "raven")
         form.addRow(self.tr("Format"), self.output_format)
 
+        self.label_field = QComboBox()
+        self.label_field.addItem(self.tr("Species code"), "code")
+        self.label_field.addItem(self.tr("Common name"), "common_name")
+        self.label_field.addItem(self.tr("Scientific name"), "scientific_name")
+        form.addRow(self.tr("Label"), self.label_field)
+
         self.revision_mode = QComboBox()
         self.revision_mode.addItem(self.tr("Current results"), "current")
         self.revision_mode.addItem(self.tr("Original results"), "original")
@@ -50,12 +56,14 @@ class LabelExportDialog(QDialog):
         self.include_rejected = QCheckBox(self.tr("Include rejected detections"))
         self.include_rejected.setChecked(False)
         form.addRow("", self.include_rejected)
+        self.overwrite_existing = QCheckBox(self.tr("Overwrite existing labels"))
+        self.overwrite_existing.setChecked(True)
+        form.addRow(self.tr("Existing files"), self.overwrite_existing)
         layout.addLayout(form)
 
         note = QLabel(
             self.tr(
                 "Correct detections and corrected species are always included. "
-                "Additional species annotations are included in current results. "
                 "Rejected detections are omitted by default."
             )
         )
@@ -80,8 +88,10 @@ class LabelExportDialog(QDialog):
     def values(self) -> dict[str, object]:
         return {
             "output_format": str(self.output_format.currentData()),
+            "label_field": str(self.label_field.currentData()),
             "revision_mode": str(self.revision_mode.currentData()),
             "include_unreviewed": self.include_unreviewed.isChecked(),
             "include_uncertain": self.include_uncertain.isChecked(),
             "include_rejected": self.include_rejected.isChecked(),
+            "overwrite_existing": self.overwrite_existing.isChecked(),
         }

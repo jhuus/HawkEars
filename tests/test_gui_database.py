@@ -636,6 +636,9 @@ def test_review_queue_applies_score_spacing_and_recording_limit(tmp_path: Path):
     assert len(detection_ids) == 2
     selected = [database.detections.get(item) for item in detection_ids]
     assert [item.score for item in selected] == [0.95, 0.80]
+    queue_results, queue_states = database.detections.list_queue_results(queue_id)
+    assert [item.score for item in queue_results] == [0.95, 0.80]
+    assert queue_states == {item: "pending" for item in detection_ids}
 
     database.review_queues.set_review_order(queue_id, "chronological")
     chronological = [
@@ -643,6 +646,8 @@ def test_review_queue_applies_score_spacing_and_recording_limit(tmp_path: Path):
         for item in database.review_queues.detection_ids(queue_id)
     ]
     assert [item.score for item in chronological] == [0.80, 0.95]
+    queue_results, _ = database.detections.list_queue_results(queue_id)
+    assert [item.score for item in queue_results] == [0.80, 0.95]
     assert {item.id for item in chronological} == set(detection_ids)
 
     database.review_queues.set_review_order(queue_id, "queue")

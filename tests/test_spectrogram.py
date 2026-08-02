@@ -86,3 +86,37 @@ def test_review_spectrogram_uses_yaml_config_with_decibels(monkeypatch):
     assert result.sample_rate == 16_000
     assert result.min_frequency == 0
     assert result.max_frequency == 13_000
+
+
+def test_review_spectrogram_reuses_only_the_current_recording(monkeypatch):
+    cfg = SimpleNamespace(
+        audio=SimpleNamespace(decibels=False, min_freq=200, max_freq=13_000)
+    )
+    loaded_paths = []
+
+    class FakeAudio:
+        def __init__(self, *, cfg):
+            pass
+
+        def load(self, path):
+            loaded_paths.append(path)
+            return np.ones(100), 28_000
+
+        def get_spectrograms(self, start_times, **kwargs):
+            assert kwargs["skip_cache"] is True
+            return np.full((1, 192, 1280), 0.5), None
+
+    monkeypatch.setattr(spectrogram, "get_config", lambda: cfg)
+    monkeypatch.setattr(spectrogram, "Audio", FakeAudio)
+    monkeypatch.setattr(
+        spectrogram,
+        "load_playback_audio",
+        lambda path, start, duration: (np.ones(160_000), 16_000),
+    )
+    generator = spectrogram.ReviewSpectrogramGenerator()
+
+    generator.generate(Path("marsh.wav"), 10.0, 12.0)
+    generator.generate(Path("marsh.wav"), 20.0, 22.0)
+    generator.generate(Path("forest.wav"), 10.0, 12.0)
+
+    assert loaded_paths == ["marsh.wav", "forest.wav"]

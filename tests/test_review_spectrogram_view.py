@@ -5,10 +5,36 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np
 import pytest
 from PySide6.QtCore import QRect
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QTableWidgetItem
 
 from hawkears.gui.services.spectrogram import ReviewSpectrogram
-from hawkears.gui.ui.main_window import SpectrogramView
+from hawkears.gui.ui.main_window import ResultsPage, SpectrogramView
+
+
+def test_results_choose_selected_visible_detection_or_first_visible():
+    app = QApplication.instance() or QApplication([])
+    page = ResultsPage()
+    page.table.setSortingEnabled(False)
+    page.table.setRowCount(3)
+    for row, detection_id in enumerate((10, 20, 30)):
+        item = QTableWidgetItem(str(detection_id))
+        item.setData(Qt.ItemDataRole.UserRole, detection_id)
+        page.table.setItem(row, 0, item)
+    page.table.setCurrentCell(1, 0)
+
+    assert page.selected_or_first_visible_detection_id() == 20
+
+    page.table.setRowHidden(1, True)
+    assert page.selected_or_first_visible_detection_id() == 10
+
+    page.table.setRowHidden(0, True)
+    assert page.selected_or_first_visible_detection_id() == 30
+
+    page.table.setRowHidden(2, True)
+    assert page.selected_or_first_visible_detection_id() is None
+    page.close()
+    app.processEvents()
 
 
 def test_spectrogram_selection_maps_to_time_and_frequency_bounds():

@@ -85,9 +85,9 @@ from hawkears.gui.services.import_runner import HawkEarsImportRunner
 from hawkears.gui.services.label_export_runner import LabelExportRunner
 from hawkears.gui.services.spectrogram import (
     ReviewSpectrogram,
+    ReviewSpectrogramGenerator,
     colorize_spectrogram,
     filter_playback_audio,
-    generate_review_spectrogram,
 )
 from hawkears.gui.ui.location_dialog import LocationDialog, location_summary
 from hawkears.gui.ui.label_export_dialog import LabelExportDialog
@@ -1130,18 +1130,16 @@ class ResultsPage(QWidget):
         self.open_button.setEnabled(visible > 0)
 
     def _open_current(self) -> None:
+        detection_id = self.selected_or_first_visible_detection_id()
+        if detection_id is not None:
+            self.review_requested.emit(detection_id)
+
+    def selected_or_first_visible_detection_id(self) -> int | None:
+        """Return the selected visible detection, or the first visible result."""
         row = self.table.currentRow()
-        if row < 0 or self.table.isRowHidden(row):
-            visible_rows = [
-                index
-                for index in range(self.table.rowCount())
-                if not self.table.isRowHidden(index)
-            ]
-            if not visible_rows:
-                return
-            row = visible_rows[0]
-        item = self.table.item(row, 0)
-        self.review_requested.emit(int(item.data(Qt.ItemDataRole.UserRole)))
+        if row >= 0 and not self.table.isRowHidden(row):
+            return int(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole))
+        return self.first_visible_detection_id()
 
     def next_visible_detection_id(self, detection_id: int) -> int | None:
         visible_ids = [
@@ -1168,6 +1166,10 @@ class SpectrogramWorker(QObject):
     generated = Signal(int, object)
     failed = Signal(int, str)
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._generator: ReviewSpectrogramGenerator | None = None
+
     @Slot(int, object, float, float)
     def generate(
         self,
@@ -1184,7 +1186,9 @@ class SpectrogramWorker(QObject):
             end_seconds,
         )
         try:
-            result = generate_review_spectrogram(
+            if self._generator is None:
+                self._generator = ReviewSpectrogramGenerator()
+            result = self._generator.generate(
                 recording_path, start_seconds, end_seconds
             )
             logger.debug(
@@ -1658,13 +1662,10 @@ class ReviewPage(QWidget):
         completer = self.correction.completer()
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        additional = QLineEdit()
-        additional.setPlaceholderText(self.tr("Add species…"))
         self.notes = QTextEdit()
         self.notes.setPlaceholderText(self.tr("Optional review notes"))
         self.notes.setMinimumHeight(110)
         form.addRow(self.tr("Correct species"), self.correction)
-        form.addRow(self.tr("Also present"), additional)
         form.addRow(self.tr("Notes"), self.notes)
         review.addLayout(form)
         review.addStretch()
@@ -2625,9 +2626,12 @@ class MainWindow(QMainWindow):
             button.setCheckable(True)
             button.setAutoExclusive(True)
             button.setEnabled(False)
-            button.clicked.connect(
-                lambda checked=False, page=index: self._show_page(page)
-            )
+            if index == 4:
+                button.clicked.connect(self._review_results_selection)
+            else:
+                button.clicked.connect(
+                    lambda checked=False, page=index: self._show_page(page)
+                )
             layout.addWidget(button)
             self.nav_buttons.append(button)
         layout.addStretch()
@@ -3009,14 +3013,14 @@ class MainWindow(QMainWindow):
             self.tr("Wait for the current task to finish before changing projects."),
         )
 
+    def _review_results_selection(self) -> None:
+        detection_id = self.results_page.selected_or_first_visible_detection_id()
+        if detection_id is None:
+            self._show_page(4)
+            return
+        self._open_review(detection_id)
+
     def _show_page(self, index: int) -> None:
-        if index == 3:
-            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-            QApplication.processEvents()
-            try:
-                self._load_results()
-            finally:
-                QApplication.restoreOverrideCursor()
         if index == 5:
             self._load_reports()
         if index != 4:
@@ -3037,7 +3041,8 @@ class MainWindow(QMainWindow):
             return
         runs = self._database.analysis.list_runs()
         self.results_page.configure_runs(runs)
-        self.results_page.configure_queues(self._database.review_queues.list_queues())
+        queues = self._database.review_queues.list_queues()
+        self.results_page.configure_queues(queues)
         if selected_run_id is not None:
             index = self.results_page.run.findData(selected_run_id)
             if index >= 0:
@@ -3048,7 +3053,7 @@ class MainWindow(QMainWindow):
             self.results_page.select_queue(selected_queue_id)
         queue_id = self.results_page.current_queue_id()
         if queue_id is not None:
-            self._load_queue_results(queue_id)
+            self._load_queue_results(queue_id, queues=queues)
         else:
             self._load_detection_results(self.results_page.current_run_id())
 
@@ -3099,20 +3104,21 @@ class MainWindow(QMainWindow):
             self._database.detections.list_results(selected_run_id)
         )
 
-    def _load_queue_results(self, queue_id: object = None) -> None:
+    def _load_queue_results(
+        self,
+        queue_id: object = None,
+        *,
+        queues: list[ReviewQueueSummary] | None = None,
+    ) -> None:
         if self._database is None or queue_id is None:
             self._load_detection_results(self.results_page.current_run_id())
             return
         selected_queue_id = int(queue_id)
-        self._database.review_queues.recalculate(selected_queue_id)
-        self.results_page.configure_queues(self._database.review_queues.list_queues())
+        queues = queues or self._database.review_queues.list_queues()
+        self.results_page.configure_queues(queues)
         self.results_page.select_queue(selected_queue_id)
         queue = next(
-            (
-                item
-                for item in self._database.review_queues.list_queues()
-                if item.id == selected_queue_id
-            ),
+            (item for item in queues if item.id == selected_queue_id),
             None,
         )
         if queue is None:
@@ -3123,20 +3129,13 @@ class MainWindow(QMainWindow):
             self.results_page.run.blockSignals(True)
             self.results_page.run.setCurrentIndex(run_index)
             self.results_page.run.blockSignals(False)
-        by_id = {
-            item.detection_id: item
-            for item in self._database.detections.list_results(queue.analysis_run_id)
-        }
+        detections, queue_states = self._database.detections.list_queue_results(
+            selected_queue_id
+        )
         self.results_page.set_detections(
-            [
-                by_id[detection_id]
-                for detection_id in self._database.review_queues.detection_ids(
-                    selected_queue_id
-                )
-                if detection_id in by_id
-            ],
+            detections,
             preserve_order=True,
-            queue_states=self._database.review_queues.item_states(selected_queue_id),
+            queue_states=queue_states,
         )
 
     def _create_review_queue(self) -> None:
@@ -3358,6 +3357,8 @@ class MainWindow(QMainWindow):
             include_uncertain=bool(values["include_uncertain"]),
             include_rejected=bool(values["include_rejected"]),
             data_root=self._application_paths.data_root,
+            label_field=str(values["label_field"]),
+            overwrite_existing=bool(values["overwrite_existing"]),
         )
         runner.moveToThread(thread)
         thread.started.connect(runner.run)
