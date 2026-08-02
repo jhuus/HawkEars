@@ -7,6 +7,7 @@ import importlib.util
 from pathlib import Path
 import json
 import logging
+import platform
 import sqlite3
 import time
 
@@ -18,11 +19,21 @@ from PySide6.QtCore import (
     QSettings,
     QThread,
     QTimer,
+    QUrl,
     Qt,
+    qVersion,
     Signal,
     Slot,
 )
-from PySide6.QtGui import QAction, QColor, QImage, QPainter, QPen, QPixmap
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QDesktopServices,
+    QImage,
+    QPainter,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtMultimedia import (
     QAudioFormat,
     QAudioSink,
@@ -64,8 +75,9 @@ from PySide6.QtWidgets import (
 )
 
 from britekit.core import util
-from hawkears.gui.database import InvalidProjectError, MigrationError, ProjectDatabase
+from hawkears import __version__
 from hawkears.core.app_paths import ApplicationPaths, resolve_application_paths
+from hawkears.gui.database import InvalidProjectError, MigrationError, ProjectDatabase
 from hawkears.gui.database.records import (
     AnalysisRunSummary,
     DetectionResult,
@@ -77,6 +89,7 @@ from hawkears.gui.database.records import (
     ValidatedReport,
 )
 from hawkears.gui.recording_time import detection_time_of_day
+from hawkears.gui.diagnostics import diagnostic_directory
 from hawkears.gui.services.class_catalog import catalog_path, load_class_catalog
 from hawkears.gui.services.location_catalog import (
     LocationCatalog,
@@ -99,6 +112,8 @@ from hawkears.gui.ui.review_export_dialog import ReviewExportDialog
 from hawkears.gui.ui.species_dialog import SpeciesDialog
 
 logger = logging.getLogger(__name__)
+
+PROJECT_URL = "https://github.com/jhuus/HawkEars"
 
 
 def page_header(title: str, subtitle: str) -> tuple[QWidget, QVBoxLayout]:
@@ -2681,6 +2696,12 @@ class MainWindow(QMainWindow):
             layout.addWidget(button)
             self.nav_buttons.append(button)
         layout.addStretch()
+        self.version_label = QLabel(
+            self.tr("Version %1").replace("%1", __version__)
+        )
+        self.version_label.setObjectName("brandSubtle")
+        self.version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.version_label)
         return sidebar
 
     def _build_menu(self) -> None:
@@ -2700,6 +2721,82 @@ class MainWindow(QMainWindow):
         file_menu.addActions([new_action, open_action, self.close_project_action])
         file_menu.addSeparator()
         file_menu.addAction(quit_action)
+
+        help_menu = self.menuBar().addMenu(self.tr("Help"))
+        documentation_action = QAction(self.tr("HawkEars documentation"), self)
+        documentation_action.triggered.connect(
+            lambda: self._open_help_url(f"{PROJECT_URL}/blob/main/GUI.md")
+        )
+        issue_action = QAction(self.tr("Report an issue"), self)
+        issue_action.triggered.connect(
+            lambda: self._open_help_url(f"{PROJECT_URL}/issues")
+        )
+        log_action = QAction(self.tr("Open log folder"), self)
+        log_action.triggered.connect(self._open_log_folder)
+        diagnostics_action = QAction(self.tr("Copy diagnostic information"), self)
+        diagnostics_action.triggered.connect(self._copy_diagnostic_information)
+        about_action = QAction(self.tr("About HawkEars"), self)
+        about_action.triggered.connect(self._show_about)
+        help_menu.addActions([documentation_action, issue_action, log_action])
+        help_menu.addSeparator()
+        help_menu.addActions([diagnostics_action, about_action])
+
+    def _open_help_url(self, url: str) -> None:
+        if not QDesktopServices.openUrl(QUrl(url)):
+            QMessageBox.warning(
+                self,
+                self.tr("Could not open link"),
+                self.tr("Open this address in a web browser:\n%1").replace("%1", url),
+            )
+
+    def _open_log_folder(self) -> None:
+        path = diagnostic_directory()
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
+            QMessageBox.warning(
+                self,
+                self.tr("Could not open log folder"),
+                self.tr("The HawkEars logs are stored in:\n%1").replace(
+                    "%1", str(path)
+                ),
+            )
+
+    def _diagnostic_information(self) -> str:
+        project_path = str(self._database.path) if self._database is not None else "—"
+        return "\n".join(
+            (
+                self.tr("HawkEars: %1").replace("%1", __version__),
+                self.tr("Python: %1").replace("%1", platform.python_version()),
+                self.tr("Qt: %1").replace("%1", qVersion()),
+                self.tr("Platform: %1").replace("%1", platform.platform()),
+                self.tr("Inference device: %1").replace(
+                    "%1", str(util.get_device())
+                ),
+                self.tr("Data directory: %1").replace(
+                    "%1", str(self._application_paths.data_root)
+                ),
+                self.tr("Project: %1").replace("%1", project_path),
+                self.tr("Log directory: %1").replace(
+                    "%1", str(diagnostic_directory())
+                ),
+            )
+        )
+
+    def _copy_diagnostic_information(self) -> None:
+        QApplication.clipboard().setText(self._diagnostic_information())
+        self.statusBar().showMessage(self.tr("Diagnostic information copied."), 4000)
+
+    def _show_about(self) -> None:
+        QMessageBox.about(
+            self,
+            self.tr("About HawkEars"),
+            self.tr(
+                "<h3>HawkEars %1</h3>"
+                "<p>A bioacoustic classifier for birds and amphibians.</p>"
+                "<p><a href=\"%2\">GitHub project</a> · MIT License</p>"
+            )
+            .replace("%1", __version__)
+            .replace("%2", PROJECT_URL),
+        )
 
     def _create_project(self) -> None:
         if self._analysis_thread is not None or self._export_thread is not None:
