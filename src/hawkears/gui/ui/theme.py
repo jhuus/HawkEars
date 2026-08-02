@@ -140,7 +140,7 @@ QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
     width: 9px;
     height: 6px;
 }
-QSpinBox:disabled, QDoubleSpinBox:disabled {
+QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled {
     background: #eee9e5;
     border-color: #ddd4ce;
     color: #9b918c;

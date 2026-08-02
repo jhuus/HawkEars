@@ -1668,13 +1668,16 @@ class ReviewPage(QWidget):
         self.correction.addItems(
             sorted(definition.common_name for definition in class_catalog)
         )
+        self.correction.setEnabled(False)
         completer = self.correction.completer()
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         completer.setFilterMode(Qt.MatchFlag.MatchContains)
         self.notes = QTextEdit()
         self.notes.setPlaceholderText(self.tr("Optional review notes"))
         self.notes.setMinimumHeight(110)
-        form.addRow(self.tr("Correct species"), self.correction)
+        self.correction_label = QLabel(self.tr("Correct species"))
+        self.correction_label.setEnabled(False)
+        form.addRow(self.correction_label, self.correction)
         form.addRow(self.tr("Notes"), self.notes)
         review.addLayout(form)
         review.addStretch()
@@ -1711,6 +1714,7 @@ class ReviewPage(QWidget):
         self._detection_start_ms = 0
         self._detection_end_ms = 0
         self._detection_id: int | None = None
+        self._displayed_species_name: str | None = None
 
     def show_detection(
         self,
@@ -1729,6 +1733,7 @@ class ReviewPage(QWidget):
         score = "—" if detection.score is None else f"{detection.score:.3f}"
         self.detection_title.setText(f"{detection.species_name} · {score}")
         self._detection_id = detection.detection_id
+        self._displayed_species_name = detection.species_name
         species_index = self.correction.findText(detection.species_name)
         if species_index < 0:
             self.correction.addItem(detection.species_name)
@@ -1741,6 +1746,7 @@ class ReviewPage(QWidget):
                 and button.property("verdictValue") == detection.review_verdict.value
             )
         self.verdict_group.setExclusive(True)
+        self._update_correction_control()
         self.notes.setPlainText(detection.review_notes)
         reviewed = detection.review_verdict is not None
         self.save_button.setEnabled(reviewed)
@@ -2037,8 +2043,22 @@ class ReviewPage(QWidget):
         )
 
     def _review_selected(self) -> None:
+        self._update_correction_control()
         self.save_button.setEnabled(True)
         self.save_stop_button.setEnabled(True)
+
+    def _update_correction_control(self) -> None:
+        checked = self.verdict_group.checkedButton()
+        incorrect = (
+            checked is not None
+            and checked.property("verdictValue") == ReviewVerdict.INCORRECT.value
+        )
+        self.correction.setEnabled(incorrect)
+        self.correction_label.setEnabled(incorrect)
+        if not incorrect and self._displayed_species_name is not None:
+            index = self.correction.findText(self._displayed_species_name)
+            if index >= 0:
+                self.correction.setCurrentIndex(index)
 
     def _save(self, advance: bool) -> None:
         checked = self.verdict_group.checkedButton()

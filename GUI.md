@@ -57,9 +57,9 @@ You can also import Audacity or CSV output created by the HawkEars command-line 
 
 ## Results
 
-The Results page displays detections from an analysis run or review queue. **Recording offset** is the detection's position relative to the start of its recording. **Time of day** is calculated from the recording timestamp and detection offset; it is shown as `—` when no usable start time is available. Results can be filtered by text, species and review status. Click a column heading to sort the table.
+The Results page displays detections from an analysis run or review queue. **Time of day** is calculated from the recording timestamp and detection offset, and is shown as `—` when no usable start time is available. **Detection offset** is the detection's position relative to the start of its recording. Results can be filtered by text, species and review status. Click a column heading to sort the table.
 
-To review a single detection, you can double-click the row or select it and click **Review selected**. If no visible row is selected, the Review tab opens the first visible result.
+To review a single detection, double-click the row or select it and click **Review selected**. If no visible row is selected, the Review tab opens the first visible result.
 
 For a small analysis you may review all detections directly. For a large analysis, create a review queue to select a smaller, reproducible subset.
 

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -8,8 +9,70 @@ from PySide6.QtCore import QRect
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QTableWidgetItem
 
+from hawkears.gui.database.records import (
+    DetectionResult,
+    SpeciesDefinition,
+)
 from hawkears.gui.services.spectrogram import ReviewSpectrogram
-from hawkears.gui.ui.main_window import ResultsPage, SpectrogramView
+from hawkears.gui.ui.main_window import ResultsPage, ReviewPage, SpectrogramView
+
+
+def test_correct_species_is_enabled_only_for_incorrect_verdict():
+    app = QApplication.instance() or QApplication([])
+    catalog = [
+        SpeciesDefinition(
+            canonical_key=f"hawkears:{code}",
+            class_name=name,
+            common_name=name,
+            scientific_name=None,
+            species_code=code,
+            ebird_code=None,
+            model_class_index=index,
+        )
+        for index, (name, code) in enumerate(
+            (("Alder Flycatcher", "ALFL"), ("Willow Flycatcher", "WIFL"))
+        )
+    ]
+    page = ReviewPage(catalog)
+    page.spectrogram.load = lambda *args, **kwargs: None
+    detection = DetectionResult(
+        detection_id=1,
+        analysis_run_id=1,
+        analysis_run_name="Run 1",
+        species_name="Alder Flycatcher",
+        score=0.8,
+        recording_name="marsh.wav",
+        start_ms=1_000,
+        end_ms=4_000,
+        recorded_at=None,
+        latitude=None,
+        longitude=None,
+        region_code=None,
+        location_name=None,
+        review_verdict=None,
+        review_notes="",
+    )
+    try:
+        page.show_detection(detection, Path("marsh.wav"))
+        assert not page.correction.isEnabled()
+        assert not page.correction_label.isEnabled()
+
+        page.incorrect_button.click()
+        assert page.correction.isEnabled()
+        assert page.correction_label.isEnabled()
+        page.correction.setCurrentText("Willow Flycatcher")
+
+        page.correct_button.click()
+        assert not page.correction.isEnabled()
+        assert not page.correction_label.isEnabled()
+        assert page.correction.currentText() == "Alder Flycatcher"
+
+        page.uncertain_button.click()
+        assert not page.correction.isEnabled()
+    finally:
+        page.spectrogram.shutdown()
+        page.close()
+        app.processEvents()
 
 
 def test_results_choose_selected_visible_detection_or_first_visible():
