@@ -1520,7 +1520,9 @@ class SpectrogramView(QWidget):
             ) / self._data.duration_seconds
             if 0 <= playback_fraction <= 1:
                 cursor_x = plot.left() + round(playback_fraction * plot.width())
-                painter.setPen(QPen(QColor("#f8f0e7"), 1))
+                painter.setPen(QPen(QColor("#220e0d"), 3))
+                painter.drawLine(cursor_x, plot.top(), cursor_x, plot.bottom())
+                painter.setPen(QPen(QColor("#fbb040"), 1))
                 painter.drawLine(cursor_x, plot.top(), cursor_x, plot.bottom())
         painter.setPen(QColor("#f8f0e7"))
         for tick in range(5):
