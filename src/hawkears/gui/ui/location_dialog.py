@@ -108,6 +108,9 @@ class LocationDialog(QDialog):
         layout.addWidget(intro)
 
         source_form = QFormLayout()
+        source_form.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
+        )
         self.mode = QComboBox()
         self.mode.addItem(self.tr("No location logic"), "none")
         self.mode.addItem(self.tr("Global latitude and longitude"), "coordinates")
@@ -168,6 +171,7 @@ class LocationDialog(QDialog):
     def _coordinates_page(self) -> QWidget:
         page = QWidget()
         form = QFormLayout(page)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.latitude = QLineEdit()
         self.latitude.setPlaceholderText(self.tr("-90 to 90"))
         self.latitude.setValidator(self._coordinate_validator(-90, 90))
@@ -178,6 +182,9 @@ class LocationDialog(QDialog):
         form.addRow(self.tr("Longitude"), self.longitude)
         self.coordinate_region = QLabel()
         self.coordinate_region.setWordWrap(True)
+        self.coordinate_region.setMinimumHeight(
+            self.coordinate_region.fontMetrics().lineSpacing() * 2
+        )
         form.addRow(self.tr("Detected county"), self.coordinate_region)
         self.latitude.textChanged.connect(self._update_coordinate_region)
         self.longitude.textChanged.connect(self._update_coordinate_region)

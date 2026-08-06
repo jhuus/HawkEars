@@ -49,6 +49,23 @@ def test_dialog_serializes_global_coordinates():
     app.processEvents()
 
 
+def test_detected_county_has_room_for_wrapped_name():
+    app = application()
+    catalog = LocationCatalog(Path("data/locations.db"))
+    dialog = LocationDialog(
+        catalog,
+        {"mode": "coordinates", "latitude": 44.63, "longitude": -79.05},
+    )
+
+    assert "Kawartha Lakes" in dialog.coordinate_region.text()
+    assert (
+        dialog.coordinate_region.minimumHeight()
+        >= dialog.coordinate_region.fontMetrics().lineSpacing() * 2
+    )
+    dialog.close()
+    app.processEvents()
+
+
 def test_coordinate_fields_accept_pasted_decimal_values():
     app = application()
     catalog = LocationCatalog(Path("data/locations.db"))
