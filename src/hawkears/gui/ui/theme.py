@@ -8,7 +8,20 @@ QWidget {
     font-family: "Inter", "Segoe UI", sans-serif;
     font-size: 10pt;
 }
-QMainWindow, #appRoot, #pageSurface { background: #faf6f1; }
+QMainWindow, QDialog, #appRoot, #pageSurface { background: #faf6f1; }
+QMenu, QComboBox QAbstractItemView {
+    background: white;
+    color: #2f211f;
+    selection-background-color: #f8e6c7;
+    selection-color: #4f1612;
+}
+QMenu {
+    border: 1px solid #d5c9c2;
+}
+QMenu::item {
+    padding: 6px 22px 6px 10px;
+}
+QMenu::item:selected { background: #f8e6c7; }
 #sidebar {
     background: #4f1612;
     border: none;

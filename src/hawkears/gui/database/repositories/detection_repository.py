@@ -551,8 +551,7 @@ class DetectionRepository:
                 parameters = (run_id,)
             query += " ORDER BY detection.id"
             return [
-                _result_from_row(row)
-                for row in connection.execute(query, parameters)
+                _result_from_row(row) for row in connection.execute(query, parameters)
             ]
         finally:
             connection.close()

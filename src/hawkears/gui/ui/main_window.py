@@ -1147,8 +1147,7 @@ class ResultsPage(QWidget):
                     or state == values[7]
                     or (
                         state == self.tr("Reviewed")
-                        and values[7]
-                        not in {self.tr("Unreviewed"), self.tr("Skipped")}
+                        and values[7] not in {self.tr("Unreviewed"), self.tr("Skipped")}
                     )
                 )
             )
@@ -2696,9 +2695,7 @@ class MainWindow(QMainWindow):
             layout.addWidget(button)
             self.nav_buttons.append(button)
         layout.addStretch()
-        self.version_label = QLabel(
-            self.tr("Version %1").replace("%1", __version__)
-        )
+        self.version_label = QLabel(self.tr("Version %1").replace("%1", __version__))
         self.version_label.setObjectName("brandSubtle")
         self.version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.version_label)
@@ -2768,16 +2765,12 @@ class MainWindow(QMainWindow):
                 self.tr("Python: %1").replace("%1", platform.python_version()),
                 self.tr("Qt: %1").replace("%1", qVersion()),
                 self.tr("Platform: %1").replace("%1", platform.platform()),
-                self.tr("Inference device: %1").replace(
-                    "%1", str(util.get_device())
-                ),
+                self.tr("Inference device: %1").replace("%1", str(util.get_device())),
                 self.tr("Data directory: %1").replace(
                     "%1", str(self._application_paths.data_root)
                 ),
                 self.tr("Project: %1").replace("%1", project_path),
-                self.tr("Log directory: %1").replace(
-                    "%1", str(diagnostic_directory())
-                ),
+                self.tr("Log directory: %1").replace("%1", str(diagnostic_directory())),
             )
         )
 
@@ -2792,7 +2785,7 @@ class MainWindow(QMainWindow):
             self.tr(
                 "<h3>HawkEars %1</h3>"
                 "<p>A bioacoustic classifier for birds and amphibians.</p>"
-                "<p><a href=\"%2\">GitHub project</a> · MIT License</p>"
+                '<p><a href="%2">GitHub project</a> · MIT License</p>'
             )
             .replace("%1", __version__)
             .replace("%2", PROJECT_URL),
