@@ -18,6 +18,7 @@ from hawkears.gui.database.records import Recording, Species
 
 class AnalysisRunner(QObject):
     progress_changed = Signal(float, str)
+    saving_results = Signal()
     completed = Signal(int, int)
     cancelled = Signal(int, int)
     failed = Signal(str)
@@ -134,6 +135,7 @@ class AnalysisRunner(QObject):
             if result is None:
                 raise RuntimeError("HawkEars did not return an analysis result.")
 
+            self.saving_results.emit()
             recording_by_path = {
                 path: recording for path, recording in zip(paths, recordings)
             }

@@ -46,6 +46,7 @@ def test_analysis_runner_persists_direct_results(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(analysis_runner, "analyze", fake_analyze)
     completed = []
+    saving_results = []
     runner = AnalysisRunner(
         project_path,
         tmp_path,
@@ -58,9 +59,11 @@ def test_analysis_runner_persists_direct_results(tmp_path: Path, monkeypatch):
         tmp_path / "hawkears-data",
     )
     runner.completed.connect(lambda run_id, count: completed.append((run_id, count)))
+    runner.saving_results.connect(lambda: saving_results.append(True))
 
     runner.run()
 
+    assert saving_results == [True]
     assert completed == [(1, 1)]
     assert Path(analyze_arguments["output_path"]) == (
         tmp_path / "survey" / "analysis" / "1"

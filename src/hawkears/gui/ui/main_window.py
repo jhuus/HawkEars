@@ -77,6 +77,7 @@ from PySide6.QtWidgets import (
 from britekit.core import util
 from hawkears import __version__
 from hawkears.core.app_paths import ApplicationPaths, resolve_application_paths
+from hawkears.core.config_loader import get_config
 from hawkears.gui.database import InvalidProjectError, MigrationError, ProjectDatabase
 from hawkears.gui.database.records import (
     AnalysisRunSummary,
@@ -114,6 +115,27 @@ from hawkears.gui.ui.species_dialog import SpeciesDialog
 logger = logging.getLogger(__name__)
 
 PROJECT_URL = "https://github.com/jhuus/HawkEars"
+
+
+def analysis_setting_defaults(paths: ApplicationPaths) -> dict[str, object]:
+    """Return the CLI's effective inference defaults for the current device."""
+    config = get_config(data_root=paths.data_root)
+    max_models = config.infer.max_models
+    if max_models is None:
+        device = util.get_device()
+        extension = (
+            "*.onnx"
+            if device == "cpu" and importlib.util.find_spec("openvino") is not None
+            else "*.ckpt"
+        )
+        max_models = len(list(Path(config.misc.ckpt_folder).glob(extension)))
+    return {
+        "min_score": float(config.infer.min_score),
+        "max_models": max(1, int(max_models)),
+        "num_threads": int(config.infer.num_threads),
+        "segment_len": config.infer.segment_len,
+        "max_label_length": config.hawkears.max_label_length,
+    }
 
 
 def page_header(title: str, subtitle: str) -> tuple[QWidget, QVBoxLayout]:
@@ -408,6 +430,7 @@ class AnalysisPage(QWidget):
     def __init__(self, application_paths: ApplicationPaths | None = None) -> None:
         super().__init__()
         paths = application_paths or resolve_application_paths()
+        self._default_settings = analysis_setting_defaults(paths)
         self._location_catalog_path = paths.data_directory / "locations.db"
         self._browse_directory = paths.data_root
         self._recording_directory: Path | None = None
@@ -440,14 +463,14 @@ class AnalysisPage(QWidget):
         self.threshold = QDoubleSpinBox()
         self.threshold.setRange(0, 1)
         self.threshold.setSingleStep(0.05)
-        self.threshold.setValue(0.6)
+        self.threshold.setValue(float(self._default_settings["min_score"]))
         self.threshold.setDecimals(2)
         self.models = QSpinBox()
-        self.models.setRange(1, 9)
-        self.models.setValue(6)
+        self.models.setRange(1, max(12, int(self._default_settings["max_models"])))
+        self.models.setValue(int(self._default_settings["max_models"]))
         self.threads = QSpinBox()
         self.threads.setRange(1, 32)
-        self.threads.setValue(3)
+        self.threads.setValue(int(self._default_settings["num_threads"]))
         self.output = QComboBox()
         self.output.addItem(self.tr("Variable-length labels"), None)
         self.output.addItem(self.tr("Fixed-length segments"), "fixed")
@@ -557,15 +580,20 @@ class AnalysisPage(QWidget):
         project_directory: Path | None = None,
     ) -> None:
         self._loading = True
-        self.threshold.setValue(float(settings.get("min_score", 0.6)))
-        self.models.setValue(int(settings.get("max_models", 6)))
-        self.threads.setValue(int(settings.get("num_threads", 3)))
-        segment_len = settings.get("segment_len")
+        defaults = self._default_settings
+        self.threshold.setValue(
+            float(settings.get("min_score", defaults["min_score"]))
+        )
+        self.models.setValue(int(settings.get("max_models", defaults["max_models"])))
+        self.threads.setValue(
+            int(settings.get("num_threads", defaults["num_threads"]))
+        )
+        segment_len = settings.get("segment_len", defaults["segment_len"])
         self.output.setCurrentIndex(1 if segment_len is not None else 0)
         self.segment_length.setValue(
             float(segment_len) if segment_len is not None else 3.0
         )
-        maximum = settings.get("max_label_length")
+        maximum = settings.get("max_label_length", defaults["max_label_length"])
         self.max_label_length.setValue(float(maximum) if maximum is not None else 0)
         location = settings.get("location", {"mode": "none"})
         self._location_settings = (
@@ -761,12 +789,21 @@ class AnalysisPage(QWidget):
     def analysis_completed(self, detection_count: int) -> None:
         self._running = False
         self._run_started_at = None
+        self.progress.setRange(0, 100)
         self.progress.setValue(100)
         self.status.setText(self.tr("Complete · %n detections", None, detection_count))
         self.cancel_button.setVisible(False)
         self.run_button.setText(self.tr("Run again"))
         self.run_button.setEnabled(self._scope_ready)
         self.import_button.setEnabled(self._import_ready)
+
+    def analysis_saving_results(self) -> None:
+        self.progress.setRange(0, 0)
+        self.status.setText(self.tr("Saving detections…"))
+
+    def analysis_loading_results(self) -> None:
+        self.progress.setRange(0, 0)
+        self.status.setText(self.tr("Loading results…"))
 
     def import_completed(
         self, detection_count: int, format_name: str, file_count: int
@@ -798,6 +835,8 @@ class AnalysisPage(QWidget):
     def analysis_cancelled(self, detection_count: int) -> None:
         self._running = False
         self._run_started_at = None
+        self.progress.setRange(0, 100)
+        self.progress.setValue(100)
         self.status.setText(
             self.tr("Cancelled · %n detections saved", None, detection_count)
         )
@@ -3040,6 +3079,7 @@ class MainWindow(QMainWindow):
         runner.moveToThread(thread)
         thread.started.connect(runner.run)
         runner.progress_changed.connect(self.analysis_page.update_progress)
+        runner.saving_results.connect(self.analysis_page.analysis_saving_results)
         runner.completed.connect(self._analysis_completed)
         runner.cancelled.connect(self._analysis_cancelled)
         runner.failed.connect(self._analysis_failed)
@@ -3053,9 +3093,11 @@ class MainWindow(QMainWindow):
         thread.start()
 
     def _analysis_completed(self, run_id: int, detection_count: int) -> None:
-        self.analysis_page.analysis_completed(detection_count)
+        self.analysis_page.analysis_loading_results()
+        QApplication.processEvents()
         self._update_navigation()
         self._load_results(selected_run_id=run_id)
+        self.analysis_page.analysis_completed(detection_count)
 
     def _start_import(self, output_directory: Path) -> None:
         if self._database is None or self._analysis_thread is not None:
@@ -3104,9 +3146,11 @@ class MainWindow(QMainWindow):
             self._analysis_runner.cancel()
 
     def _analysis_cancelled(self, run_id: int, detection_count: int) -> None:
-        self.analysis_page.analysis_cancelled(detection_count)
+        self.analysis_page.analysis_loading_results()
+        QApplication.processEvents()
         self._update_navigation()
         self._load_results(selected_run_id=run_id)
+        self.analysis_page.analysis_cancelled(detection_count)
 
     def _analysis_failed(self, message: str) -> None:
         self.analysis_page.analysis_failed()

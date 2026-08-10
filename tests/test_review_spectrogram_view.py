@@ -1,6 +1,7 @@
 import os
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -15,8 +16,120 @@ from hawkears.gui.database.records import (
     ReviewVerdict,
     SpeciesDefinition,
 )
+from hawkears.core.app_paths import ApplicationPaths
 from hawkears.gui.services.spectrogram import ReviewSpectrogram
-from hawkears.gui.ui.main_window import ResultsPage, ReviewPage, SpectrogramView
+from hawkears.gui.ui import main_window
+from hawkears.gui.ui.main_window import (
+    AnalysisPage,
+    ResultsPage,
+    ReviewPage,
+    SpectrogramView,
+)
+
+
+@pytest.mark.parametrize(
+    ("device", "configured_models", "checkpoint_count", "expected_models"),
+    (("cpu", 3, 0, 3), ("mps", 3, 0, 3), ("cuda", None, 7, 7)),
+)
+def test_analysis_defaults_match_cli_device_behavior(
+    tmp_path: Path,
+    monkeypatch,
+    device: str,
+    configured_models: int | None,
+    checkpoint_count: int,
+    expected_models: int,
+):
+    checkpoint_directory = tmp_path / "data" / "ckpt"
+    checkpoint_directory.mkdir(parents=True)
+    for index in range(checkpoint_count):
+        (checkpoint_directory / f"model-{index}.ckpt").touch()
+    config = SimpleNamespace(
+        infer=SimpleNamespace(
+            min_score=0.7,
+            max_models=configured_models,
+            num_threads=3,
+            segment_len=None,
+        ),
+        hawkears=SimpleNamespace(max_label_length=None),
+        misc=SimpleNamespace(ckpt_folder=str(checkpoint_directory)),
+    )
+    monkeypatch.setattr(main_window, "get_config", lambda **kwargs: config)
+    monkeypatch.setattr(main_window.util, "get_device", lambda: device)
+    monkeypatch.setattr(main_window.importlib.util, "find_spec", lambda name: None)
+
+    defaults = main_window.analysis_setting_defaults(ApplicationPaths(tmp_path))
+
+    assert defaults == {
+        "min_score": 0.7,
+        "max_models": expected_models,
+        "num_threads": 3,
+        "segment_len": None,
+        "max_label_length": None,
+    }
+
+
+def test_analysis_page_uses_device_defaults_for_unset_project_settings(
+    tmp_path: Path, monkeypatch
+):
+    monkeypatch.setattr(
+        main_window,
+        "analysis_setting_defaults",
+        lambda paths: {
+            "min_score": 0.7,
+            "max_models": 3,
+            "num_threads": 4,
+            "segment_len": None,
+            "max_label_length": None,
+        },
+    )
+    app = QApplication.instance() or QApplication([])
+    page = AnalysisPage(ApplicationPaths(tmp_path))
+
+    page.configure(
+        {},
+        recording_directory=None,
+        recurse=False,
+        species_count=0,
+        editable=True,
+    )
+
+    assert page.current_settings()["min_score"] == 0.7
+    assert page.current_settings()["max_models"] == 3
+    assert page.current_settings()["num_threads"] == 4
+    page.close()
+    app.processEvents()
+
+
+def test_analysis_page_shows_post_inference_phases(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        main_window,
+        "analysis_setting_defaults",
+        lambda paths: {
+            "min_score": 0.7,
+            "max_models": 3,
+            "num_threads": 3,
+            "segment_len": None,
+            "max_label_length": None,
+        },
+    )
+    app = QApplication.instance() or QApplication([])
+    page = AnalysisPage(ApplicationPaths(tmp_path))
+
+    page.analysis_saving_results()
+    assert page.status.text() == "Saving detections…"
+    assert page.progress.minimum() == 0
+    assert page.progress.maximum() == 0
+
+    page.analysis_loading_results()
+    assert page.status.text() == "Loading results…"
+    assert page.progress.maximum() == 0
+
+    page.analysis_completed(42)
+    assert page.status.text() == "Complete · 42 detections"
+    assert page.progress.maximum() == 100
+    assert page.progress.value() == 100
+    page.close()
+    app.processEvents()
 
 
 def test_correct_species_is_enabled_only_for_incorrect_verdict():
