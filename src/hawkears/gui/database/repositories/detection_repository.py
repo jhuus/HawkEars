@@ -480,8 +480,23 @@ class DetectionRepository:
         finally:
             connection.close()
 
+    def get_result(self, detection_id: int) -> DetectionResult:
+        """Return one denormalized detection for browsing and review."""
+        results = self._query_results(detection_id=detection_id)
+        if not results:
+            raise LookupError(f"Detection {detection_id} does not exist.")
+        return results[0]
+
     def list_results(self, run_id: Optional[int] = None) -> list[DetectionResult]:
         """Return denormalized detections for browsing and review."""
+        return self._query_results(run_id=run_id)
+
+    def _query_results(
+        self,
+        *,
+        run_id: Optional[int] = None,
+        detection_id: Optional[int] = None,
+    ) -> list[DetectionResult]:
         connection = connect(self.database_path, readonly=True)
         try:
             query = """
@@ -546,7 +561,10 @@ class DetectionRepository:
                 LEFT JOIN review ON review.detection_id = detection.id
             """
             parameters: tuple[object, ...] = ()
-            if run_id is not None:
+            if detection_id is not None:
+                query += " WHERE detection.id = ?"
+                parameters = (detection_id,)
+            elif run_id is not None:
                 query += " WHERE analysis_run.id = ?"
                 parameters = (run_id,)
             query += " ORDER BY detection.id"

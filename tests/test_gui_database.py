@@ -377,6 +377,7 @@ def test_bulk_inference_detection_creation(tmp_path: Path):
     assert [(run.id, run.detection_count) for run in runs] == [(run_id, 2)]
     results = database.detections.list_results(run_id)
     assert [result.species_name for result in results] == ["Marsh Wren"] * 2
+    assert database.detections.get_result(results[0].detection_id) == results[0]
     assert results[0].recording_name == "marsh.wav"
     assert results[0].recorded_at == "2015-07-12"
     assert results[0].region_code == "CA-ON-OT"

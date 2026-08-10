@@ -1099,6 +1099,49 @@ class ResultsPage(QWidget):
             self.table.sortItems(1, Qt.SortOrder.DescendingOrder)
         self._apply_filters()
 
+    def update_detection(self, detection: DetectionResult) -> None:
+        """Replace one displayed detection without rebuilding the results table."""
+        for row in range(self.table.rowCount()):
+            if (
+                int(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole))
+                != detection.detection_id
+            ):
+                continue
+            self.table.setSortingEnabled(False)
+            values = self._detection_values(detection)
+            for column, value in enumerate(values):
+                item = self.table.item(row, column)
+                item.setText(value)
+                item.setData(Qt.ItemDataRole.UserRole, detection.detection_id)
+            if self.species.findText(detection.species_name) < 0:
+                self.species.addItem(detection.species_name)
+            self.table.setSortingEnabled(True)
+            self.table.sortItems(1, Qt.SortOrder.DescendingOrder)
+            self._apply_filters()
+            return
+
+    def _detection_values(self, detection: DetectionResult) -> tuple[str, ...]:
+        score = "—" if detection.score is None else f"{detection.score:.3f}"
+        return (
+            detection.species_name,
+            score,
+            detection.recording_name,
+            detection.recorded_at[:10] if detection.recorded_at else "—",
+            detection_time_of_day(
+                detection.recorded_at,
+                detection.recording_name,
+                detection.start_ms,
+            )
+            or "—",
+            self._location(detection),
+            self._time_range(detection.start_ms, detection.end_ms),
+            (
+                self._verdict_text(detection.review_verdict)
+                if detection.review_verdict is not None
+                else self.tr("Unreviewed")
+            ),
+        )
+
     @staticmethod
     def _time_range(start_ms: int, end_ms: int) -> str:
         def format_time(value: int) -> str:
@@ -3537,15 +3580,9 @@ class MainWindow(QMainWindow):
         logger.info("Opening review: detection_id=%d", detection_id)
         if self._database is None:
             return
-        detection = next(
-            (
-                item
-                for item in self._database.detections.list_results()
-                if item.detection_id == detection_id
-            ),
-            None,
-        )
-        if detection is None:
+        try:
+            detection = self._database.detections.get_result(detection_id)
+        except LookupError:
             QMessageBox.warning(
                 self,
                 self.tr("Detection unavailable"),
@@ -3657,13 +3694,21 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, self.tr("Could not save review"), str(error))
             return
 
-        selected_run_id = self.results_page.current_run_id()
-        self._load_results(
-            selected_run_id=selected_run_id,
-            selected_queue_id=selected_queue_id,
-        )
-        if advance and selected_queue_id is not None:
-            next_detection_id = self.results_page.first_visible_detection_id()
+        if selected_queue_id is None:
+            self.results_page.update_detection(
+                self._database.detections.get_result(detection_id)
+            )
+            self.results_page.configure_queues(
+                self._database.review_queues.list_queues()
+            )
+            self.results_page.select_queue(None)
+        else:
+            self._load_results(
+                selected_run_id=self.results_page.current_run_id(),
+                selected_queue_id=selected_queue_id,
+            )
+            if advance:
+                next_detection_id = self.results_page.first_visible_detection_id()
         if advance and next_detection_id is not None:
             self._open_review(next_detection_id)
         else:

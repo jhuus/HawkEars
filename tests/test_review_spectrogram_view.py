@@ -1,4 +1,5 @@
 import os
+from dataclasses import replace
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import QApplication, QTableWidgetItem
 
 from hawkears.gui.database.records import (
     DetectionResult,
+    ReviewVerdict,
     SpeciesDefinition,
 )
 from hawkears.gui.services.spectrogram import ReviewSpectrogram
@@ -133,6 +135,47 @@ def test_results_search_matches_partial_recording_date():
         if not page.table.isRowHidden(row)
     ]
     assert visible_dates == ["2014-06-15"]
+    page.close()
+    app.processEvents()
+
+
+def test_results_page_updates_one_detection_without_rebuilding_rows():
+    app = QApplication.instance() or QApplication([])
+    page = ResultsPage()
+    detections = [
+        DetectionResult(
+            detection_id=index,
+            analysis_run_id=1,
+            analysis_run_name="Run 1",
+            species_name="Alder Flycatcher",
+            score=score,
+            recording_name=f"recording-{index}.wav",
+            start_ms=1_000,
+            end_ms=4_000,
+            recorded_at="2014-06-15",
+            latitude=None,
+            longitude=None,
+            region_code=None,
+            location_name=None,
+            review_verdict=None,
+            review_notes="",
+        )
+        for index, score in ((1, 0.9), (2, 0.8))
+    ]
+    page.set_detections(detections)
+    untouched_item = page.table.item(1, 0)
+
+    page.update_detection(
+        replace(
+            detections[0],
+            species_name="American Robin",
+            review_verdict=ReviewVerdict.CORRECT,
+        )
+    )
+
+    assert page.table.item(0, 0).text() == "American Robin"
+    assert page.table.item(0, 7).text() == "Correct"
+    assert page.table.item(1, 0) is untouched_item
     page.close()
     app.processEvents()
 

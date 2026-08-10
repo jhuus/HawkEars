@@ -71,6 +71,7 @@ QPushButton[nav="true"]:disabled {
 #metricValue { color: #4f1612; font-size: 19pt; font-weight: 700; }
 #muted { color: #786b67; }
 QLabel:disabled { color: #a39792; }
+QCheckBox:disabled { color: #a39792; }
 QMenu::item:disabled { color: #a39792; }
 QFrame[card="true"] {
     background: white;

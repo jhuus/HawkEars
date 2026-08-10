@@ -3,7 +3,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QComboBox, QDialog
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog
 
 from hawkears.gui.ui.theme import STYLESHEET
 
@@ -39,4 +39,24 @@ def test_dialogs_and_combo_popups_remain_light_with_dark_system_palette():
         dialog.close()
         app.setStyleSheet(original_stylesheet)
         app.setPalette(original_palette)
+        app.processEvents()
+
+
+def test_disabled_checkbox_uses_muted_text_color():
+    app = QApplication.instance() or QApplication([])
+    original_stylesheet = app.styleSheet()
+    checkbox = QCheckBox("Disabled option")
+    checkbox.setEnabled(False)
+
+    try:
+        app.setStyleSheet(STYLESHEET)
+        checkbox.show()
+        app.processEvents()
+
+        assert checkbox.palette().color(
+            QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText
+        ) == QColor("#a39792")
+    finally:
+        checkbox.close()
+        app.setStyleSheet(original_stylesheet)
         app.processEvents()
