@@ -93,6 +93,7 @@ class SoundAlikeHeuristics:
         self.max_rare = 0.001  # main species occurrence < this?
         self.min_common = 0.01  # soundalike species occurrence > this?
         self.with_location = {
+            "ATPU": [SN(soundalike="TUPU", enabled=True)],
             "BAGO": [SN(soundalike="COGO", enabled=True)],
             "BCCH": [SN(soundalike="BOCH", enabled=True)],
             "BHVI": [SN(soundalike="CAVI", enabled=True)],
@@ -136,6 +137,7 @@ class SoundAlikeHeuristics:
             ],
             "SCTA": [SN(soundalike="WETA", enabled=True)],
             "SPTO": [SN(soundalike="EATO", enabled=True)],
+            "TUPU": [SN(soundalike="ATPU", enabled=True)],
             "VASW": [SN(soundalike="AMRE", enabled=True)],
             "WETA": [SN(soundalike="SCTA", enabled=True)],
             "WEWA": [SN(soundalike="CHSP", enabled=True)],
