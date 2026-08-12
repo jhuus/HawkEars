@@ -27,6 +27,33 @@ def test_excluded_classes_stay_below_a_zero_score_threshold():
     assert np.all(frame_map[:, 1] < 0.0)
 
 
+def test_output_filter_removes_excluded_classes_and_zero_padding():
+    analyzer = Analyzer.__new__(Analyzer)
+    analyzer.cfg = SimpleNamespace(infer=SimpleNamespace(min_score=0.0))
+    classes = {
+        "Common Nighthawk": SimpleNamespace(include=True),
+        "Acadian Flycatcher": SimpleNamespace(include=False),
+        "Canine": SimpleNamespace(include=False),
+    }
+    analyzer.class_mgr = SimpleNamespace(
+        class_info_by_label_field=lambda label: classes.get(label)
+    )
+    dataframe = pd.DataFrame(
+        [
+            {"name": "Common Nighthawk", "score": 0.72},
+            {"name": "Common Nighthawk", "score": 0.0},
+            {"name": "Acadian Flycatcher", "score": 0.0},
+            {"name": "Canine", "score": 0.4},
+        ]
+    )
+
+    filtered = analyzer._filter_output_dataframe(dataframe)
+
+    assert filtered.to_dict("records") == [
+        {"name": "Common Nighthawk", "score": 0.72}
+    ]
+
+
 def test_analysis_progress_reports_percentage():
     assert AnalysisProgress(1, 4).percent_complete == 25.0
     assert AnalysisProgress(0, 0).percent_complete == 100.0

@@ -562,7 +562,7 @@ class AnalysisPage(QWidget):
         self._scope_ready = False
         self._import_ready = False
         self._editable = False
-        self.threshold.valueChanged.connect(self._emit_settings)
+        self.threshold.valueChanged.connect(self._threshold_changed)
         self.models.valueChanged.connect(self._emit_settings)
         self.threads.valueChanged.connect(self._emit_settings)
         self.output.currentIndexChanged.connect(self._label_format_changed)
@@ -705,8 +705,18 @@ class AnalysisPage(QWidget):
         self._update_label_controls()
         self._emit_settings()
 
+    def _threshold_changed(self) -> None:
+        self._update_label_controls()
+        self._emit_settings()
+
     def _update_label_controls(self) -> None:
+        zero_threshold = self.threshold.value() == 0
+        if zero_threshold and self.output.currentData() != "fixed":
+            blocked = self.output.blockSignals(True)
+            self.output.setCurrentIndex(1)
+            self.output.blockSignals(blocked)
         fixed_length = self.output.currentData() == "fixed"
+        self.output.setEnabled(self._editable and not zero_threshold)
         self.segment_length.setEnabled(self._editable and fixed_length)
         self.segment_length_label.setEnabled(self._editable and fixed_length)
         self.max_label_length.setEnabled(self._editable and not fixed_length)

@@ -233,6 +233,7 @@ class Analyzer:
                 dataframe = predictor.get_dataframe(
                     None, frame_map, None, recording_stem
                 )
+                dataframe = self._filter_output_dataframe(dataframe)
                 dataframe = self._split_long_dataframe_labels(dataframe)
 
             if self.do_csv:
@@ -244,6 +245,7 @@ class Analyzer:
                     else None
                 )
                 if rarities_df is not None:
+                    rarities_df = self._filter_output_dataframe(rarities_df)
                     rarities_df = self._split_long_dataframe_labels(rarities_df)
                 with self._dataframes_lock:
                     self.dataframes.append(dataframe)
@@ -334,6 +336,15 @@ class Analyzer:
         """
         try:
             labels = self._split_long_labels(predictor.get_frame_labels(frame_map))
+            labels = {
+                name: [
+                    label
+                    for label in class_labels
+                    if self.cfg.infer.min_score > 0 or label.score > 0
+                ]
+                for name, class_labels in labels.items()
+                if self._is_included_output_label(name)
+            }
 
             # Check if there is any output
             if not write_empty_file:
@@ -352,6 +363,19 @@ class Analyzer:
                         out_file.write(text)
         except (IOError, OSError) as e:
             raise Exception(f"Failed to write Audacity labels to {file_path}: {str(e)}")
+
+    def _filter_output_dataframe(self, dataframe):
+        """Remove labels excluded from output, including zero-threshold padding."""
+        if dataframe.empty:
+            return dataframe
+        included = dataframe["name"].map(self._is_included_output_label)
+        if self.cfg.infer.min_score <= 0:
+            included &= dataframe["score"] > 0
+        return dataframe.loc[included].reset_index(drop=True)
+
+    def _is_included_output_label(self, label: str) -> bool:
+        info = self.class_mgr.class_info_by_label_field(label)
+        return info is not None and info.include
 
     def _split_long_labels(self, labels):
         """Split oversized variable labels while retaining their full coverage."""

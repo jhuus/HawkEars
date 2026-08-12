@@ -100,6 +100,77 @@ def test_analysis_page_uses_device_defaults_for_unset_project_settings(
     app.processEvents()
 
 
+def test_zero_threshold_forces_fixed_length_labels(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        main_window,
+        "analysis_setting_defaults",
+        lambda paths: {
+            "min_score": 0.7,
+            "max_models": 3,
+            "num_threads": 3,
+            "segment_len": None,
+            "max_label_length": None,
+        },
+    )
+    app = QApplication.instance() or QApplication([])
+    page = AnalysisPage(ApplicationPaths(tmp_path))
+    page.configure(
+        {"min_score": 0.7, "segment_len": None},
+        recording_directory=None,
+        recurse=False,
+        species_count=1,
+        editable=True,
+    )
+
+    assert page.output.currentData() is None
+    assert page.output.isEnabled()
+    page.threshold.setValue(0)
+
+    assert page.output.currentData() == "fixed"
+    assert not page.output.isEnabled()
+    assert page.segment_length.isEnabled()
+    assert not page.max_label_length.isEnabled()
+    assert page.current_settings()["segment_len"] == 3.0
+
+    page.threshold.setValue(0.1)
+    assert page.output.isEnabled()
+    assert page.output.currentData() == "fixed"
+    page.close()
+    app.processEvents()
+
+
+def test_configured_zero_threshold_overrides_variable_labels(
+    tmp_path: Path, monkeypatch
+):
+    monkeypatch.setattr(
+        main_window,
+        "analysis_setting_defaults",
+        lambda paths: {
+            "min_score": 0.7,
+            "max_models": 3,
+            "num_threads": 3,
+            "segment_len": None,
+            "max_label_length": None,
+        },
+    )
+    app = QApplication.instance() or QApplication([])
+    page = AnalysisPage(ApplicationPaths(tmp_path))
+
+    page.configure(
+        {"min_score": 0.0, "segment_len": None},
+        recording_directory=None,
+        recurse=False,
+        species_count=1,
+        editable=True,
+    )
+
+    assert page.output.currentData() == "fixed"
+    assert not page.output.isEnabled()
+    assert page.current_settings()["segment_len"] == 3.0
+    page.close()
+    app.processEvents()
+
+
 def test_analysis_page_shows_post_inference_phases(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(
         main_window,
