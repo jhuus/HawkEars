@@ -681,6 +681,8 @@ class DetectionRepository:
         try:
             query = """
                 SELECT species.common_name AS species_name,
+                       species.species_code,
+                       species.scientific_name,
                        count(detection.id) AS detection_count,
                        sum(current.end_ms - current.start_ms) / 1000.0
                            AS detection_seconds,
@@ -719,6 +721,8 @@ class DetectionRepository:
             species = tuple(
                 SpeciesReport(
                     species_name=row["species_name"],
+                    species_code=row["species_code"],
+                    scientific_name=row["scientific_name"],
                     detection_count=row["detection_count"],
                     detection_seconds=row["detection_seconds"],
                     reviewed_count=row["reviewed_count"],
@@ -759,6 +763,8 @@ class DetectionRepository:
             "species": (
                 (
                     "species",
+                    "species_code",
+                    "scientific_name",
                     "reviewed",
                     "accepted",
                     "incorrect",
@@ -766,40 +772,50 @@ class DetectionRepository:
                     "seconds",
                 ),
                 """
-                SELECT current_species AS species, count(*) AS reviewed,
+                SELECT current_species AS species, current_species_code AS species_code,
+                       current_scientific_name AS scientific_name,
+                       count(*) AS reviewed,
                        sum(accepted) AS accepted,
                        sum(verdict = 'incorrect' AND corrected = 0) AS incorrect,
                        sum(verdict = 'uncertain') AS uncertain,
                        sum(duration_ms) / 1000.0 AS seconds
                 FROM reviewed
-                GROUP BY current_species
+                GROUP BY current_species_id
                 ORDER BY current_species COLLATE NOCASE
                 """,
             ),
             "recording": (
-                ("recording", "species", "date", "location", "detections", "seconds"),
+                ("recording", "species", "species_code", "scientific_name",
+                 "date", "location", "detections", "seconds"),
                 """
-                SELECT recording, current_species AS species, date, location,
+                SELECT recording, current_species AS species,
+                       current_species_code AS species_code,
+                       current_scientific_name AS scientific_name, date, location,
                        count(*) AS detections, sum(duration_ms) / 1000.0 AS seconds
                 FROM reviewed WHERE accepted = 1
-                GROUP BY recording, current_species, date, location
+                GROUP BY recording, current_species_id, date, location
                 ORDER BY recording COLLATE NOCASE, current_species COLLATE NOCASE
                 """,
             ),
             "date_location": (
-                ("date", "location", "species", "recordings", "detections", "seconds"),
+                ("date", "location", "species", "species_code", "scientific_name",
+                 "recordings", "detections", "seconds"),
                 """
                 SELECT date, location, current_species AS species,
+                       current_species_code AS species_code,
+                       current_scientific_name AS scientific_name,
                        count(DISTINCT recording_id) AS recordings,
                        count(*) AS detections, sum(duration_ms) / 1000.0 AS seconds
                 FROM reviewed WHERE accepted = 1
-                GROUP BY date, location, current_species
+                GROUP BY date, location, current_species_id
                 ORDER BY date, location COLLATE NOCASE, current_species COLLATE NOCASE
                 """,
             ),
             "score_accuracy": (
                 (
                     "species",
+                    "species_code",
+                    "scientific_name",
                     "score_range",
                     "reviewed",
                     "correct",
@@ -809,6 +825,8 @@ class DetectionRepository:
                 ),
                 """
                 SELECT original_species AS species,
+                       original_species_code AS species_code,
+                       original_scientific_name AS scientific_name,
                        CASE
                          WHEN score IS NULL THEN 'No score'
                          WHEN score >= 1.0 THEN '1.0'
@@ -825,21 +843,25 @@ class DetectionRepository:
                                  sum(verdict IN ('correct', 'incorrect')) END
                            AS correctness_percent
                 FROM reviewed
-                GROUP BY original_species,
+                GROUP BY original_species_id,
                          CASE WHEN score IS NULL THEN -1
                               ELSE CAST(score * 10 AS INTEGER) END
                 ORDER BY original_species COLLATE NOCASE, score
                 """,
             ),
             "first_detection": (
-                ("species", "date", "location", "recording", "start_seconds", "score"),
+                ("species", "species_code", "scientific_name", "date", "location",
+                 "recording", "start_seconds", "score"),
                 """
-                SELECT current_species AS species, date, location, recording,
+                SELECT current_species AS species,
+                       current_species_code AS species_code,
+                       current_scientific_name AS scientific_name,
+                       date, location, recording,
                        start_ms / 1000.0 AS start_seconds, score
                 FROM (
                     SELECT reviewed.*,
                            row_number() OVER (
-                               PARTITION BY current_species, date
+                               PARTITION BY current_species_id, date
                                ORDER BY recorded_at, recording COLLATE NOCASE, start_ms
                            ) AS position
                     FROM reviewed WHERE accepted = 1
@@ -860,8 +882,14 @@ class DetectionRepository:
                        recording.display_name AS recording,
                        current.start_ms,
                        current.end_ms - current.start_ms AS duration_ms,
+                       current_species.id AS current_species_id,
                        current_species.common_name AS current_species,
+                       current_species.species_code AS current_species_code,
+                       current_species.scientific_name AS current_scientific_name,
+                       original_species.id AS original_species_id,
                        original_species.common_name AS original_species,
+                       original_species.species_code AS original_species_code,
+                       original_species.scientific_name AS original_scientific_name,
                        review.verdict,
                        original.species_id != current.species_id AS corrected,
                        review.verdict = 'correct' OR (
@@ -955,7 +983,11 @@ class DetectionRepository:
             "review_verdict",
             "review_notes",
             "original_species",
+            "original_species_code",
+            "original_scientific_name",
             "current_species",
+            "current_species_code",
+            "current_scientific_name",
             "species_corrected",
             "original_start_seconds",
             "original_end_seconds",
@@ -966,6 +998,8 @@ class DetectionRepository:
             "current_min_frequency_hz",
             "current_max_frequency_hz",
             "additional_species",
+            "additional_species_codes",
+            "additional_scientific_names",
             "review_queues",
         )
         conditions = []
@@ -1026,7 +1060,11 @@ class DetectionRepository:
                    review.verdict AS review_verdict,
                    review.notes AS review_notes,
                    original_species.common_name AS original_species,
+                   original_species.species_code AS original_species_code,
+                   original_species.scientific_name AS original_scientific_name,
                    current_species.common_name AS current_species,
+                   current_species.species_code AS current_species_code,
+                   current_species.scientific_name AS current_scientific_name,
                    {corrected} AS species_corrected,
                    original.start_ms / 1000.0 AS original_start_seconds,
                    original.end_ms / 1000.0 AS original_end_seconds,
@@ -1037,6 +1075,9 @@ class DetectionRepository:
                    current.low_frequency_hz AS current_min_frequency_hz,
                    current.high_frequency_hz AS current_max_frequency_hz,
                    coalesce(additional.names, '') AS additional_species,
+                   coalesce(additional.codes, '') AS additional_species_codes,
+                   coalesce(additional.scientific_names, '')
+                       AS additional_scientific_names,
                    coalesce(queues.names, '') AS review_queues
             FROM detection
             JOIN detection_revision AS original
@@ -1054,7 +1095,10 @@ class DetectionRepository:
             LEFT JOIN analysis_run ON analysis_run.id = analysis_item.analysis_run_id
             LEFT JOIN (
                 SELECT detection_additional_species.detection_id,
-                       group_concat(species.common_name, '; ') AS names
+                       group_concat(species.common_name, '; ') AS names,
+                       group_concat(species.species_code, '; ') AS codes,
+                       group_concat(species.scientific_name, '; ')
+                           AS scientific_names
                 FROM detection_additional_species
                 JOIN species ON species.id = detection_additional_species.species_id
                 GROUP BY detection_additional_species.detection_id

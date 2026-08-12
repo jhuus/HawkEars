@@ -409,8 +409,16 @@ def test_bulk_inference_detection_creation(tmp_path: Path):
 
 def test_validated_reports_include_confirmed_corrections(tmp_path: Path):
     database = create_project(tmp_path)
-    predicted = database.species.add("Alder Flycatcher")
-    corrected = database.species.add("Common Nighthawk")
+    predicted = database.species.add(
+        "Alder Flycatcher",
+        species_code="ALFL",
+        scientific_name="Empidonax alnorum",
+    )
+    corrected = database.species.add(
+        "Common Nighthawk",
+        species_code="CONI",
+        scientific_name="Chordeiles minor",
+    )
     first_recording = database.recordings.add(tmp_path / "first.mp3")
     second_recording = database.recordings.add(tmp_path / "second.mp3")
     run_id = database.analysis.create_run(
@@ -463,25 +471,55 @@ def test_validated_reports_include_confirmed_corrections(tmp_path: Path):
 
     species_report = database.detections.validated_report("species", run_id)
     nighthawk = next(row for row in species_report.rows if row[0] == "Common Nighthawk")
-    assert nighthawk == ("Common Nighthawk", 2, 2, 0, 0, 7.0)
+    assert nighthawk == (
+        "Common Nighthawk",
+        "CONI",
+        "Chordeiles minor",
+        2,
+        2,
+        0,
+        0,
+        7.0,
+    )
 
     presence = database.detections.validated_report("recording", run_id)
     assert len(presence.rows) == 2
     assert {row[0] for row in presence.rows} == {"first.mp3", "second.mp3"}
-    assert {row[3] for row in presence.rows} == {"Central Okanagan"}
+    assert {row[5] for row in presence.rows} == {"Central Okanagan"}
+    assert {row[1:4] for row in presence.rows} == {
+        ("Common Nighthawk", "CONI", "Chordeiles minor")
+    }
 
     date_location = database.detections.validated_report("date_location", run_id)
     assert date_location.rows == (
-        ("2025-06-01", "Central Okanagan", "Common Nighthawk", 2, 2, 7.0),
+        (
+            "2025-06-01",
+            "Central Okanagan",
+            "Common Nighthawk",
+            "CONI",
+            "Chordeiles minor",
+            2,
+            2,
+            7.0,
+        ),
     )
 
     accuracy = database.detections.validated_report("score_accuracy", run_id)
-    assert sum(row[2] for row in accuracy.rows) == 3
+    assert sum(row[4] for row in accuracy.rows) == 3
     assert {row[0] for row in accuracy.rows} == {"Alder Flycatcher", "Common Nighthawk"}
 
     first = database.detections.validated_report("first_detection", run_id)
     assert first.rows == (
-        ("Common Nighthawk", "2025-06-01", "Central Okanagan", "first.mp3", 2.0, 0.91),
+        (
+            "Common Nighthawk",
+            "CONI",
+            "Chordeiles minor",
+            "2025-06-01",
+            "Central Okanagan",
+            "first.mp3",
+            2.0,
+            0.91,
+        ),
     )
 
     all_reviews = database.detections.reviewed_detection_export(run_id=run_id)
@@ -493,7 +531,11 @@ def test_validated_reports_include_confirmed_corrections(tmp_path: Path):
     assert correction_row[columns["review_outcome"]] == "accepted"
     assert correction_row[columns["review_verdict"]] == "incorrect"
     assert correction_row[columns["original_species"]] == "Alder Flycatcher"
+    assert correction_row[columns["original_species_code"]] == "ALFL"
+    assert correction_row[columns["original_scientific_name"]] == "Empidonax alnorum"
     assert correction_row[columns["current_species"]] == "Common Nighthawk"
+    assert correction_row[columns["current_species_code"]] == "CONI"
+    assert correction_row[columns["current_scientific_name"]] == "Chordeiles minor"
     assert correction_row[columns["species_corrected"]] == 1
     assert correction_row[columns["original_start_seconds"]] == 8.0
 

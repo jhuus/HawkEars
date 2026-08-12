@@ -2431,6 +2431,8 @@ class ReportsPage(QWidget):
         self._validated_report = report
         headers = {
             "species": self.tr("Species"),
+            "species_code": self.tr("Species code"),
+            "scientific_name": self.tr("Scientific name"),
             "reviewed": self.tr("Reviewed"),
             "accepted": self.tr("Accepted"),
             "incorrect": self.tr("Incorrect"),
@@ -2585,6 +2587,8 @@ class ReportsPage(QWidget):
                 writer.writerow(
                     (
                         "species",
+                        "species_code",
+                        "scientific_name",
                         "detections",
                         "seconds",
                         "reviewed",
@@ -2600,6 +2604,8 @@ class ReportsPage(QWidget):
                     writer.writerow(
                         (
                             item.species_name,
+                            item.species_code or "",
+                            item.scientific_name or "",
                             item.detection_count,
                             f"{item.detection_seconds:.1f}",
                             item.reviewed_count,

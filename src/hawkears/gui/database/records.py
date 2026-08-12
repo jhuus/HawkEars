@@ -218,6 +218,8 @@ class SpeciesReport:
     """Review totals for detections currently assigned to one species."""
 
     species_name: str
+    species_code: Optional[str]
+    scientific_name: Optional[str]
     detection_count: int
     detection_seconds: float
     reviewed_count: int
