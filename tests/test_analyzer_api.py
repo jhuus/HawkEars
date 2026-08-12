@@ -3,9 +3,28 @@ from types import MethodType, SimpleNamespace
 import threading
 
 import pandas as pd
+import numpy as np
 
 from hawkears.core.analysis_result import AnalysisProgress
 from hawkears.core.analyzer import Analyzer
+
+
+def test_excluded_classes_stay_below_a_zero_score_threshold():
+    analyzer = Analyzer.__new__(Analyzer)
+    analyzer.cfg = SimpleNamespace(
+        hawkears=SimpleNamespace(save_rarities=False),
+        infer=SimpleNamespace(min_score=0.0),
+    )
+    analyzer.check_occurrence = False
+    analyzer.class_mgr = SimpleNamespace(
+        class_info_by_index=lambda index: SimpleNamespace(include=index == 0)
+    )
+    frame_map = np.array([[0.8, 0.4], [0.7, 0.2]], dtype=np.float32)
+
+    analyzer._update_frame_map(frame_map, "recording.wav")
+
+    assert np.all(frame_map[:, 0] >= 0.0)
+    assert np.all(frame_map[:, 1] < 0.0)
 
 
 def test_analysis_progress_reports_percentage():

@@ -296,23 +296,28 @@ class Analyzer:
         import numpy as np
 
         num_classes = frame_map.shape[1]  # num_frames = frame_map.shape[0]
+        # A zero cannot represent an excluded score when the configured cutoff is
+        # also zero: Predictor treats scores equal to the cutoff as detections.
+        # Model confidence scores are non-negative, so use a negative sentinel in
+        # that case while retaining the usual zeroed frame map at other cutoffs.
+        filtered_score = -1.0 if self.cfg.infer.min_score <= 0 else 0.0
         if self.check_occurrence and self.cfg.hawkears.save_rarities:
             # scores for low-occurrence classes
-            rarities_frame_map = np.zeros(frame_map.shape)
+            rarities_frame_map = np.full_like(frame_map, filtered_score)
         else:
             rarities_frame_map = None
 
         for class_index in range(num_classes):
             info = self.class_mgr.class_info_by_index(class_index)
             if not info.include:
-                frame_map[:, class_index] = 0
+                frame_map[:, class_index] = filtered_score
             elif self.check_occurrence and info.name in self.occur_mgr.class_name_set:
                 occurrence = self.occur_mgr.get_value(recording_name, info.name)
                 if occurrence < self.cfg.hawkears.min_occurrence:
                     if self.cfg.hawkears.save_rarities:
                         rarities_frame_map[:, class_index] = frame_map[:, class_index]
 
-                    frame_map[:, class_index] = 0
+                    frame_map[:, class_index] = filtered_score
 
         return rarities_frame_map
 

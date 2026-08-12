@@ -3158,9 +3158,21 @@ class MainWindow(QMainWindow):
         self._load_results(selected_run_id=run_id)
         self.analysis_page.analysis_cancelled(detection_count)
 
-    def _analysis_failed(self, message: str) -> None:
+    def _analysis_failed(self, message: str, details: str) -> None:
         self.analysis_page.analysis_failed()
-        QMessageBox.critical(self, self.tr("Analysis failed"), message)
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Icon.Critical)
+        dialog.setWindowTitle(self.tr("Analysis failed"))
+        dialog.setText(message)
+        dialog.setInformativeText(
+            self.tr(
+                "Technical details are available below and have been written "
+                "to the HawkEars log."
+            )
+        )
+        dialog.setDetailedText(details)
+        dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
+        dialog.exec()
 
     def _analysis_thread_finished(self) -> None:
         if self._analysis_thread is not None:

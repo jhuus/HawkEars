@@ -1,9 +1,11 @@
 """Background inference and project persistence for the GUI."""
 
 import csv
+import logging
 import math
 from pathlib import Path
 import threading
+import traceback
 from typing import Mapping, Sequence
 
 from PySide6.QtCore import QObject, Signal, Slot
@@ -16,12 +18,15 @@ from hawkears.gui.database import ProjectDatabase
 from hawkears.gui.database.records import Recording, Species
 
 
+logger = logging.getLogger(__name__)
+
+
 class AnalysisRunner(QObject):
     progress_changed = Signal(float, str)
     saving_results = Signal()
     completed = Signal(int, int)
     cancelled = Signal(int, int)
-    failed = Signal(str)
+    failed = Signal(str, str)
 
     def __init__(
         self,
@@ -50,6 +55,8 @@ class AnalysisRunner(QObject):
     @Slot()
     def run(self) -> None:
         database = ProjectDatabase(self.database_path)
+        phase = "preparing"
+        saved_count = 0
         try:
             paths = [
                 Path(path).resolve()
@@ -88,6 +95,7 @@ class AnalysisRunner(QObject):
                 database.analysis.set_item_status(item_id, "running")
 
             date = self._date_value(location)
+            phase = "analyzing"
             result = analyze(
                 input_path=str(self.recording_directory),
                 output_path=str(self.output_directory(self.run_id)),
@@ -136,6 +144,7 @@ class AnalysisRunner(QObject):
                 raise RuntimeError("HawkEars did not return an analysis result.")
 
             self.saving_results.emit()
+            phase = "converting"
             recording_by_path = {
                 path: recording for path, recording in zip(paths, recordings)
             }
@@ -158,7 +167,9 @@ class AnalysisRunner(QObject):
                         detection.score,
                     )
                 )
-            count = database.detections.create_inferred_many(rows)
+            phase = "saving"
+            saved_count = database.detections.create_inferred_many(rows)
+            phase = "finalizing"
             was_cancelled = self._cancel_requested.is_set() and len(
                 self._completed_paths
             ) < len(paths)
@@ -175,19 +186,60 @@ class AnalysisRunner(QObject):
                 )
             if was_cancelled:
                 database.analysis.set_run_status(self.run_id, "cancelled")
-                self.cancelled.emit(self.run_id, count)
+                self.cancelled.emit(self.run_id, saved_count)
             else:
                 database.analysis.set_run_status(self.run_id, "completed")
-                self.completed.emit(self.run_id, count)
+                self.completed.emit(self.run_id, saved_count)
         except Exception as error:
+            details = traceback.format_exc()
+            logger.exception(
+                "Analysis run failed while %s; run_id=%s; saved_detections=%d",
+                phase,
+                self.run_id,
+                saved_count,
+            )
             if self.run_id is not None:
                 try:
                     database.analysis.set_run_status(
                         self.run_id, "failed", error_message=str(error)
                     )
                 except Exception:
-                    pass
-            self.failed.emit(str(error))
+                    logger.exception(
+                        "Could not mark failed analysis run %d as failed", self.run_id
+                    )
+            self.failed.emit(
+                self._failure_message(error, phase, saved_count), details
+            )
+
+    def _failure_message(
+        self, error: Exception, phase: str, saved_count: int
+    ) -> str:
+        run = (
+            self.tr("Analysis run %1").replace("%1", str(self.run_id))
+            if self.run_id is not None
+            else self.tr("The analysis")
+        )
+        phase_labels = {
+            "preparing": self.tr("preparing the analysis"),
+            "analyzing": self.tr("analyzing recordings"),
+            "converting": self.tr("converting analysis results"),
+            "saving": self.tr("saving detections"),
+            "finalizing": self.tr("finalizing the analysis"),
+        }
+        message = self.tr("%1 failed while %2.").replace("%1", run).replace(
+            "%2", phase_labels.get(phase, phase)
+        )
+        if saved_count:
+            save_status = self.tr("%n detection(s) were saved.", None, saved_count)
+        else:
+            save_status = self.tr("No detections were saved.")
+        if isinstance(error, KeyError) and error.args:
+            reason = self.tr("Unexpected result value: %1").replace(
+                "%1", str(error.args[0])
+            )
+        else:
+            reason = str(error).strip() or type(error).__name__
+        return f"{message}\n\n{save_status}\n\n{reason}"
 
     @staticmethod
     def _date_value(location: Mapping[str, object]) -> str | None:

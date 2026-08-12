@@ -143,3 +143,36 @@ def test_analysis_runner_cancels_without_leaving_running_items(
         } == {"cancelled"}
     finally:
         connection.close()
+
+
+def test_analysis_runner_reports_phase_run_and_traceback_on_failure(
+    tmp_path: Path, monkeypatch
+):
+    project_path = tmp_path / "survey.hawkears"
+    database = ProjectDatabase.create(project_path, "Survey")
+    species = database.species.add("Marsh Wren", class_name="Marsh Wren")
+    recording = tmp_path / "one.wav"
+    recording.touch()
+    monkeypatch.setattr(
+        analysis_runner,
+        "find_recording_paths",
+        lambda input_path, recurse: [str(recording)],
+    )
+
+    def fail_analysis(**kwargs):
+        raise RuntimeError("model output could not be decoded")
+
+    monkeypatch.setattr(analysis_runner, "analyze", fail_analysis)
+    runner = AnalysisRunner(project_path, tmp_path, False, [species], {})
+    failures = []
+    runner.failed.connect(lambda message, details: failures.append((message, details)))
+
+    runner.run()
+
+    assert len(failures) == 1
+    message, details = failures[0]
+    assert "Analysis run 1 failed while analyzing recordings." in message
+    assert "No detections were saved." in message
+    assert "model output could not be decoded" in message
+    assert "Traceback (most recent call last)" in details
+    assert "RuntimeError: model output could not be decoded" in details
