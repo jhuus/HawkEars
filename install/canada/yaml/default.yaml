@@ -17,4 +17,5 @@ infer:
   scaling_intercept: 1.3
 hawkears:
   heuristics_manager: "hawkears.heuristics.canada.main.CanadaHeuristicsManager"
+  taxonomy_file: "data/taxonomy.csv"
   save_rarities: true

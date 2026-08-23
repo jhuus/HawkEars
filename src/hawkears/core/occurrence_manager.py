@@ -171,7 +171,9 @@ class OccurrenceManager:
             self.file_info[name] = (region, week_num)
 
     def get_value(self, filename: str, class_name: str):
-        assert class_name in self.class_mgr.name_dict, f"Class {class_name} not found."
+        assert (
+            self.class_mgr.class_info_by_name(class_name) is not None
+        ), f"Class {class_name} not found."
 
         if class_name not in self.class_name_set:
             return 0.0

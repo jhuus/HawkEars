@@ -581,13 +581,9 @@ class AnalysisPage(QWidget):
     ) -> None:
         self._loading = True
         defaults = self._default_settings
-        self.threshold.setValue(
-            float(settings.get("min_score", defaults["min_score"]))
-        )
+        self.threshold.setValue(float(settings.get("min_score", defaults["min_score"])))
         self.models.setValue(int(settings.get("max_models", defaults["max_models"])))
-        self.threads.setValue(
-            int(settings.get("num_threads", defaults["num_threads"]))
-        )
+        self.threads.setValue(int(settings.get("num_threads", defaults["num_threads"])))
         segment_len = settings.get("segment_len", defaults["segment_len"])
         self.output.setCurrentIndex(1 if segment_len is not None else 0)
         self.segment_length.setValue(
@@ -2678,7 +2674,12 @@ class MainWindow(QMainWindow):
         self._database: ProjectDatabase | None = None
         if class_catalog is None:
             path = catalog_path(self._application_paths.data_root)
-            class_catalog = load_class_catalog(path) if path.is_file() else []
+            config = get_config(data_root=self._application_paths.data_root)
+            class_catalog = (
+                load_class_catalog(path, config.hawkears.taxonomy_file)
+                if path.is_file()
+                else []
+            )
         self._class_catalog = class_catalog
 
         root = QWidget()

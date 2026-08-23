@@ -34,6 +34,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     from hawkears.gui.ui.main_window import MainWindow
+    from hawkears.core.config_loader import get_config
     from hawkears.gui.i18n import install_translators
     from hawkears.gui.ui.resources import brand_icon
     from hawkears.gui.ui.theme import STYLESHEET
@@ -82,7 +83,10 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         try:
-            class_catalog = load_class_catalog(classes_path)
+            config = get_config(data_root=paths.data_root)
+            class_catalog = load_class_catalog(
+                classes_path, config.hawkears.taxonomy_file
+            )
         except (OSError, ClassCatalogError) as error:
             QMessageBox.critical(
                 None,
@@ -160,6 +164,7 @@ def _run_packaging_smoke_test() -> int:
     required_resources = (
         resources.joinpath("yaml", "default.yaml"),
         resources.joinpath("data", "classes.csv"),
+        resources.joinpath("data", "taxonomy.csv"),
         resources.joinpath("data", "locations.db"),
         resources.joinpath("recordings", "CommonYellowthroat.mp3"),
     )

@@ -38,7 +38,10 @@ class LowBandHeuristics:
             return
 
         # Get indexes of RUGR and SPGR in low-band and main models
-        low_band_class_mgr = ClassManager(self.cfg)
+        # Taxonomy overrides are keyed to the main model's embedded codes. The
+        # low-band classifier is an internal score source with a different class
+        # set, so public taxonomy must not be applied to it.
+        low_band_class_mgr = ClassManager(self.cfg, apply_taxonomy=False)
         self.class_indexes = []
         for name in ["Ruffed Grouse", "Spruce Grouse"]:
             main_info = class_mgr.class_info_by_name(name)

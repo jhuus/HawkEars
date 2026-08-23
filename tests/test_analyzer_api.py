@@ -36,7 +36,8 @@ def test_output_filter_removes_excluded_classes_and_zero_padding():
         "Canine": SimpleNamespace(include=False),
     }
     analyzer.class_mgr = SimpleNamespace(
-        class_info_by_label_field=lambda label: classes.get(label)
+        class_info_by_label_field=lambda label: classes.get(label),
+        effective_label=lambda label: label,
     )
     dataframe = pd.DataFrame(
         [

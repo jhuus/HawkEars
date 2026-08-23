@@ -16,6 +16,7 @@ def test_basic():
     cfg = HawkEarsBaseConfig()
 
     cfg.misc.ckpt_folder = "tests/data/ckpt"
+    cfg.hawkears.taxonomy_file = None
     cfg.hawkears.include_list = None
     cfg.hawkears.exclude_list = "tests/data/exclude-basic.txt"
 
@@ -43,6 +44,7 @@ def test_filelist():
     cfg = HawkEarsBaseConfig()
 
     cfg.misc.ckpt_folder = "tests/data/ckpt"
+    cfg.hawkears.taxonomy_file = None
     cfg.hawkears.include_list = None
     cfg.hawkears.exclude_list = "tests/data/exclude-basic.txt"
     cfg.hawkears.filelist = "tests/data/filelist1.csv"
@@ -62,6 +64,7 @@ def test_compact_packaged_occurrence_data(tmp_path):
 
     cfg = HawkEarsBaseConfig()
     cfg.misc.ckpt_folder = "tests/data/ckpt"
+    cfg.hawkears.taxonomy_file = None
     cfg.hawkears.include_list = None
     cfg.hawkears.exclude_list = "tests/data/exclude-basic.txt"
     cfg.hawkears.occurrence_pickle = str(tmp_path / "occurrence.pkl")
@@ -97,7 +100,9 @@ class _EmptyRegionProvider:
 def _occurrence_manager_for_region(region):
     manager = OccurrenceManager.__new__(OccurrenceManager)
     manager.cfg = SimpleNamespace(hawkears=SimpleNamespace(region=region, date=None))
-    manager.class_mgr = SimpleNamespace(name_dict={"Test species": object()})
+    manager.class_mgr = SimpleNamespace(
+        class_info_by_name=lambda name: object() if name == "Test species" else None
+    )
     manager.provider = _EmptyRegionProvider()
     manager.class_name_set = manager.provider.class_names
     manager._region_has_data_cache = {}

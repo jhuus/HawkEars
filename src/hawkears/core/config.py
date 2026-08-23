@@ -30,9 +30,8 @@ class HawkEarsConfig:
         0.0002  # ignore species if occurrence less than this for location/week
     )
 
-    # These dicts allow names/codes to be updated without retraining
-    map_names: Optional[dict] = None  # Map old class names to new names
-    map_codes: Optional[dict] = None  # Map old class codes to new codes
+    # Override model-embedded display taxonomy, keyed by the model code.
+    taxonomy_file: Optional[str] = "data/taxonomy.csv"
 
     # If specified, output labels for these classes only
     include_list: Optional[str] = None

@@ -74,9 +74,23 @@ def test_packaged_config_uses_explicit_data_root(tmp_path, monkeypatch):
 
     assert Path(config.misc.ckpt_folder) == tmp_path / "data" / "ckpt"
     assert Path(config.hawkears.exclude_list) == tmp_path / "data" / "exclude.txt"
+    assert Path(config.hawkears.taxonomy_file).name == "taxonomy.csv"
+    assert Path(config.hawkears.taxonomy_file).is_file()
     assert (
         Path(config.hawkears.occurrence_pickle) == tmp_path / "data" / "occurrence.pkl"
     )
+
+
+def test_local_taxonomy_overrides_packaged_default(tmp_path, monkeypatch):
+    monkeypatch.setattr(config_loader.util, "get_device", lambda: "cpu")
+    config_loader._base_configs.clear()
+    taxonomy = tmp_path / "data" / "taxonomy.csv"
+    taxonomy.parent.mkdir()
+    taxonomy.write_text("model_code,name,code,alt_name,alt_code\n", encoding="utf-8")
+
+    config = config_loader.get_config(data_root=tmp_path)
+
+    assert Path(config.hawkears.taxonomy_file) == taxonomy
 
 
 def test_application_readiness_requires_catalogs_and_both_model_sets(tmp_path):

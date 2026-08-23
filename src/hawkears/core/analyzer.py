@@ -313,8 +313,11 @@ class Analyzer:
             info = self.class_mgr.class_info_by_index(class_index)
             if not info.include:
                 frame_map[:, class_index] = filtered_score
-            elif self.check_occurrence and info.name in self.occur_mgr.class_name_set:
-                occurrence = self.occur_mgr.get_value(recording_name, info.name)
+            elif (
+                self.check_occurrence
+                and info.model_name in self.occur_mgr.class_name_set
+            ):
+                occurrence = self.occur_mgr.get_value(recording_name, info.model_name)
                 if occurrence < self.cfg.hawkears.min_occurrence:
                     if self.cfg.hawkears.save_rarities:
                         rarities_frame_map[:, class_index] = frame_map[:, class_index]
@@ -337,7 +340,7 @@ class Analyzer:
         try:
             labels = self._split_long_labels(predictor.get_frame_labels(frame_map))
             labels = {
-                name: [
+                self.class_mgr.effective_label(name): [
                     label
                     for label in class_labels
                     if self.cfg.infer.min_score > 0 or label.score > 0
@@ -371,7 +374,9 @@ class Analyzer:
         included = dataframe["name"].map(self._is_included_output_label)
         if self.cfg.infer.min_score <= 0:
             included &= dataframe["score"] > 0
-        return dataframe.loc[included].reset_index(drop=True)
+        filtered = dataframe.loc[included].copy()
+        filtered["name"] = filtered["name"].map(self.class_mgr.effective_label)
+        return filtered.reset_index(drop=True)
 
     def _is_included_output_label(self, label: str) -> bool:
         info = self.class_mgr.class_info_by_label_field(label)

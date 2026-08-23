@@ -53,6 +53,18 @@ def _resolve_runtime_paths(cfg: HawkEarsBaseConfig, root: Path) -> None:
     cfg.misc.ckpt_folder = cast(str, rooted(cfg.misc.ckpt_folder))
     cfg.hawkears.include_list = rooted(cfg.hawkears.include_list)
     cfg.hawkears.exclude_list = rooted(cfg.hawkears.exclude_list)
+    taxonomy_file = cfg.hawkears.taxonomy_file
+    if taxonomy_file is not None:
+        taxonomy_path = Path(taxonomy_file)
+        if not taxonomy_path.is_absolute():
+            local_path = root / taxonomy_path
+            packaged_path = installation_resources().joinpath(*taxonomy_path.parts)
+            taxonomy_file = str(
+                local_path
+                if local_path.is_file() or not packaged_path.is_file()
+                else packaged_path
+            )
+    cfg.hawkears.taxonomy_file = taxonomy_file
     cfg.hawkears.occurrence_pickle = cast(str, rooted(cfg.hawkears.occurrence_pickle))
 
 

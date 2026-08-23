@@ -42,3 +42,21 @@ def test_catalog_requires_expected_columns(tmp_path: Path):
 
     with pytest.raises(ClassCatalogError, match="must contain the columns"):
         load_class_catalog(path)
+
+
+def test_catalog_applies_taxonomy_with_stable_model_key(tmp_path: Path):
+    catalog = write_catalog(
+        tmp_path / "classes.csv",
+        "Name,Code,AltName,AltCode\nBarred Owl,BADO,Strix varia,brdowl\n",
+    )
+    taxonomy = write_catalog(
+        tmp_path / "taxonomy.csv",
+        "model_code,name,code,alt_name,alt_code\nBADO,,BAOW,,\n",
+    )
+
+    definitions = load_class_catalog(catalog, taxonomy)
+
+    assert definitions[0].canonical_key == "hawkears:BADO"
+    assert definitions[0].species_code == "BAOW"
+    assert definitions[0].common_name == "Barred Owl"
+    assert definitions[0].scientific_name == "Strix varia"
