@@ -78,6 +78,38 @@ def test_taxonomy_aliases_work_in_include_list(tmp_path):
     assert [info.model_code for info in class_mgr.included_classes()] == ["AGOL"]
 
 
+def test_in_memory_include_names_override_configured_exclusions(tmp_path):
+    exclude_list = tmp_path / "exclude.txt"
+    exclude_list.write_text("American Goldfinch\n", encoding="utf-8")
+    cfg = HawkEarsBaseConfig()
+    cfg.misc.ckpt_folder = "tests/data/ckpt"
+    cfg.hawkears.taxonomy_file = None
+    cfg.hawkears.include_list = None
+    cfg.hawkears.exclude_list = str(exclude_list)
+
+    class_mgr = ClassManager(cfg, include_names={"American Goldfinch"})
+
+    assert [info.name for info in class_mgr.included_classes()] == [
+        "American Goldfinch"
+    ]
+
+
+def test_file_include_does_not_override_configured_exclusions(tmp_path):
+    include_list = tmp_path / "include.txt"
+    include_list.write_text("American Goldfinch\n", encoding="utf-8")
+    exclude_list = tmp_path / "exclude.txt"
+    exclude_list.write_text("American Goldfinch\n", encoding="utf-8")
+    cfg = HawkEarsBaseConfig()
+    cfg.misc.ckpt_folder = "tests/data/ckpt"
+    cfg.hawkears.taxonomy_file = None
+    cfg.hawkears.include_list = str(include_list)
+    cfg.hawkears.exclude_list = str(exclude_list)
+
+    class_mgr = ClassManager(cfg)
+
+    assert class_mgr.included_classes() == []
+
+
 def test_packaged_taxonomy_updates_barred_owl_code():
     cfg = HawkEarsBaseConfig()
     cfg.misc.ckpt_folder = "tests/data/ckpt"

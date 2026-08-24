@@ -91,7 +91,8 @@ def analyze(
     - progress_callback: Optional callback receiving progress notifications.
     - cancellation_callback: Optional callback checked between recordings. Return true
       to stop the analysis after recordings already in progress finish.
-    - include_names: Optional model class names to include, avoiding an include-list file.
+    - include_names: Optional authoritative collection of model class names to include,
+      avoiding an include-list file and the configured default exclusion list.
     - raise_errors: Re-raise inference and validation errors for application callers.
     - data_root: Explicit HawkEars data directory. If omitted, legacy
       current-directory discovery is retained.

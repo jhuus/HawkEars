@@ -42,7 +42,11 @@ class ClassManager:
             raise Exception(f"Error processing {cfg.hawkears.include_list}: {e}")
 
         try:
-            if cfg.hawkears.exclude_list is None:
+            # An in-memory include collection represents an application's explicit
+            # class selection (the GUI uses it for project target species).  It must
+            # not be negated by the default exclusion file.  File-based include and
+            # exclude lists retain their historical behavior, where exclude wins.
+            if include_names is not None or cfg.hawkears.exclude_list is None:
                 self.exclude_set = set()
             else:
                 self.exclude_set = set(
