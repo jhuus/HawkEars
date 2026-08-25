@@ -21,8 +21,9 @@ class LabelExportDialog(QDialog):
         layout = QVBoxLayout(self)
         explanation = QLabel(
             self.tr(
-                "Export one label file per recording. Current results use corrected "
-                "species and boundaries; original results ignore all review changes."
+                "Export detections to audio-label files. Current results use "
+                "corrected species and boundaries; original results ignore all "
+                "review changes."
             )
         )
         explanation.setWordWrap(True)
@@ -33,6 +34,7 @@ class LabelExportDialog(QDialog):
         self.output_format = QComboBox()
         self.output_format.addItem(self.tr("Audacity labels"), "audacity")
         self.output_format.addItem(self.tr("Raven selection tables"), "raven")
+        self.output_format.addItem(self.tr("HawkEars CSV"), "csv")
         form.addRow(self.tr("Format"), self.output_format)
 
         self.label_field = QComboBox()

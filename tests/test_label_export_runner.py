@@ -124,3 +124,53 @@ def test_audacity_export_can_use_common_or_scientific_names(tmp_path: Path):
         assert (output_directory / "marsh_scores.txt").read_text() == (
             f"1.250\t4.250\t{expected};0.900\n"
         )
+
+
+def test_csv_export_writes_combined_hawkears_scores_file(tmp_path: Path):
+    database = ProjectDatabase.create(tmp_path / "survey.hawkears", "Survey")
+    species = database.species.add(
+        "Common Yellowthroat",
+        scientific_name="Geothlypis trichas",
+        species_code="COYE",
+    )
+    marsh = database.recordings.add(tmp_path / "marsh.wav")
+    quiet = database.recordings.add(tmp_path / "quiet.wav")
+    run_id = database.analysis.create_run(
+        "2.3.0",
+        {},
+        species_ids=[species.id],
+        recording_ids=[marsh.id, quiet.id],
+    )
+    database.detections.create_inferred(
+        marsh.id,
+        database.analysis.item_ids(run_id)[marsh.id],
+        species.id,
+        1_250,
+        4_250,
+        0.9,
+    )
+    output_directory = tmp_path / "labels"
+    runner = LabelExportRunner(
+        database.path,
+        output_directory,
+        output_format="csv",
+        run_id=run_id,
+        revision_mode="current",
+        include_unreviewed=True,
+        include_uncertain=True,
+        include_rejected=False,
+        data_root=tmp_path,
+    )
+    completed = []
+    failures = []
+    runner.completed.connect(lambda *values: completed.append(values))
+    runner.failed.connect(failures.append)
+
+    runner.run()
+
+    assert not failures
+    assert completed == [(1, 1, "csv")]
+    assert (output_directory / "scores.csv").read_text() == (
+        "recording,name,start_time,end_time,score\n"
+        "marsh,COYE,1.250,4.250,0.900\n"
+    )

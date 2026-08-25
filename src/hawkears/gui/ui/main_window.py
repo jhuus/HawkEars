@@ -3628,9 +3628,12 @@ class MainWindow(QMainWindow):
     def _audio_label_export_completed(
         self, detection_count: int, recording_count: int, output_format: str
     ) -> None:
-        format_name = (
-            self.tr("Audacity") if output_format == "audacity" else self.tr("Raven")
-        )
+        format_names = {
+            "audacity": self.tr("Audacity"),
+            "csv": self.tr("HawkEars CSV"),
+            "raven": self.tr("Raven"),
+        }
+        format_name = format_names.get(output_format, output_format)
         QMessageBox.information(
             self,
             self.tr("Audio labels exported"),

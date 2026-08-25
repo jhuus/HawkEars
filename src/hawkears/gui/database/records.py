@@ -267,7 +267,7 @@ class ReviewedDetectionExport:
 
 @dataclass(frozen=True)
 class LabelExportDetection:
-    """One resolved annotation row for Audacity or Raven export."""
+    """One resolved annotation row for an audio-label export."""
 
     detection_id: int
     recording_id: int

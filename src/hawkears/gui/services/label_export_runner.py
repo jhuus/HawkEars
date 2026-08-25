@@ -1,5 +1,6 @@
-"""Background Audacity and Raven export for desktop projects."""
+"""Background audio-label export for desktop projects."""
 
+import csv
 from collections import defaultdict
 from pathlib import Path
 
@@ -47,7 +48,7 @@ class LabelExportRunner(QObject):
     @Slot()
     def run(self) -> None:
         try:
-            if self.output_format not in {"audacity", "raven"}:
+            if self.output_format not in {"audacity", "csv", "raven"}:
                 raise ValueError(f"Unknown label export format: {self.output_format}")
             if self.label_field not in {"code", "common_name", "scientific_name"}:
                 raise ValueError(f"Unknown label field: {self.label_field}")
@@ -69,19 +70,23 @@ class LabelExportRunner(QObject):
                 )
             }
             self.output_directory.mkdir(parents=True, exist_ok=True)
-            duplicate_stems = self._duplicate_stems(recordings)
-            plans = []
-            for recording_id, recording in recordings.items():
-                stem = Path(recording.display_name).stem
-                if stem.casefold() in duplicate_stems:
-                    stem = f"{stem}-{recording_id}"
-                if self.output_format == "audacity":
-                    output_path = self.output_directory / f"{stem}_scores.txt"
-                else:
-                    output_path = (
-                        self.output_directory / f"{stem}.HawkEars.selection.table.txt"
-                    )
-                plans.append((recording, grouped[recording_id], output_path))
+            if self.output_format == "csv":
+                plans = [(None, list(detections), self.output_directory / "scores.csv")]
+            else:
+                duplicate_stems = self._duplicate_stems(recordings)
+                plans = []
+                for recording_id, recording in recordings.items():
+                    stem = Path(recording.display_name).stem
+                    if stem.casefold() in duplicate_stems:
+                        stem = f"{stem}-{recording_id}"
+                    if self.output_format == "audacity":
+                        output_path = self.output_directory / f"{stem}_scores.txt"
+                    else:
+                        output_path = (
+                            self.output_directory
+                            / f"{stem}.HawkEars.selection.table.txt"
+                        )
+                    plans.append((recording, grouped[recording_id], output_path))
             existing = [
                 output_path for _, _, output_path in plans if output_path.exists()
             ]
@@ -94,9 +99,12 @@ class LabelExportRunner(QObject):
             for recording, rows, output_path in plans:
                 if self.output_format == "audacity":
                     self._write_audacity(rows, output_path)
+                elif self.output_format == "csv":
+                    self._write_csv(rows, output_path)
                 else:
+                    assert recording is not None
                     self._write_raven(rows, recording, output_path)
-            self.completed.emit(len(detections), len(recordings), self.output_format)
+            self.completed.emit(len(detections), len(plans), self.output_format)
         except Exception as error:
             self.failed.emit(str(error))
 
@@ -119,6 +127,31 @@ class LabelExportRunner(QObject):
                     label += f";{row.score:.3f}"
                 output.write(
                     f"{row.start_ms / 1000:.3f}\t{row.end_ms / 1000:.3f}\t{label}\n"
+                )
+
+    def _write_csv(
+        self, rows: list[LabelExportDetection], output_path: Path
+    ) -> None:
+        ordered_rows = sorted(
+            rows,
+            key=lambda row: (
+                Path(row.recording_name).stem.casefold(),
+                self._label(row).casefold(),
+                row.start_ms,
+            ),
+        )
+        with output_path.open("w", encoding="utf-8", newline="") as output:
+            writer = csv.writer(output, lineterminator="\n")
+            writer.writerow(("recording", "name", "start_time", "end_time", "score"))
+            for row in ordered_rows:
+                writer.writerow(
+                    (
+                        Path(row.recording_name).stem,
+                        self._label(row),
+                        f"{row.start_ms / 1000:.3f}",
+                        f"{row.end_ms / 1000:.3f}",
+                        "" if row.score is None else f"{row.score:.3f}",
+                    )
                 )
 
     def _write_raven(

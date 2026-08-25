@@ -1134,7 +1134,7 @@ class DetectionRepository:
         include_uncertain: bool = True,
         include_rejected: bool = False,
     ) -> tuple[LabelExportDetection, ...]:
-        """Return normalized annotations for Audacity and Raven exports."""
+        """Return normalized annotations for audio-label exports."""
         if revision_mode not in {"current", "original"}:
             raise ValueError(f"Unknown label export revision mode: {revision_mode}")
 
