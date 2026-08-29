@@ -4,18 +4,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
-from importlib.resources import files as package_files
 from importlib.resources.abc import Traversable
 import json
 import logging
 from pathlib import Path
 import shutil
 import tempfile
-from typing import Callable, Iterator
+from typing import Callable, Iterator, Mapping
 import urllib.request
 import zipfile
 
-from hawkears.core.config import HawkEarsConfig
+from hawkears.core.app_paths import resolve_application_paths
+from hawkears.core.package_regions import (
+    ModelBundle,
+    PackageRegion,
+    default_package_region,
+    package_resources,
+)
 
 
 @dataclass(frozen=True)
@@ -38,14 +43,67 @@ CancellationCallback = Callable[[], bool]
 
 
 def installation_resources() -> Traversable:
-    """Return packaged install resources, with an editable-source fallback."""
-    try:
-        return package_files("hawkears.install.canada")
-    except ModuleNotFoundError:
-        source_directory = Path(__file__).resolve().parents[3] / "install" / "canada"
-        if source_directory.is_dir():
-            return source_directory
-        raise
+    """Return resources for the default package region."""
+    return package_resources(default_package_region())
+
+
+@dataclass(frozen=True)
+class InitializationStatus:
+    """The readiness of a HawkEars application data root."""
+
+    ready: bool
+    data_root: Path
+    package_region: str
+    missing_resources: tuple[str, ...]
+    missing_bundles: tuple[str, ...]
+    outdated_bundles: tuple[str, ...]
+
+
+def get_initialization_status(
+    data_root: Path | str | None = None,
+    *,
+    checkpoint_directories: Mapping[str, Path | str] | None = None,
+) -> InitializationStatus:
+    """Return installation readiness without downloading or changing files."""
+    root = resolve_application_paths(data_root).data_root
+    package_region = default_package_region()
+    bundle_paths = _bundle_paths(root, package_region, checkpoint_directories)
+    manifest = _read_model_manifest(root)
+
+    required_resources = (
+        Path("yaml/default.yaml"),
+        Path("data/classes.csv"),
+        Path("data/locations.db"),
+    )
+    missing_resources = tuple(
+        str(path) for path in required_resources if not (root / path).is_file()
+    )
+    missing_bundles: list[str] = []
+    outdated_bundles: list[str] = []
+
+    for bundle in package_region.bundles:
+        directory = bundle_paths[bundle.name]
+        if not _has_models(directory):
+            missing_bundles.append(bundle.name)
+            continue
+        if manifest is not None and not _manifest_bundle_is_current(
+            manifest, bundle, directory, root
+        ):
+            outdated_bundles.append(bundle.name)
+
+    return InitializationStatus(
+        ready=not (missing_resources or missing_bundles or outdated_bundles),
+        data_root=root,
+        package_region=package_region.name,
+        missing_resources=missing_resources,
+        missing_bundles=tuple(missing_bundles),
+        outdated_bundles=tuple(outdated_bundles),
+    )
+
+
+def is_initialized(data_root: Path | str | None = None) -> bool:
+    """Return whether HawkEars is ready at the resolved application data root."""
+    return get_initialization_status(data_root).ready
 
 
 def _iter_files(
@@ -61,13 +119,18 @@ def _iter_files(
 def initialize(
     destination: Path,
     *,
+    checkpoint_directories: Mapping[str, Path | str] | None = None,
+    force: bool = False,
     downloader: DownloadFunction | None = None,
     progress_callback: ProgressCallback | None = None,
     cancellation_callback: CancellationCallback | None = None,
 ) -> None:
-    """Install packaged resources and download versioned model bundles."""
+    """Install resources and any missing or outdated model bundles."""
     destination.mkdir(parents=True, exist_ok=True)
-    resources = installation_resources()
+    package_region = default_package_region()
+    resources = package_resources(package_region)
+    bundle_paths = _bundle_paths(destination, package_region, checkpoint_directories)
+    previous_manifest = _read_model_manifest(destination)
 
     for relative_parts, resource in _iter_files(resources):
         _check_cancelled(cancellation_callback)
@@ -84,33 +147,27 @@ def initialize(
             except zipfile.BadZipFile:
                 logging.warning("Invalid packaged zip file: %s", output_path)
 
-    config = HawkEarsConfig()
-    bundles = (
-        (
-            config.main_models_url,
-            config.main_models_sha256,
-            destination / "data" / "ckpt",
-        ),
-        (
-            config.low_band_models_url,
-            config.low_band_models_sha256,
-            destination / "data" / "ckpt-low-band",
-        ),
-    )
-    for url, sha256, model_directory in bundles:
+    for bundle in package_region.bundles:
+        model_directory = bundle_paths[bundle.name]
+        if not force and _has_models(model_directory):
+            if previous_manifest is None or _manifest_bundle_is_current(
+                previous_manifest, bundle, model_directory, destination
+            ):
+                _report(progress_callback, "models-skipped", bundle.name)
+                continue
         _check_cancelled(cancellation_callback)
-        _report(progress_callback, "models", url)
+        _report(progress_callback, "models", bundle.url)
         if downloader is None:
             download_and_extract(
-                url,
+                bundle.url,
                 model_directory,
-                expected_sha256=sha256,
+                expected_sha256=bundle.sha256,
                 progress_callback=progress_callback,
                 cancellation_callback=cancellation_callback,
             )
         else:
-            downloader(url, model_directory)
-    _write_model_manifest(destination, config)
+            downloader(bundle.url, model_directory)
+    _write_model_manifest(destination, package_region, bundle_paths)
     _report(progress_callback, "complete", str(destination))
 
 
@@ -252,26 +309,114 @@ def _download_reporter(
     return report
 
 
-def _write_model_manifest(destination: Path, config: HawkEarsConfig) -> None:
+def _write_model_manifest(
+    destination: Path,
+    package_region: PackageRegion,
+    bundle_paths: Mapping[str, Path],
+) -> None:
     manifest_path = destination / "data" / "models.json"
     temporary_path = manifest_path.with_suffix(".json.tmp")
     manifest = {
-        "format_version": 1,
+        "format_version": 2,
+        "package_region": package_region.name,
         "bundles": {
-            "main": {
-                "version": config.main_models_version,
-                "url": config.main_models_url,
-                "sha256": config.main_models_sha256,
-            },
-            "low_band": {
-                "version": config.low_band_models_version,
-                "url": config.low_band_models_url,
-                "sha256": config.low_band_models_sha256,
-            },
+            bundle.name: {
+                "version": bundle.version,
+                "path": _stored_path(bundle_paths[bundle.name], destination),
+                "url": bundle.url,
+                "sha256": bundle.sha256,
+            }
+            for bundle in package_region.bundles
         },
     }
     temporary_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     temporary_path.replace(manifest_path)
+
+
+def _bundle_paths(
+    data_root: Path,
+    package_region: PackageRegion,
+    overrides: Mapping[str, Path | str] | None,
+) -> dict[str, Path]:
+    unknown = set(overrides or ()) - {bundle.name for bundle in package_region.bundles}
+    if unknown:
+        names = ", ".join(sorted(unknown))
+        raise ValueError(f"Unknown model bundle checkpoint directories: {names}")
+
+    configured_paths: dict[str, Path] = {}
+    try:
+        # Imported lazily to keep config loading independent of initialization.
+        from hawkears.core.config_loader import get_config
+
+        config = get_config(data_root=data_root)
+        configured_paths = {
+            bundle.name: Path(
+                getattr(getattr(config, bundle.config_section), bundle.config_key)
+            )
+            for bundle in package_region.bundles
+        }
+    except (AttributeError, TypeError, ValueError):
+        # Structured defaults below remain usable while diagnosing bad local config.
+        configured_paths = {}
+
+    result: dict[str, Path] = {}
+    for bundle in package_region.bundles:
+        path = Path(
+            (overrides or {}).get(
+                bundle.name,
+                configured_paths.get(bundle.name, bundle.default_directory),
+            )
+        )
+        result[bundle.name] = path if path.is_absolute() else data_root / path
+    return result
+
+
+def _has_models(directory: Path) -> bool:
+    return directory.is_dir() and any(
+        item.is_file() and item.suffix.casefold() in {".ckpt", ".onnx"}
+        for item in directory.iterdir()
+    )
+
+
+def _read_model_manifest(data_root: Path) -> dict | None:
+    path = data_root / "data" / "models.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _manifest_bundle_is_current(
+    manifest: dict,
+    bundle: ModelBundle,
+    directory: Path,
+    data_root: Path,
+) -> bool:
+    if manifest.get("package_region", "canada") != default_package_region().name:
+        return False
+    bundles = manifest.get("bundles")
+    if not isinstance(bundles, dict):
+        return False
+    installed = bundles.get(bundle.name)
+    if not isinstance(installed, dict) or installed.get("version") != bundle.version:
+        return False
+    stored_path = installed.get("path")
+    if stored_path is None:  # Version 1 used the default directories.
+        expected_path = data_root / bundle.default_directory
+    else:
+        expected_path = Path(stored_path)
+        if not expected_path.is_absolute():
+            expected_path = data_root / expected_path
+    return expected_path.absolute() == directory.absolute()
+
+
+def _stored_path(path: Path, data_root: Path) -> str:
+    absolute_path = path.absolute()
+    try:
+        return str(absolute_path.relative_to(data_root.absolute()))
+    except ValueError:
+        return str(absolute_path)
 
 
 def _sha256(path: Path, cancellation_callback: CancellationCallback | None) -> str:

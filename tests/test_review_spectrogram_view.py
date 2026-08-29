@@ -85,6 +85,10 @@ def test_analysis_page_uses_device_defaults_for_unset_project_settings(
     app = QApplication.instance() or QApplication([])
     page = AnalysisPage(ApplicationPaths(tmp_path))
 
+    assert page.models.minimum() == 1
+    assert page.models.maximum() == 3
+    assert page.models.value() == 3
+
     page.configure(
         {},
         recording_directory=None,

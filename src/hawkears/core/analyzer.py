@@ -126,43 +126,22 @@ class Analyzer:
         heuristics_manager = self._load_heuristics_manager(predictor.audio)
 
         # Initial_start_times is a list of seed values for the spectrogram start times.
-        # For example, suppose initial_start_times = [0, .5, 1.0]. Then model 1 uses
-        # [0, 3, 6, ...], model 2 uses [.5, 3.5, 6.5, ...], model 3 uses [1, 4, 7, ...].
-        # After that it wraps using a modulus operator, so model 4 has the same
-        # start_times as model 1 etc.
-        end_offset = start_seconds + self.cfg.audio.spec_duration - 0.5
-        initial_start_times = util.get_range(start_seconds, end_offset, 0.5)
-
-        if self.cfg.infer.max_models > 10:
-            pass  # use the default initial_start_times from above
-        elif self.cfg.infer.max_models == 10:
-            # space out the last 3
-            initial_start_times.extend(
-                [start_seconds, start_seconds + 1, start_seconds + 2]
-            )
-        elif self.cfg.infer.max_models == 9:
-            # space out the last 3
-            initial_start_times.extend(
-                [start_seconds, start_seconds + 1, start_seconds + 2]
-            )
-        elif self.cfg.infer.max_models == 8:
-            # space out the last 2
-            initial_start_times.extend([start_seconds, start_seconds + 1.5])
-        elif self.cfg.infer.max_models == 4:
-            initial_start_times = [
-                start_seconds,
-                start_seconds + 0.75,
-                start_seconds + 1.5,
-                start_seconds + 2.25,
-            ]
-        elif self.cfg.infer.max_models == 3:
+        # For example, suppose initial_start_times = [0, 1.0, 2.0] with 3 models.
+        # Then model 1 uses [0, 3, 6, ...], model 2 uses [-2.0, 1.0, 4.0, ...], and
+        # model 3 uses [-1.0, 2.0, 5.0, ...].
+        if self.cfg.infer.max_models == 3:
             initial_start_times = [start_seconds, start_seconds + 1, start_seconds + 2]
         elif self.cfg.infer.max_models == 2:
             initial_start_times = [start_seconds, start_seconds + 1.5]
         elif self.cfg.infer.max_models == 1:
             initial_start_times = [start_seconds]
+        else:
+            raise Exception(f"Invalid max_models value={self.cfg.infer.max_models}")
+
+        logging.debug(f"[Thread {thread_num}] Initial start times={initial_start_times}")
 
         # Remove any that go past end of recording
+        end_offset = start_seconds + self.cfg.audio.spec_duration - 0.5
         for i in range(1, len(initial_start_times), 1):
             if initial_start_times[i] > end_offset:
                 initial_start_times = initial_start_times[:i]

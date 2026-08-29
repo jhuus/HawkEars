@@ -15,7 +15,9 @@ from hawkears.core.initializer import initialize
 def init(dest: Optional[Path] = None) -> None:
     """Set up the default HawkEars directory and download model checkpoints."""
     destination = Path(".") if dest is None else dest
-    initialize(destination)
+    # The CLI is an explicit request to refresh the installed model bundles.
+    # API callers can use initialize() directly for idempotent setup.
+    initialize(destination, force=True)
     logging.info("Done. Destination: %s", destination)
 
 

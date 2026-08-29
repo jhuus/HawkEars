@@ -6,9 +6,11 @@ import os
 # framework out of runtime imports and native application bundles.
 os.environ.setdefault("BRITEKIT_INFERENCE_ONLY", "1")
 
-from .__about__ import __version__
-
-__all__ = ["__version__"]
+from hawkears.core.initializer import (
+    InitializationStatus,
+    get_initialization_status,
+    is_initialized,
+)
 
 # SPDX-FileCopyrightText: 2025-present Jan Huus <jhuus1@gmail.com>
 #
@@ -32,4 +34,7 @@ __all__ = [
     "__version__",
     "commands",
     "get_config",
+    "InitializationStatus",
+    "get_initialization_status",
+    "is_initialized",
 ]

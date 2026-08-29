@@ -10,7 +10,7 @@ from britekit.core import util
 
 from hawkears.core.app_paths import resolve_application_paths
 from hawkears.core.config import HawkEarsBaseConfig
-from hawkears.core.initializer import installation_resources
+from hawkears.core.package_regions import default_package_region, package_resources
 
 _base_configs: dict[tuple[Path, str], HawkEarsBaseConfig] = {}
 
@@ -36,7 +36,7 @@ def _load_yaml(root: Path, name: str):
     if local_path.is_file():
         return OmegaConf.load(local_path)
 
-    resource = installation_resources().joinpath("yaml", name)
+    resource = package_resources(default_package_region()).joinpath("yaml", name)
     if resource.is_file():
         with resource.open("r", encoding="utf-8") as handle:
             return OmegaConf.load(handle)
@@ -51,6 +51,9 @@ def _resolve_runtime_paths(cfg: HawkEarsBaseConfig, root: Path) -> None:
         return str(path if path.is_absolute() else root / path)
 
     cfg.misc.ckpt_folder = cast(str, rooted(cfg.misc.ckpt_folder))
+    cfg.hawkears.low_band_ckpt_folder = cast(
+        str, rooted(cfg.hawkears.low_band_ckpt_folder)
+    )
     cfg.hawkears.include_list = rooted(cfg.hawkears.include_list)
     cfg.hawkears.exclude_list = rooted(cfg.hawkears.exclude_list)
     taxonomy_file = cfg.hawkears.taxonomy_file
@@ -58,7 +61,9 @@ def _resolve_runtime_paths(cfg: HawkEarsBaseConfig, root: Path) -> None:
         taxonomy_path = Path(taxonomy_file)
         if not taxonomy_path.is_absolute():
             local_path = root / taxonomy_path
-            packaged_path = installation_resources().joinpath(*taxonomy_path.parts)
+            packaged_path = package_resources(default_package_region()).joinpath(
+                *taxonomy_path.parts
+            )
             taxonomy_file = str(
                 local_path
                 if local_path.is_file() or not packaged_path.is_file()

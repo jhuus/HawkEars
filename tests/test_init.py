@@ -28,9 +28,72 @@ def test_init_installs_compact_occurrence_and_location_catalog(tmp_path, monkeyp
     assert len(downloads) == 2
     assert all(download[2]["expected_sha256"] for download in downloads)
     manifest = json.loads((tmp_path / "data" / "models.json").read_text())
-    assert manifest["format_version"] == 1
+    assert manifest["format_version"] == 2
+    assert manifest["package_region"] == "canada"
     assert manifest["bundles"]["main"]["version"] == "2.2.0"
+    assert manifest["bundles"]["main"]["path"] == "data/ckpt"
     assert manifest["bundles"]["low_band"]["version"] == "2.0.0"
+    assert manifest["bundles"]["low_band"]["path"] == "data/ckpt-low-band"
+
+
+def test_api_init_adopts_complete_legacy_models_without_downloading(
+    tmp_path, monkeypatch
+):
+    for name in ("ckpt", "ckpt-low-band"):
+        directory = tmp_path / "data" / name
+        directory.mkdir(parents=True)
+        (directory / "model.ckpt").touch()
+    downloads = []
+    monkeypatch.setattr(
+        initializer,
+        "download_and_extract",
+        lambda *args, **kwargs: downloads.append((args, kwargs)),
+    )
+
+    initializer.initialize(tmp_path)
+
+    assert downloads == []
+    manifest = json.loads((tmp_path / "data" / "models.json").read_text())
+    assert manifest["format_version"] == 2
+
+
+def test_cli_init_replaces_existing_models(tmp_path, monkeypatch):
+    for name in ("ckpt", "ckpt-low-band"):
+        directory = tmp_path / "data" / name
+        directory.mkdir(parents=True)
+        (directory / "model.ckpt").touch()
+    downloads = []
+
+    def record_download(url: str, destination: Path, **kwargs) -> None:
+        downloads.append(destination)
+
+    monkeypatch.setattr(initializer, "download_and_extract", record_download)
+
+    _init.init(tmp_path)
+
+    assert downloads == [
+        tmp_path / "data" / "ckpt",
+        tmp_path / "data" / "ckpt-low-band",
+    ]
+
+
+def test_init_uses_explicit_checkpoint_directories(tmp_path, monkeypatch):
+    downloads = []
+
+    def record_download(url: str, destination: Path, **kwargs) -> None:
+        downloads.append(destination)
+
+    monkeypatch.setattr(initializer, "download_and_extract", record_download)
+    main = tmp_path / "external" / "main"
+
+    initializer.initialize(
+        tmp_path,
+        checkpoint_directories={"main": main},
+    )
+
+    assert downloads == [main, tmp_path / "data" / "ckpt-low-band"]
+    manifest = json.loads((tmp_path / "data" / "models.json").read_text())
+    assert manifest["bundles"]["main"]["path"] == "external/main"
 
 
 def test_model_download_replaces_directory_after_valid_extraction(tmp_path):

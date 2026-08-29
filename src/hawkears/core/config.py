@@ -44,26 +44,12 @@ class HawkEarsConfig:
     heuristics_manager: Optional[str] = None
 
     low_band_classifier: bool = True  # if true, include low-band classifier
+    low_band_ckpt_folder: str = "data/ckpt-low-band"
     # Split variable-duration labels longer than this many seconds.
     max_label_length: Optional[float] = None
     # Merge a trailing split fragment at or below this duration, distributing
     # it across the preceding pieces so no very short label is created.
     max_label_length_merge_threshold: float = 0.5
-
-    main_models_version: str = "2.2.0"
-    main_models_url: str = (
-        "https://github.com/jhuus/HawkEars/releases/download/models-2.2.0/main-models-2.2.0.zip"
-    )
-    main_models_sha256: str = (
-        "24cf831c2f32affced1c7a87f8e92c5d4c5aff0ea2f8fe1e935502eb9c335c3b"
-    )
-    low_band_models_version: str = "2.0.0"
-    low_band_models_url: str = (
-        "https://github.com/jhuus/HawkEars/releases/download/models-2.0.0/low-band-models-2.0.0.zip"
-    )
-    low_band_models_sha256: str = (
-        "4d56c860b1f3a317cfbe3d10bd7ee98574dcf840e29d5b19bd4487e6ff418c55"
-    )
 
 
 @dataclass

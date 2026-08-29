@@ -101,8 +101,9 @@ class LowBandHeuristics:
     def _init_config(self, cfg: HawkEarsBaseConfig):
         """Create low-band model config object from main config object."""
         low_band_cfg = deepcopy(cfg)
+        low_band_cfg.misc.ckpt_folder = cfg.hawkears.low_band_ckpt_folder
 
-        data_root = Path(cfg.misc.ckpt_folder).parent.parent
+        data_root = Path(cfg.hawkears.occurrence_pickle).parent.parent
         yaml_cfg = load_auxiliary_config("low_band.yaml", data_root=data_root)
         if yaml_cfg is None:
             logging.error("File low_band.yaml not found. Skipping low-band classifier.")

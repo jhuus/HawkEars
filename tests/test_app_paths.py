@@ -6,6 +6,7 @@ from hawkears.core.app_paths import (
     resolve_application_paths,
 )
 from hawkears.core import config_loader
+from hawkears.core.initializer import get_initialization_status, is_initialized
 
 
 def test_explicit_data_root_takes_precedence(tmp_path):
@@ -73,6 +74,10 @@ def test_packaged_config_uses_explicit_data_root(tmp_path, monkeypatch):
     config = config_loader.get_config(data_root=tmp_path)
 
     assert Path(config.misc.ckpt_folder) == tmp_path / "data" / "ckpt"
+    assert (
+        Path(config.hawkears.low_band_ckpt_folder)
+        == tmp_path / "data" / "ckpt-low-band"
+    )
     assert Path(config.hawkears.exclude_list) == tmp_path / "data" / "exclude.txt"
     assert Path(config.hawkears.taxonomy_file).name == "taxonomy.csv"
     assert Path(config.hawkears.taxonomy_file).is_file()
@@ -109,3 +114,68 @@ def test_application_readiness_requires_catalogs_and_both_model_sets(tmp_path):
     (data / "ckpt-low-band" / "low.onnx").touch()
 
     assert is_application_ready(tmp_path)
+    assert is_initialized(tmp_path)
+
+
+def test_initialization_status_reports_missing_and_outdated_bundles(tmp_path):
+    (tmp_path / "yaml").mkdir()
+    (tmp_path / "yaml" / "default.yaml").touch()
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "classes.csv").touch()
+    (data / "locations.db").touch()
+    (data / "ckpt").mkdir()
+    (data / "ckpt" / "main.ckpt").touch()
+    (data / "models.json").write_text(
+        '{"format_version": 2, "package_region": "canada", '
+        '"bundles": {"main": {"version": "old", "path": "data/ckpt"}}}',
+        encoding="utf-8",
+    )
+
+    status = get_initialization_status(tmp_path)
+
+    assert not status.ready
+    assert status.missing_bundles == ("low_band",)
+    assert status.outdated_bundles == ("main",)
+
+
+def test_version_one_manifest_uses_default_bundle_paths(tmp_path):
+    (tmp_path / "yaml").mkdir()
+    (tmp_path / "yaml" / "default.yaml").touch()
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "classes.csv").touch()
+    (data / "locations.db").touch()
+    for name in ("ckpt", "ckpt-low-band"):
+        directory = data / name
+        directory.mkdir()
+        (directory / "model.ckpt").touch()
+    (data / "models.json").write_text(
+        '{"format_version": 1, "bundles": {'
+        '"main": {"version": "2.2.0"}, '
+        '"low_band": {"version": "2.0.0"}}}',
+        encoding="utf-8",
+    )
+
+    assert get_initialization_status(tmp_path).ready
+
+
+def test_initialization_status_uses_configured_checkpoint_paths(tmp_path, monkeypatch):
+    monkeypatch.setattr(config_loader.util, "get_device", lambda: "cpu")
+    config_loader._base_configs.clear()
+    (tmp_path / "yaml").mkdir()
+    (tmp_path / "yaml" / "default.yaml").write_text(
+        "misc:\n  ckpt_folder: custom/main\n"
+        "hawkears:\n  low_band_ckpt_folder: custom/low\n",
+        encoding="utf-8",
+    )
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "classes.csv").touch()
+    (data / "locations.db").touch()
+    for name in ("main", "low"):
+        directory = tmp_path / "custom" / name
+        directory.mkdir(parents=True)
+        (directory / "model.ckpt").touch()
+
+    assert get_initialization_status(tmp_path).ready

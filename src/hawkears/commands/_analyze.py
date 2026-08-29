@@ -238,7 +238,7 @@ def analyze(
             )
             if max_models is None and cfg.infer.max_models == available_models:
                 logging.info(
-                    "For faster performance with lower accuracy, use the --models option to reduce ensemble size (e.g. --models 6)."
+                    "For faster performance with lower accuracy, use the --models option to reduce ensemble size (e.g. --models 2)."
                 )
 
             if cfg.hawkears.low_band_classifier:
@@ -402,7 +402,7 @@ def analyze(
 @click.option(
     "--models",
     "max_models",
-    type=click.IntRange(1, 12),
+    type=click.IntRange(1, 3),
     help="Optional model count. If specified, use only this many models (i.e. checkpoints, or neural networks).",
 )
 @click.option(

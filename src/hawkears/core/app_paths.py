@@ -26,14 +26,6 @@ class ApplicationPaths:
         return self.data_root / "yaml"
 
     @property
-    def checkpoint_directory(self) -> Path:
-        return self.data_directory / "ckpt"
-
-    @property
-    def low_band_checkpoint_directory(self) -> Path:
-        return self.data_directory / "ckpt-low-band"
-
-    @property
     def projects_directory(self) -> Path:
         return self.data_root / "projects"
 
@@ -44,22 +36,11 @@ def is_initialized_directory(path: Path) -> bool:
 
 
 def is_application_ready(path: Path) -> bool:
-    """Return whether required catalogs and both model sets are installed."""
-    data_directory = path / "data"
+    """Return whether the current HawkEars package is ready for use."""
+    # Import lazily because initializer also uses application-path resolution.
+    from hawkears.core.initializer import is_initialized
 
-    def has_models(directory: Path) -> bool:
-        return directory.is_dir() and any(
-            item.is_file() and item.suffix.lower() in {".ckpt", ".onnx"}
-            for item in directory.iterdir()
-        )
-
-    return (
-        is_initialized_directory(path)
-        and (data_directory / "classes.csv").is_file()
-        and (data_directory / "locations.db").is_file()
-        and has_models(data_directory / "ckpt")
-        and has_models(data_directory / "ckpt-low-band")
-    )
+    return is_initialized(path)
 
 
 def default_data_directory(
