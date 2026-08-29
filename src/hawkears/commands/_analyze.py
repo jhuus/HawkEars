@@ -7,6 +7,8 @@ from copy import deepcopy
 import logging
 import os
 from pathlib import Path
+import signal
+import threading
 import time
 from typing import Callable, Collection, Optional
 
@@ -481,27 +483,48 @@ def _analyze_cmd(
     else:
         start_seconds = 0
 
-    analyze(
-        cfg_path,
-        input_path,
-        output_path,
-        rtype,
-        date,
-        region,
-        lat,
-        lon,
-        filelist,
-        include,
-        exclude,
-        start_seconds,
-        min_score,
-        num_threads,
-        segment_len,
-        max_models,
-        label_field,
-        recurse,
-        top,
-        low_band,
-        quiet,
-        max_label_length=max_label_length,
-    )
+    cancel_requested = threading.Event()
+    previous_sigint_handler = signal.getsignal(signal.SIGINT)
+
+    def request_cancel(signum, frame):
+        if cancel_requested.is_set():
+            raise KeyboardInterrupt
+        cancel_requested.set()
+        click.echo(
+            "\nCancellation requested; finishing active recordings. "
+            "Press Ctrl-C again to stop immediately.",
+            err=True,
+        )
+
+    signal.signal(signal.SIGINT, request_cancel)
+    try:
+        analyze(
+            cfg_path,
+            input_path,
+            output_path,
+            rtype,
+            date,
+            region,
+            lat,
+            lon,
+            filelist,
+            include,
+            exclude,
+            start_seconds,
+            min_score,
+            num_threads,
+            segment_len,
+            max_models,
+            label_field,
+            recurse,
+            top,
+            low_band,
+            quiet,
+            max_label_length=max_label_length,
+            cancellation_callback=cancel_requested.is_set,
+        )
+    finally:
+        signal.signal(signal.SIGINT, previous_sigint_handler)
+
+    if cancel_requested.is_set():
+        raise click.Abort

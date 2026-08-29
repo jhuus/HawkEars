@@ -1,4 +1,5 @@
 from click.testing import CliRunner
+import signal
 
 from hawkears.cli import cli
 from hawkears.gui.app import _initial_project_path
@@ -31,3 +32,53 @@ def test_gui_accepts_an_existing_project_from_file_association(tmp_path):
 
     assert _initial_project_path([str(project)]) == project.resolve()
     assert _initial_project_path(["--unexpected"]) is None
+
+
+def test_analyze_ctrl_c_requests_cooperative_cancellation(tmp_path, monkeypatch):
+    installed_handlers = []
+    previous_handler = object()
+
+    monkeypatch.setattr(signal, "getsignal", lambda signum: previous_handler)
+    monkeypatch.setattr(
+        signal,
+        "signal",
+        lambda signum, handler: installed_handlers.append(handler),
+    )
+
+    def fake_analyze(*args, **kwargs):
+        assert not kwargs["cancellation_callback"]()
+        installed_handlers[-1](signal.SIGINT, None)
+        assert kwargs["cancellation_callback"]()
+
+    monkeypatch.setattr("hawkears.commands._analyze.analyze", fake_analyze)
+
+    result = CliRunner().invoke(cli, ["analyze", str(tmp_path), "--quiet"])
+
+    assert result.exit_code == 1
+    assert "Cancellation requested; finishing active recordings." in result.output
+    assert "Aborted!" in result.output
+    assert installed_handlers[-1] is previous_handler
+
+
+def test_analyze_second_ctrl_c_aborts_immediately(tmp_path, monkeypatch):
+    installed_handlers = []
+    previous_handler = object()
+
+    monkeypatch.setattr(signal, "getsignal", lambda signum: previous_handler)
+    monkeypatch.setattr(
+        signal,
+        "signal",
+        lambda signum, handler: installed_handlers.append(handler),
+    )
+
+    def fake_analyze(*args, **kwargs):
+        installed_handlers[-1](signal.SIGINT, None)
+        installed_handlers[-1](signal.SIGINT, None)
+
+    monkeypatch.setattr("hawkears.commands._analyze.analyze", fake_analyze)
+
+    result = CliRunner().invoke(cli, ["analyze", str(tmp_path), "--quiet"])
+
+    assert result.exit_code == 1
+    assert "Aborted!" in result.output
+    assert installed_handlers[-1] is previous_handler
