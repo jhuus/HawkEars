@@ -50,9 +50,39 @@ def test_output_filter_removes_excluded_classes_and_zero_padding():
 
     filtered = analyzer._filter_output_dataframe(dataframe)
 
-    assert filtered.to_dict("records") == [
-        {"name": "Common Nighthawk", "score": 0.72}
-    ]
+    assert filtered.to_dict("records") == [{"name": "Common Nighthawk", "score": 0.72}]
+
+
+def test_audacity_output_reads_min_score_once(tmp_path: Path):
+    class InferConfig:
+        reads = 0
+
+        @property
+        def min_score(self):
+            self.reads += 1
+            return 0.0
+
+    infer = InferConfig()
+    analyzer = Analyzer.__new__(Analyzer)
+    analyzer.cfg = SimpleNamespace(infer=infer)
+    analyzer.class_mgr = SimpleNamespace(
+        effective_label=lambda label: label,
+    )
+    analyzer._split_long_labels = lambda labels: labels
+    analyzer._is_included_output_label = lambda label: True
+    labels = {
+        "Common Nighthawk": [
+            SimpleNamespace(start_time=0.0, end_time=3.0, score=0.0),
+            SimpleNamespace(start_time=3.0, end_time=6.0, score=0.8),
+        ]
+    }
+    predictor = SimpleNamespace(get_frame_labels=lambda frame_map: labels)
+    output_path = tmp_path / "labels.txt"
+
+    analyzer._save_audacity_labels(predictor, None, str(output_path))
+
+    assert infer.reads == 1
+    assert output_path.read_text() == "3.00\t6.00\tCommon Nighthawk;0.800\n"
 
 
 def test_analysis_progress_reports_percentage():

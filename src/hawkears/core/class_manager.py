@@ -151,6 +151,17 @@ class ClassManager:
                 model_code,
             )
 
+        self.label_field = cfg.infer.label_field
+        try:
+            self._label_dict = {
+                "names": self.name_dict,
+                "codes": self.code_dict,
+                "alt_names": self.alt_name_dict,
+                "alt_codes": self.alt_code_dict,
+            }[self.label_field]
+        except KeyError:
+            raise ValueError(f"Invalid label field: {self.label_field}") from None
+
     @staticmethod
     def _add_lookup(
         lookup: dict[str, ClassInfo], key: str, info: ClassInfo, field: str
@@ -196,16 +207,7 @@ class ClassManager:
         return None
 
     def class_info_by_label_field(self, name: str):
-        if self.cfg.infer.label_field == "names":
-            return self.class_info_by_name(name)
-        elif self.cfg.infer.label_field == "codes":
-            return self.class_info_by_code(name)
-        elif self.cfg.infer.label_field == "alt_names":
-            return self.class_info_by_alt_name(name)
-        elif self.cfg.infer.label_field == "alt_codes":
-            return self.class_info_by_alt_code(name)
-        else:
-            raise Exception("Invalid value: {self.cfg.infer.label_field=}")
+        return self._label_dict.get(name)
 
     def effective_label(self, label: str) -> str:
         """Return the configured public label for a model-generated label."""
@@ -217,7 +219,7 @@ class ClassManager:
             "codes": info.code,
             "alt_names": info.alt_name,
             "alt_codes": info.alt_code,
-        }[self.cfg.infer.label_field]
+        }[self.label_field]
         return effective or label
 
     def all_classes(self) -> list[ClassInfo]:

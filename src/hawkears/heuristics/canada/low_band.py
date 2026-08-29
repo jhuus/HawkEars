@@ -83,7 +83,7 @@ class LowBandHeuristics:
         # correct spectrogram parameters
         self.predictor.audio.set_config(self.cfg)
         _, low_band_frame_map, _ = self.predictor.get_recording_scores(
-            recording_path, start_seconds
+            recording_path, start_seconds, use_loaded_audio=True
         )
 
         # shape = (num_frames, num_classes) and occasionally the two maps

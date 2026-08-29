@@ -189,6 +189,7 @@ class SoundAlikeHeuristics:
         If high-scoring WTSP frames overlap sufficiently with high-scoring BWHA frames, set all BWHA scores
         to zero.
         """
+        inference_min_score = self.cfg.infer.min_score
         for code, defns in self.no_location.items():
             for defn in defns:
                 if not defn.enabled:
@@ -200,10 +201,8 @@ class SoundAlikeHeuristics:
 
                 class_idx = info.index
                 class_scores = frame_map[:, class_idx]
-                if (
-                    class_scores.max() < self.cfg.infer.min_score
-                    or class_scores.max() < self.min_score
-                ):
+                class_max = class_scores.max()
+                if class_max < inference_min_score or class_max < self.min_score:
                     continue  # nothing to do
                 soundalike_idx = self.class_mgr.class_info_by_code(
                     defn.soundalike

@@ -27,6 +27,7 @@ class OccurrenceManager:
         date: Optional[str] = None,
     ):
         self.cfg = cfg
+        self.region = cfg.hawkears.region
         self.class_mgr = class_mgr
         self.recording_paths = recording_paths
 
@@ -179,9 +180,12 @@ class OccurrenceManager:
             return 0.0
 
         if self.file_info is None or filename not in self.file_info:
-            region = self.cfg.hawkears.region
+            region = (
+                self.region if hasattr(self, "region") else self.cfg.hawkears.region
+            )
             week_num = self.week_num
-            if self.cfg.hawkears.date == "file":
+            date = self.date if hasattr(self, "date") else self.cfg.hawkears.date
+            if date == "file":
                 week_num = self._get_week_num_from_filename(filename)
                 if week_num is None:
                     logging.error(

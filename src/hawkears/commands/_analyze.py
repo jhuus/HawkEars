@@ -404,7 +404,7 @@ def analyze(
 @click.option(
     "--models",
     "max_models",
-    type=click.IntRange(1, 3),
+    type=click.IntRange(1, 6),
     help="Optional model count. If specified, use only this many models (i.e. checkpoints, or neural networks).",
 )
 @click.option(

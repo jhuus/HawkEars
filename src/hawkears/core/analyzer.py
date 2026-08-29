@@ -129,11 +129,34 @@ class Analyzer:
         # For example, suppose initial_start_times = [0, 1.0, 2.0] with 3 models.
         # Then model 1 uses [0, 3, 6, ...], model 2 uses [-2.0, 1.0, 4.0, ...], and
         # model 3 uses [-1.0, 2.0, 5.0, ...].
-        if self.cfg.infer.max_models == 3:
+        end_offset = start_seconds + self.cfg.audio.spec_duration - 0.5
+
+        if self.cfg.infer.max_models == 12:
+            # models will be paired up, 6 per segment at 1/2-second intervals
+            initial_start_times = util.get_range(start_seconds, end_offset, 0.5)
+        elif self.cfg.infer.max_models == 9:
+            # 6 at 1/2-second intervals, then 3 overlapping at 1-second intervals
+            initial_start_times = util.get_range(start_seconds, end_offset, 0.5)
+            initial_start_times.extend(
+                [start_seconds, start_seconds + 1, start_seconds + 2]
+            )
+        elif self.cfg.infer.max_models == 6:
+            # # 3 at 1-second intervals, then overlap the next 3 with the first 3
+            initial_start_times = [start_seconds, start_seconds + 1, start_seconds + 2]
+        elif self.cfg.infer.max_models == 5:
+            # 3 at 1-second intervals, then 2 overlapping at 1.5-second intervals
+            initial_start_times = [start_seconds, start_seconds + 1, start_seconds + 2, start_seconds, start_seconds + 1.5]
+        elif self.cfg.infer.max_models == 4:
+            # 3 at 1-second intervals, then 1 overlapping
+            initial_start_times = [start_seconds, start_seconds + 1, start_seconds + 2, start_seconds]
+        elif self.cfg.infer.max_models == 3:
+            # 3 at 1-second intervals
             initial_start_times = [start_seconds, start_seconds + 1, start_seconds + 2]
         elif self.cfg.infer.max_models == 2:
+            # 2 at 1.5-second intervals
             initial_start_times = [start_seconds, start_seconds + 1.5]
         elif self.cfg.infer.max_models == 1:
+            # 1 at 3-second intervals
             initial_start_times = [start_seconds]
         else:
             raise Exception(f"Invalid max_models value={self.cfg.infer.max_models}")
@@ -141,7 +164,6 @@ class Analyzer:
         logging.debug(f"[Thread {thread_num}] Initial start times={initial_start_times}")
 
         # Remove any that go past end of recording
-        end_offset = start_seconds + self.cfg.audio.spec_duration - 0.5
         for i in range(1, len(initial_start_times), 1):
             if initial_start_times[i] > end_offset:
                 initial_start_times = initial_start_times[:i]
@@ -282,7 +304,11 @@ class Analyzer:
         # Model confidence scores are non-negative, so use a negative sentinel in
         # that case while retaining the usual zeroed frame map at other cutoffs.
         filtered_score = -1.0 if self.cfg.infer.min_score <= 0 else 0.0
-        if self.check_occurrence and self.cfg.hawkears.save_rarities:
+        save_rarities = self.cfg.hawkears.save_rarities
+        min_occurrence = (
+            self.cfg.hawkears.min_occurrence if self.check_occurrence else None
+        )
+        if self.check_occurrence and save_rarities:
             # scores for low-occurrence classes
             rarities_frame_map = np.full_like(frame_map, filtered_score)
         else:
@@ -297,8 +323,8 @@ class Analyzer:
                 and info.model_name in self.occur_mgr.class_name_set
             ):
                 occurrence = self.occur_mgr.get_value(recording_name, info.model_name)
-                if occurrence < self.cfg.hawkears.min_occurrence:
-                    if self.cfg.hawkears.save_rarities:
+                if min_occurrence is not None and occurrence < min_occurrence:
+                    if save_rarities:
                         rarities_frame_map[:, class_index] = frame_map[:, class_index]
 
                     frame_map[:, class_index] = filtered_score
@@ -318,11 +344,12 @@ class Analyzer:
         """
         try:
             labels = self._split_long_labels(predictor.get_frame_labels(frame_map))
+            keep_all_scores = self.cfg.infer.min_score > 0
             labels = {
                 self.class_mgr.effective_label(name): [
                     label
                     for label in class_labels
-                    if self.cfg.infer.min_score > 0 or label.score > 0
+                    if keep_all_scores or label.score > 0
                 ]
                 for name, class_labels in labels.items()
                 if self._is_included_output_label(name)
@@ -366,26 +393,39 @@ class Analyzer:
         maximum = self.cfg.hawkears.max_label_length
         if self.cfg.infer.segment_len is not None or maximum is None:
             return labels
+        merge_threshold = self.cfg.hawkears.max_label_length_merge_threshold
         split = {}
         for name, class_labels in labels.items():
             split[name] = []
             for label in class_labels:
                 for start, end in self._split_label_range(
-                    label.start_time, label.end_time
+                    label.start_time,
+                    label.end_time,
+                    maximum=maximum,
+                    merge_threshold=merge_threshold,
                 ):
                     split[name].append(type(label)(label.score, start, end))
         return split
 
-    def _split_label_range(self, start: float, end: float) -> list[tuple[float, float]]:
+    def _split_label_range(
+        self,
+        start: float,
+        end: float,
+        *,
+        maximum: float | None = None,
+        merge_threshold: float | None = None,
+    ) -> list[tuple[float, float]]:
         """Split one range, absorbing a configured short trailing remainder."""
-        maximum = self.cfg.hawkears.max_label_length
+        if maximum is None:
+            maximum = self.cfg.hawkears.max_label_length
         if maximum is None or end - start <= maximum:
             return [(start, end)]
         duration = end - start
         full_count = int(duration // maximum)
         remainder = duration - full_count * maximum
-        threshold = self.cfg.hawkears.max_label_length_merge_threshold
-        if 0 < remainder <= threshold and full_count > 0:
+        if merge_threshold is None:
+            merge_threshold = self.cfg.hawkears.max_label_length_merge_threshold
+        if 0 < remainder <= merge_threshold and full_count > 0:
             piece_length = duration / full_count
             return [
                 (
@@ -411,10 +451,14 @@ class Analyzer:
         maximum = self.cfg.hawkears.max_label_length
         if self.cfg.infer.segment_len is not None or maximum is None or dataframe.empty:
             return dataframe
+        merge_threshold = self.cfg.hawkears.max_label_length_merge_threshold
         rows = []
         for _, row in dataframe.iterrows():
             for start, end in self._split_label_range(
-                float(row["start_time"]), float(row["end_time"])
+                float(row["start_time"]),
+                float(row["end_time"]),
+                maximum=maximum,
+                merge_threshold=merge_threshold,
             ):
                 piece = row.copy()
                 piece["start_time"] = start
