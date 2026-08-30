@@ -118,20 +118,12 @@ PROJECT_URL = "https://github.com/jhuus/HawkEars"
 
 
 def analysis_setting_defaults(paths: ApplicationPaths) -> dict[str, object]:
-    """Return the CLI's effective inference defaults for the current device."""
+    """Return the GUI inference defaults for the current device."""
     config = get_config(data_root=paths.data_root)
-    max_models = config.infer.max_models
-    if max_models is None:
-        device = util.get_device()
-        extension = (
-            "*.onnx"
-            if device == "cpu" and importlib.util.find_spec("openvino") is not None
-            else "*.ckpt"
-        )
-        max_models = len(list(Path(config.misc.ckpt_folder).glob(extension)))
+    max_models = 6 if util.get_device() == "cuda" else 3
     return {
         "min_score": float(config.infer.min_score),
-        "max_models": max(1, int(max_models)),
+        "max_models": max_models,
         "num_threads": int(config.infer.num_threads),
         "segment_len": config.infer.segment_len,
         "max_label_length": config.hawkears.max_label_length,
@@ -466,8 +458,8 @@ class AnalysisPage(QWidget):
         self.threshold.setValue(float(self._default_settings["min_score"]))
         self.threshold.setDecimals(2)
         self.models = QSpinBox()
-        self.models.setRange(1, 3)
-        self.models.setValue(3)
+        self.models.setRange(1, 6)
+        self.models.setValue(int(self._default_settings["max_models"]))
         self.threads = QSpinBox()
         self.threads.setRange(1, 32)
         self.threads.setValue(int(self._default_settings["num_threads"]))

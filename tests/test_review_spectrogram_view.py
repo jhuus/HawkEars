@@ -29,9 +29,9 @@ from hawkears.gui.ui.main_window import (
 
 @pytest.mark.parametrize(
     ("device", "configured_models", "checkpoint_count", "expected_models"),
-    (("cpu", 3, 0, 3), ("mps", 3, 0, 3), ("cuda", None, 7, 7)),
+    (("cpu", 3, 0, 3), ("mps", 3, 0, 3), ("cuda", None, 7, 6)),
 )
-def test_analysis_defaults_match_cli_device_behavior(
+def test_analysis_defaults_choose_model_count_for_device(
     tmp_path: Path,
     monkeypatch,
     device: str,
@@ -86,7 +86,7 @@ def test_analysis_page_uses_device_defaults_for_unset_project_settings(
     page = AnalysisPage(ApplicationPaths(tmp_path))
 
     assert page.models.minimum() == 1
-    assert page.models.maximum() == 3
+    assert page.models.maximum() == 6
     assert page.models.value() == 3
 
     page.configure(
@@ -100,6 +100,29 @@ def test_analysis_page_uses_device_defaults_for_unset_project_settings(
     assert page.current_settings()["min_score"] == 0.7
     assert page.current_settings()["max_models"] == 3
     assert page.current_settings()["num_threads"] == 4
+    page.close()
+    app.processEvents()
+
+
+def test_analysis_page_defaults_to_six_models_for_cuda(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        main_window,
+        "analysis_setting_defaults",
+        lambda paths: {
+            "min_score": 0.7,
+            "max_models": 6,
+            "num_threads": 3,
+            "segment_len": None,
+            "max_label_length": None,
+        },
+    )
+    app = QApplication.instance() or QApplication([])
+    page = AnalysisPage(ApplicationPaths(tmp_path))
+
+    assert page.models.minimum() == 1
+    assert page.models.maximum() == 6
+    assert page.models.value() == 6
+
     page.close()
     app.processEvents()
 
