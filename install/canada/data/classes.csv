@@ -22,6 +22,7 @@ American Woodcock,AMWO,Scolopax minor,amewoo
 Ancient Murrelet,ANMU,Synthliboramphus antiquus,ancmur
 Anna's Hummingbird,ANHU,Calypte anna,annhum
 Arctic Tern,ARTE,Sterna paradisaea,arcter
+Atlantic Puffin,ATPU,Fratercula arctica,atlpuf
 Baird's Sandpiper,BASA,Calidris bairdii,baisan
 Baird's Sparrow,BAIS,Centronyx bairdii,baispa
 Bald Eagle,BAEA,Haliaeetus leucocephalus,baleag
@@ -37,6 +38,7 @@ Bell's Vireo,BEVI,Vireo bellii,belvir
 Belted Kingfisher,BEKI,Megaceryle alcyon,belkin1
 Bewick's Wren,BEWR,Thryomanes bewickii,bewwre
 Bicknell's Thrush,BITH,Catharus bicknelli,bicthr
+Black Guillemot,BLGU,Cepphus grylle,blkgui
 Black Oystercatcher,BLOY,Haematopus bachmani,blkoys
 Black Rail,BLRA,Laterallus jamaicensis,blkrai
 Black Swift,BLSW,Cypseloides niger,blkswi
@@ -51,6 +53,7 @@ Black-capped Chickadee,BCCH,Poecile atricapillus,bkcchi
 Black-crowned Night Heron,BCNH,Nycticorax nycticorax,bcnher
 Black-footed Albatross,BFAL,Phoebastria nigripes,bkfalb
 Black-headed Grosbeak,BHGR,Pheucticus melanocephalus,bkhgro
+Black-legged Kittiwake,BLKI,Rissa tridactyla,bklkit
 Black-throated Blue Warbler,BTBW,Setophaga caerulescens,btbwar
 Black-throated Gray Warbler,BTYW,Setophaga nigrescens,btywar
 Black-throated Green Warbler,BTNW,Setophaga virens,btnwar
@@ -103,6 +106,7 @@ Clapper Rail,CLRA,Rallus crepitans,clarai11
 Clark's Nutcracker,CLNU,Nucifraga columbiana,clanut
 Clay-colored Sparrow,CCSP,Spizella pallida,clcspa
 Cliff Swallow,CLSW,Petrochelidon pyrrhonota,cliswa
+Common Eider,COEI,Somateria mollissima,comeid
 Common Gallinule,COGA,Gallinula galeata,comgal1
 Common Goldeneye,COGO,Bucephala clangula,comgol
 Common Grackle,COGR,Quiscalus quiscula,comgra
@@ -141,6 +145,7 @@ Forster's Tern,FOTE,Sterna forsteri,forter
 Fox Sparrow,FOSP,Passerella iliaca,foxspa
 Franklin's Gull,FRGU,Leucophaeus pipixcan,fragul
 Gadwall,GADW,Mareca strepera,gadwal
+Glaucous Gull,GLGU,Larus hyperboreus,glagul
 Glaucous-winged Gull,GWGU,Larus glaucescens,glwgul
 Golden Eagle,GOEA,Aquila chrysaetos,goleag
 Golden-crowned Kinglet,GCKI,Regulus satrapa,gockin
@@ -162,6 +167,7 @@ Great Egret,GREG,Ardea alba,greegr
 Great Gray Owl,GGOW,Strix nebulosa,grgowl
 Great Horned Owl,GHOW,Bubo virginianus,grhowl
 Great Plains Toad,TOAD-GRPL,Anaxyrus cognatus,TOAD-GRPL
+Greater Scaup,GRSC,Aythya marila,gresca
 Greater White-fronted Goose,GWFG,Anser albifrons,gwfgoo
 Greater Yellowlegs,GRYE,Tringa melanoleuca,greyel
 Green Frog,FROG-GREN,Lithobates clamitans,FROG-GREN
@@ -198,6 +204,7 @@ Least Flycatcher,LEFL,Empidonax minimus,leafly
 Least Sandpiper,LESA,Calidris minutilla,leasan
 LeConte's Sparrow,LCSP,Ammospiza leconteii,lecspa
 Lesser Black-backed Gull,LBBG,Larus fuscus,lbbgul
+Lesser Scaup,LESC,Aythya affinis,lessca
 Lesser Yellowlegs,LEYE,Tringa flavipes,lesyel
 Lewis's Woodpecker,LEWO,Melanerpes lewis,lewwoo
 Lincoln's Sparrow,LISP,Melospiza lincolnii,linspa
@@ -206,6 +213,7 @@ Long-billed Curlew,LBCU,Numenius americanus,lobcur
 Long-billed Dowitcher,LBDO,Limnodromus scolopaceus,lobdow
 Long-eared Owl,LEOW,Asio otus,loeowl
 Long-tailed Duck,LTDU,Clangula hyemalis,lotduc
+Long-tailed Jaeger,LTJA,Stercorarius longicaudus,lotjae
 Louisiana Waterthrush,LOWA,Parkesia motacilla,louwat
 MacGillivray's Warbler,MGWA,Geothlypis tolmiei,macwar
 Magnolia Warbler,MAWA,Setophaga magnolia,magwar
@@ -224,6 +232,7 @@ Nelson's Sparrow,NESP,Ammospiza nelsoni,nstspa
 Noise,Noise,Noise,Noise
 Northern Cardinal,NOCA,Cardinalis cardinalis,norcar
 Northern Flicker,NOFL,Colaptes auratus,norfli
+Northern Gannet,NOGA,Morus bassanus,norgan
 Northern Harrier,NOHA,Circus hudsonius,norhar2
 Northern Hawk Owl,NHOW,Surnia ulula,nohowl
 Northern House Wren,NHWR,Troglodytes aedon,houwre
@@ -247,6 +256,7 @@ Pacific Chorus Frog,FROG-PACH,Pseudacris regilla,FROG-PACH
 Pacific Loon,PALO,Gavia pacifica,pacloo
 Pacific Wren,PAWR,Troglodytes pacificus,pacwre1
 Palm Warbler,PAWA,Setophaga palmarum,palwar
+Parasitic Jaeger,PAJA,Stercorarius parasiticus,parjae
 Pectoral Sandpiper,PESA,Calidris melanotos,pecsan
 Peregrine Falcon,PEFA,Falco peregrinus,perfal
 Philadelphia Vireo,PHVI,Vireo philadelphicus,phivir
@@ -259,13 +269,17 @@ Pine Siskin,PISI,Spinus pinus,pinsis
 Pine Warbler,PIWA,Setophaga pinus,pinwar
 Pink-footed Shearwater,PFSH,Ardenna creatopus,pifshe
 Plains Spadefoot Toad,TOAD-PLSP,Spea bombifrons,TOAD-PLSP
+Pomarine Jaeger,POJA,Stercorarius pomarinus,pomjae
 Prairie Warbler,PRAW,Setophaga discolor,prawar
 Prothonotary Warbler,PROW,Protonotaria citrea,prowar
 Purple Finch,PUFI,Haemorhous purpureus,purfin
 Purple Martin,PUMA,Progne subis,purmar
+Purple Sandpiper,PUSA,Calidris maritima,pursan
 Pygmy Nuthatch,PYNU,Sitta pygmaea,pygnut
+Razorbill,RAZO,Alca torda,razorb
 Red Crossbill,RECR,Loxia curvirostra,redcro
 Red-bellied Woodpecker,RBWO,Melanerpes carolinus,rebwoo
+Red-breasted Merganser,RBME,Mergus serrator,rebmer
 Red-breasted Nuthatch,RBNU,Sitta canadensis,rebnut
 Red-breasted Sapsucker,RBSA,Sphyrapicus ruber,rebsap
 Red-eyed Vireo,REVI,Vireo olivaceus,reevir1
