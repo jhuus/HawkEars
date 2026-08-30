@@ -30,7 +30,7 @@ def test_init_installs_compact_occurrence_and_location_catalog(tmp_path, monkeyp
     manifest = json.loads((tmp_path / "data" / "models.json").read_text())
     assert manifest["format_version"] == 2
     assert manifest["package_region"] == "canada"
-    assert manifest["bundles"]["main"]["version"] == "2.2.0"
+    assert manifest["bundles"]["main"]["version"] == "2.3.0"
     assert manifest["bundles"]["main"]["path"] == "data/ckpt"
     assert manifest["bundles"]["low_band"]["version"] == "2.0.0"
     assert manifest["bundles"]["low_band"]["path"] == "data/ckpt-low-band"
