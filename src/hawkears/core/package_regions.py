@@ -45,9 +45,9 @@ PACKAGE_REGIONS: Mapping[str, PackageRegion] = MappingProxyType(
                     default_directory=Path("data/ckpt"),
                     config_section="misc",
                     config_key="ckpt_folder",
-                    version="2.2.0",
-                    url="https://github.com/jhuus/HawkEars/releases/download/models-2.2.0/main-models-2.2.0.zip",
-                    sha256="24cf831c2f32affced1c7a87f8e92c5d4c5aff0ea2f8fe1e935502eb9c335c3b",
+                    version="2.3.0",
+                    url="https://github.com/jhuus/HawkEars/releases/download/models-2.3.0/main-models-2.3.0.zip",
+                    sha256="774a5844e7fe40b720ed2b6f24a68108b63f64c2606c2c70ab69703515030417",
                 ),
                 ModelBundle(
                     name="low_band",
