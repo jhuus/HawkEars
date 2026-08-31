@@ -36,6 +36,10 @@ def main(argv: list[str] | None = None) -> int:
     from hawkears.gui.ui.main_window import MainWindow
     from hawkears.core.config_loader import get_config
     from hawkears.gui.i18n import install_translators
+    from hawkears.gui.linux_desktop import (
+        DESKTOP_FILE_NAME,
+        install_linux_desktop_integration,
+    )
     from hawkears.gui.ui.resources import brand_icon
     from hawkears.gui.ui.theme import STYLESHEET
     from hawkears.gui.services.class_catalog import (
@@ -56,11 +60,18 @@ def main(argv: list[str] | None = None) -> int:
     QCoreApplication.setOrganizationName("HawkEars")
     app = QApplication(application_arguments)
     app.setApplicationDisplayName("HawkEars")
+    app.setDesktopFileName(DESKTOP_FILE_NAME.removesuffix(".desktop"))
     logger.info("PySide6 application created; log=%s", log_path)
     configured_data_root = QSettings().value("dataDirectory")
     paths = resolve_application_paths(
         str(configured_data_root) if configured_data_root else None
     )
+    try:
+        if install_linux_desktop_integration():
+            logger.info("Linux desktop launcher and icon installed")
+    except OSError:
+        # Desktop integration is optional and must not prevent model setup or use.
+        logger.warning("Could not install Linux desktop integration", exc_info=True)
     translators = install_translators(app)
     app._hawkears_translators = translators  # type: ignore[attr-defined]
     app.setWindowIcon(brand_icon())
