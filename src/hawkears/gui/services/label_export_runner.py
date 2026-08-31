@@ -70,6 +70,7 @@ class LabelExportRunner(QObject):
                 )
             }
             self.output_directory.mkdir(parents=True, exist_ok=True)
+            plans: list[tuple[Recording | None, list[LabelExportDetection], Path]]
             if self.output_format == "csv":
                 plans = [(None, list(detections), self.output_directory / "scores.csv")]
             else:
@@ -96,14 +97,14 @@ class LabelExportRunner(QObject):
                     f"including {existing[0].name}. Enable overwriting or choose "
                     "an empty folder."
                 )
-            for recording, rows, output_path in plans:
+            for planned_recording, rows, output_path in plans:
                 if self.output_format == "audacity":
                     self._write_audacity(rows, output_path)
                 elif self.output_format == "csv":
                     self._write_csv(rows, output_path)
                 else:
-                    assert recording is not None
-                    self._write_raven(rows, recording, output_path)
+                    assert planned_recording is not None
+                    self._write_raven(rows, planned_recording, output_path)
             self.completed.emit(len(detections), len(plans), self.output_format)
         except Exception as error:
             self.failed.emit(str(error))
@@ -129,9 +130,7 @@ class LabelExportRunner(QObject):
                     f"{row.start_ms / 1000:.3f}\t{row.end_ms / 1000:.3f}\t{label}\n"
                 )
 
-    def _write_csv(
-        self, rows: list[LabelExportDetection], output_path: Path
-    ) -> None:
+    def _write_csv(self, rows: list[LabelExportDetection], output_path: Path) -> None:
         ordered_rows = sorted(
             rows,
             key=lambda row: (

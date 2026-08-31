@@ -2148,9 +2148,7 @@ class ReviewPage(QWidget):
             self._cursor_elapsed_timer.nsecsElapsed() // 1000,
         )
         self._playback_last_progress_us = processed_us
-        position_ms = self._playback_start_ms + round(
-            processed_us / 1000
-        )
+        position_ms = self._playback_start_ms + round(processed_us / 1000)
         if self._play_end_ms > 0:
             position_ms = min(position_ms, self._play_end_ms)
         self._cursor_position_ms = position_ms

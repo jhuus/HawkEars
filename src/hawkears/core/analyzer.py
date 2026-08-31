@@ -145,10 +145,21 @@ class Analyzer:
             initial_start_times = [start_seconds, start_seconds + 1, start_seconds + 2]
         elif self.cfg.infer.max_models == 5:
             # 3 at 1-second intervals, then 2 overlapping at 1.5-second intervals
-            initial_start_times = [start_seconds, start_seconds + 1, start_seconds + 2, start_seconds, start_seconds + 1.5]
+            initial_start_times = [
+                start_seconds,
+                start_seconds + 1,
+                start_seconds + 2,
+                start_seconds,
+                start_seconds + 1.5,
+            ]
         elif self.cfg.infer.max_models == 4:
             # 3 at 1-second intervals, then 1 overlapping
-            initial_start_times = [start_seconds, start_seconds + 1, start_seconds + 2, start_seconds]
+            initial_start_times = [
+                start_seconds,
+                start_seconds + 1,
+                start_seconds + 2,
+                start_seconds,
+            ]
         elif self.cfg.infer.max_models == 3:
             # 3 at 1-second intervals
             initial_start_times = [start_seconds, start_seconds + 1, start_seconds + 2]
@@ -161,7 +172,9 @@ class Analyzer:
         else:
             raise Exception(f"Invalid max_models value={self.cfg.infer.max_models}")
 
-        logging.debug(f"[Thread {thread_num}] Initial start times={initial_start_times}")
+        logging.debug(
+            f"[Thread {thread_num}] Initial start times={initial_start_times}"
+        )
 
         # Remove any that go past end of recording
         for i in range(1, len(initial_start_times), 1):

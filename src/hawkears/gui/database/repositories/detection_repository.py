@@ -785,8 +785,16 @@ class DetectionRepository:
                 """,
             ),
             "recording": (
-                ("recording", "species", "species_code", "scientific_name",
-                 "date", "location", "detections", "seconds"),
+                (
+                    "recording",
+                    "species",
+                    "species_code",
+                    "scientific_name",
+                    "date",
+                    "location",
+                    "detections",
+                    "seconds",
+                ),
                 """
                 SELECT recording, current_species AS species,
                        current_species_code AS species_code,
@@ -798,8 +806,16 @@ class DetectionRepository:
                 """,
             ),
             "date_location": (
-                ("date", "location", "species", "species_code", "scientific_name",
-                 "recordings", "detections", "seconds"),
+                (
+                    "date",
+                    "location",
+                    "species",
+                    "species_code",
+                    "scientific_name",
+                    "recordings",
+                    "detections",
+                    "seconds",
+                ),
                 """
                 SELECT date, location, current_species AS species,
                        current_species_code AS species_code,
@@ -850,8 +866,16 @@ class DetectionRepository:
                 """,
             ),
             "first_detection": (
-                ("species", "species_code", "scientific_name", "date", "location",
-                 "recording", "start_seconds", "score"),
+                (
+                    "species",
+                    "species_code",
+                    "scientific_name",
+                    "date",
+                    "location",
+                    "recording",
+                    "start_seconds",
+                    "score",
+                ),
                 """
                 SELECT current_species AS species,
                        current_species_code AS species_code,

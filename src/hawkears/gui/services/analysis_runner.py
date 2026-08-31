@@ -17,7 +17,6 @@ from hawkears.core.analyzer import find_recording_paths
 from hawkears.gui.database import ProjectDatabase
 from hawkears.gui.database.records import Recording, Species
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -207,13 +206,9 @@ class AnalysisRunner(QObject):
                     logger.exception(
                         "Could not mark failed analysis run %d as failed", self.run_id
                     )
-            self.failed.emit(
-                self._failure_message(error, phase, saved_count), details
-            )
+            self.failed.emit(self._failure_message(error, phase, saved_count), details)
 
-    def _failure_message(
-        self, error: Exception, phase: str, saved_count: int
-    ) -> str:
+    def _failure_message(self, error: Exception, phase: str, saved_count: int) -> str:
         run = (
             self.tr("Analysis run %1").replace("%1", str(self.run_id))
             if self.run_id is not None
@@ -226,8 +221,10 @@ class AnalysisRunner(QObject):
             "saving": self.tr("saving detections"),
             "finalizing": self.tr("finalizing the analysis"),
         }
-        message = self.tr("%1 failed while %2.").replace("%1", run).replace(
-            "%2", phase_labels.get(phase, phase)
+        message = (
+            self.tr("%1 failed while %2.")
+            .replace("%1", run)
+            .replace("%2", phase_labels.get(phase, phase))
         )
         if saved_count:
             save_status = self.tr("%n detection(s) were saved.", None, saved_count)

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from hawkears.core.app_paths import (
@@ -7,6 +8,7 @@ from hawkears.core.app_paths import (
 )
 from hawkears.core import config_loader
 from hawkears.core.initializer import get_initialization_status, is_initialized
+from hawkears.core.package_regions import default_package_region
 
 
 def test_explicit_data_root_takes_precedence(tmp_path):
@@ -150,12 +152,12 @@ def test_version_one_manifest_uses_default_bundle_paths(tmp_path):
         directory = data / name
         directory.mkdir()
         (directory / "model.ckpt").touch()
-    (data / "models.json").write_text(
-        '{"format_version": 1, "bundles": {'
-        '"main": {"version": "2.2.0"}, '
-        '"low_band": {"version": "2.0.0"}}}',
-        encoding="utf-8",
-    )
+    bundles = default_package_region().bundles
+    manifest = {
+        "format_version": 1,
+        "bundles": {bundle.name: {"version": bundle.version} for bundle in bundles},
+    }
+    (data / "models.json").write_text(json.dumps(manifest), encoding="utf-8")
 
     assert get_initialization_status(tmp_path).ready
 
