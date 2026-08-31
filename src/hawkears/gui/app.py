@@ -49,10 +49,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     from hawkears.gui.ui.setup_dialog import SetupDialog
 
+    # Set the identity before QApplication initializes the platform integration.
+    # In particular, macOS otherwise derives the Dock name from the Python
+    # executable used by the console-script launcher.
+    QCoreApplication.setApplicationName("HawkEars")
+    QCoreApplication.setOrganizationName("HawkEars")
     app = QApplication(application_arguments)
+    app.setApplicationDisplayName("HawkEars")
     logger.info("PySide6 application created; log=%s", log_path)
-    app.setApplicationName("HawkEars")
-    app.setOrganizationName("HawkEars")
     configured_data_root = QSettings().value("dataDirectory")
     paths = resolve_application_paths(
         str(configured_data_root) if configured_data_root else None
