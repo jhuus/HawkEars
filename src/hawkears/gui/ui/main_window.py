@@ -11,6 +11,7 @@ import platform
 import sqlite3
 import time
 
+import psutil
 from PySide6.QtCore import (
     QBuffer,
     QByteArray,
@@ -148,7 +149,10 @@ def analysis_setting_defaults(paths: ApplicationPaths) -> dict[str, object]:
     return {
         "min_score": float(config.infer.min_score),
         "max_models": max_models,
-        "num_threads": int(config.infer.num_threads),
+        # Each worker owns a Predictor and its model ensemble. Keep the GUI's
+        # memory-safe default lower than the CLI/config default; users can raise
+        # it for higher throughput when their system has sufficient memory.
+        "num_threads": 1,
         "segment_len": config.infer.segment_len,
         "max_label_length": config.hawkears.max_label_length,
     }
@@ -2751,6 +2755,12 @@ class MainWindow(QMainWindow):
             self.pages.addWidget(page)
         root_layout.addWidget(self.pages, 1)
         self.setCentralWidget(root)
+        self._memory_process = psutil.Process()
+        self._memory_timer = QTimer(self)
+        self._memory_timer.setInterval(2_000)
+        self._memory_timer.timeout.connect(self._update_memory_status)
+        self._memory_timer.start()
+        self._update_memory_status()
 
         self.welcome.create_requested.connect(self._create_project)
         self.welcome.open_requested.connect(self._open_project)
@@ -2837,11 +2847,50 @@ class MainWindow(QMainWindow):
             layout.addWidget(button)
             self.nav_buttons.append(button)
         layout.addStretch()
+        memory_tooltip = self.tr(
+            "HawkEars shows resident memory used by this application. Available "
+            "shows memory the operating system can provide without swapping. "
+            "Virtual and GPU memory are not included."
+        )
+        self.app_memory_label = QLabel()
+        self.app_memory_label.setObjectName("memoryStatus")
+        self.app_memory_label.setToolTip(memory_tooltip)
+        self.available_memory_label = QLabel()
+        self.available_memory_label.setObjectName("memoryStatus")
+        self.available_memory_label.setToolTip(memory_tooltip)
+        layout.addWidget(self.app_memory_label)
+        layout.addWidget(self.available_memory_label)
+        layout.addSpacing(6)
         self.version_label = QLabel(self.tr("Version %1").replace("%1", __version__))
         self.version_label.setObjectName("brandSubtle")
         self.version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.version_label)
         return sidebar
+
+    def _update_memory_status(self) -> None:
+        """Refresh the compact, cross-platform sidebar memory summary."""
+        try:
+            resident_bytes = self._memory_process.memory_info().rss
+            system_memory = psutil.virtual_memory()
+        except (psutil.Error, OSError):
+            self.app_memory_label.setText(self.tr("HawkEars: —"))
+            self.available_memory_label.setText(self.tr("Available: —"))
+            return
+
+        gibibyte = 1024**3
+        self.app_memory_label.setText(
+            self.tr("HawkEars: %1 GB").replace("%1", f"{resident_bytes / gibibyte:.1f}")
+        )
+        self.available_memory_label.setText(
+            self.tr("Available: %1 GB").replace(
+                "%1", f"{system_memory.available / gibibyte:.1f}"
+            )
+        )
+        critical = system_memory.available < gibibyte
+        if self.available_memory_label.property("critical") != critical:
+            self.available_memory_label.setProperty("critical", critical)
+            self.available_memory_label.style().unpolish(self.available_memory_label)
+            self.available_memory_label.style().polish(self.available_memory_label)
 
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu(self.tr("File"))
@@ -3021,9 +3070,7 @@ class MainWindow(QMainWindow):
         """Enable pages whose project prerequisites have been satisfied."""
         assert self._database is not None
         project = self._database.project.get()
-        recording_directory = project.resolved_recording_directory(
-            self._database.path
-        )
+        recording_directory = project.resolved_recording_directory(self._database.path)
         analysis_ready = (
             recording_directory is not None
             and recording_directory.is_dir()

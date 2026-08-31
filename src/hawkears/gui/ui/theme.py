@@ -28,6 +28,8 @@ QMenu::item:selected { background: #f8e6c7; }
 }
 #brand { color: #f8f0e7; font-size: 17pt; font-weight: 700; }
 #brandSubtle { color: #fcbb73; font-size: 8pt; }
+#memoryStatus { color: #d9c4bc; font-size: 8pt; }
+#memoryStatus[critical="true"] { color: #ffb3a7; font-weight: 600; }
 #projectChip {
     background: #220e0d;
     border: 1px solid #79352d;

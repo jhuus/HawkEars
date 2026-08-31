@@ -62,7 +62,7 @@ def test_analysis_defaults_choose_model_count_for_device(
     assert defaults == {
         "min_score": 0.7,
         "max_models": expected_models,
-        "num_threads": 3,
+        "num_threads": 1,
         "segment_len": None,
         "max_label_length": None,
     }
