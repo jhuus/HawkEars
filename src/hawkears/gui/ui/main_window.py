@@ -3018,15 +3018,26 @@ class MainWindow(QMainWindow):
         self._show_page(1)
 
     def _update_navigation(self) -> None:
-        """Enable result-oriented pages after the first completed analysis."""
+        """Enable pages whose project prerequisites have been satisfied."""
         assert self._database is not None
+        project = self._database.project.get()
+        recording_directory = project.resolved_recording_directory(
+            self._database.path
+        )
+        analysis_ready = (
+            recording_directory is not None
+            and recording_directory.is_dir()
+            and bool(self._database.species.list_project_species())
+        )
         has_completed_run = any(
             run.status == "completed"
             or (run.status == "cancelled" and run.detection_count > 0)
             for run in self._database.analysis.list_runs()
         )
         for index, button in enumerate(self.nav_buttons):
-            button.setEnabled(index < 2 or has_completed_run)
+            button.setEnabled(
+                index == 0 or (index == 1 and analysis_ready) or has_completed_run
+            )
 
     def _populate_project_menu(self) -> None:
         self.project_menu.clear()
@@ -3094,6 +3105,7 @@ class MainWindow(QMainWindow):
             editable=True,
             project_directory=self._database.path.parent,
         )
+        self._update_navigation()
 
     def _save_recording_scope(self, directory: Path | None, recurse: bool) -> None:
         if self._database is None:
