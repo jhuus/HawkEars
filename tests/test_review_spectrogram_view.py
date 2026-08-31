@@ -288,6 +288,54 @@ def test_correct_species_is_enabled_only_for_incorrect_verdict():
         app.processEvents()
 
 
+@pytest.mark.parametrize(
+    ("processed_us", "elapsed_us", "previous_processed_us", "expected_us"),
+    (
+        (250_000, 900_000, 200_000, 250_000),
+        (250_000, 900_000, 250_000, 900_000),
+        (0, 900_000, 0, 900_000),
+    ),
+)
+def test_review_cursor_falls_back_when_processed_audio_time_does_not_advance(
+    processed_us: int,
+    elapsed_us: int,
+    previous_processed_us: int,
+    expected_us: int,
+):
+    audio_sink = SimpleNamespace(
+        processedUSecs=lambda: processed_us,
+        elapsedUSecs=lambda: elapsed_us,
+    )
+
+    progress_us, latest_processed_us = main_window.playback_progress_us(
+        audio_sink, 0, 0, previous_processed_us  # type: ignore[arg-type]
+    )
+    assert progress_us == expected_us
+    assert latest_processed_us == processed_us
+
+
+@pytest.mark.parametrize(
+    ("sink_progress_us", "previous_progress_us", "timer_progress_us", "expected_us"),
+    (
+        (250_000, 200_000, 900_000, 250_000),
+        (250_000, 250_000, 900_000, 900_000),
+        (100_000, 250_000, 200_000, 250_000),
+    ),
+)
+def test_review_cursor_uses_monotonic_timer_when_sink_clocks_stall(
+    sink_progress_us: int,
+    previous_progress_us: int,
+    timer_progress_us: int,
+    expected_us: int,
+):
+    assert (
+        main_window.unstalled_playback_progress_us(
+            sink_progress_us, previous_progress_us, timer_progress_us
+        )
+        == expected_us
+    )
+
+
 def test_results_choose_selected_visible_detection_or_first_visible():
     app = QApplication.instance() or QApplication([])
     page = ResultsPage()

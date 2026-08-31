@@ -1,0 +1,1 @@
+"""Packaged HawkEars installation resources."""

@@ -14,6 +14,7 @@ import time
 from PySide6.QtCore import (
     QBuffer,
     QByteArray,
+    QElapsedTimer,
     QIODevice,
     QObject,
     QSettings,
@@ -115,6 +116,29 @@ from hawkears.gui.ui.species_dialog import SpeciesDialog
 logger = logging.getLogger(__name__)
 
 PROJECT_URL = "https://github.com/jhuus/HawkEars"
+
+
+def playback_progress_us(
+    audio_sink: QAudioSink,
+    processed_origin_us: int,
+    elapsed_origin_us: int,
+    previous_processed_us: int,
+) -> tuple[int, int]:
+    """Return playback progress and the latest processed-audio reading."""
+    processed_us = max(0, audio_sink.processedUSecs() - processed_origin_us)
+    if processed_us > previous_processed_us:
+        return processed_us, processed_us
+    elapsed_us = max(0, audio_sink.elapsedUSecs() - elapsed_origin_us)
+    return elapsed_us, processed_us
+
+
+def unstalled_playback_progress_us(
+    sink_progress_us: int, previous_progress_us: int, timer_progress_us: int
+) -> int:
+    """Keep progress monotonic, using a wall clock when sink clocks stall."""
+    if sink_progress_us <= previous_progress_us:
+        sink_progress_us = timer_progress_us
+    return max(previous_progress_us, sink_progress_us)
 
 
 def analysis_setting_defaults(paths: ApplicationPaths) -> dict[str, object]:
@@ -1803,7 +1827,12 @@ class ReviewPage(QWidget):
         self._cursor_timer = QTimer(self)
         self._cursor_timer.setInterval(33)
         self._cursor_timer.timeout.connect(self._animate_playback_cursor)
+        self._cursor_elapsed_timer = QElapsedTimer()
         self._playback_start_ms = 0
+        self._playback_processed_origin_us = 0
+        self._playback_elapsed_origin_us = 0
+        self._playback_last_processed_us = 0
+        self._playback_last_progress_us = 0
         self._playback_mode: str | None = None
         self._playback_samples = None
         self._playback_sample_rate = 0
@@ -2070,6 +2099,12 @@ class ReviewPage(QWidget):
             (relative_start + self._playback_source_start_ms) / 1000
         )
         self._audio_sink.start(buffer)
+        self._playback_processed_origin_us = self._audio_sink.processedUSecs()
+        self._playback_elapsed_origin_us = self._audio_sink.elapsedUSecs()
+        self._playback_last_processed_us = 0
+        self._playback_last_progress_us = 0
+        self._cursor_elapsed_timer.restart()
+        self._cursor_timer.start()
         self._update_playback_buttons(True)
 
     def _is_playing(self) -> bool:
@@ -2101,8 +2136,20 @@ class ReviewPage(QWidget):
     def _animate_playback_cursor(self) -> None:
         if self._audio_sink is None:
             return
+        processed_us, self._playback_last_processed_us = playback_progress_us(
+            self._audio_sink,
+            self._playback_processed_origin_us,
+            self._playback_elapsed_origin_us,
+            self._playback_last_processed_us,
+        )
+        processed_us = unstalled_playback_progress_us(
+            processed_us,
+            self._playback_last_progress_us,
+            self._cursor_elapsed_timer.nsecsElapsed() // 1000,
+        )
+        self._playback_last_progress_us = processed_us
         position_ms = self._playback_start_ms + round(
-            self._audio_sink.processedUSecs() / 1000
+            processed_us / 1000
         )
         if self._play_end_ms > 0:
             position_ms = min(position_ms, self._play_end_ms)
@@ -2122,6 +2169,12 @@ class ReviewPage(QWidget):
         )
         playing = state == QtAudio.State.ActiveState
         if playing:
+            assert self._audio_sink is not None
+            self._playback_processed_origin_us = self._audio_sink.processedUSecs()
+            self._playback_elapsed_origin_us = self._audio_sink.elapsedUSecs()
+            self._playback_last_processed_us = 0
+            self._playback_last_progress_us = 0
+            self._cursor_elapsed_timer.restart()
             self._cursor_timer.start()
         elif state in (QtAudio.State.IdleState, QtAudio.State.StoppedState):
             self._cursor_timer.stop()
