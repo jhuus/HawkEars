@@ -50,6 +50,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QFrame,
@@ -72,6 +73,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QTabWidget,
     QTextEdit,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
@@ -159,7 +161,9 @@ def analysis_setting_defaults(paths: ApplicationPaths) -> dict[str, object]:
     }
 
 
-def page_header(title: str, subtitle: str) -> tuple[QWidget, QVBoxLayout]:
+def page_header(
+    title: str, subtitle: str, help_requested: object | None = None
+) -> tuple[QWidget, QVBoxLayout]:
     page = QWidget()
     layout = QVBoxLayout(page)
     layout.setContentsMargins(30, 25, 30, 25)
@@ -168,7 +172,17 @@ def page_header(title: str, subtitle: str) -> tuple[QWidget, QVBoxLayout]:
     title_label.setObjectName("pageTitle")
     subtitle_label = QLabel(subtitle)
     subtitle_label.setObjectName("pageSubtitle")
-    layout.addWidget(title_label)
+    heading = QHBoxLayout()
+    heading.addWidget(title_label)
+    heading.addStretch()
+    if help_requested is not None:
+        help_button = QPushButton(QApplication.translate("PageHeader", "Help"))
+        help_button.setToolTip(
+            QApplication.translate("PageHeader", "Open help for this page (F1)")
+        )
+        help_button.clicked.connect(help_requested)  # type: ignore[arg-type]
+        heading.addWidget(help_button)
+    layout.addLayout(heading)
     layout.addWidget(subtitle_label)
     return page, layout
 
@@ -287,6 +301,7 @@ class WelcomePage(QWidget):
 class ProjectPage(QWidget):
     recording_scope_changed = Signal(object, bool)
     edit_species_requested = Signal()
+    help_requested = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -295,6 +310,7 @@ class ProjectPage(QWidget):
             self.tr(
                 "Choose the species and recordings that define the analysis scope."
             ),
+            lambda: self.help_requested.emit("project"),
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -448,6 +464,7 @@ class AnalysisPage(QWidget):
     resume_requested = Signal(int)
     cancel_requested = Signal()
     import_requested = Signal(object)
+    help_requested = Signal(str)
 
     def __init__(self, application_paths: ApplicationPaths | None = None) -> None:
         super().__init__()
@@ -462,6 +479,7 @@ class AnalysisPage(QWidget):
             self.tr(
                 "Configure HawkEars inference and run it across the project recordings."
             ),
+            lambda: self.help_requested.emit("analyze"),
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -508,6 +526,33 @@ class AnalysisPage(QWidget):
         self.max_label_length.setDecimals(0)
         self.max_label_length.setSuffix(self.tr(" seconds"))
         self.max_label_length.setSpecialValueText(self.tr("No limit"))
+        self.threshold.setToolTip(
+            self.tr("Exclude detections whose confidence score is below this value.")
+        )
+        self.models.setToolTip(
+            self.tr(
+                "Combine predictions from this many models. More models generally "
+                "improve accuracy but increase analysis time and memory use."
+            )
+        )
+        self.threads.setToolTip(
+            self.tr(
+                "Process this many recordings concurrently. More workers may improve "
+                "throughput but each worker needs its own model ensemble and memory."
+            )
+        )
+        self.output.setToolTip(
+            self.tr(
+                "Choose whether detections follow the detected duration or use "
+                "equal-length time segments."
+            )
+        )
+        self.max_label_length.setToolTip(
+            self.tr(
+                "Split longer variable-length detections into consecutive labels "
+                "without discarding detected time."
+            )
+        )
         form.addRow(self.tr("Inference device"), self.inference_device)
         form.addRow(self.tr("Minimum score"), self.threshold)
         form.addRow(self.tr("Ensemble models"), self.models)
@@ -944,12 +989,14 @@ class ResultsPage(QWidget):
     create_queue_requested = Signal()
     review_order_changed = Signal(int, str)
     confirmation_changed = Signal(int, bool)
+    help_requested = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
         page, outer = page_header(
             self.tr("Results"),
             self.tr("Sort and filter detections, then review them in sequence."),
+            lambda: self.help_requested.emit("results"),
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -974,9 +1021,20 @@ class ResultsPage(QWidget):
             self.tr("Chronological by recording"), "chronological"
         )
         self.review_order.setEnabled(False)
+        self.review_order.setToolTip(
+            self.tr(
+                "Choose which queued detection is presented next without changing "
+                "the detections stored in the queue."
+            )
+        )
         self.review_order.currentIndexChanged.connect(self._review_order_selected)
         sources.addWidget(self.review_order)
         self.create_queue_button = QPushButton(self.tr("Create queue…"))
+        self.create_queue_button.setToolTip(
+            self.tr(
+                "Create a saved, reproducible subset of one species' detections for review."
+            )
+        )
         self.create_queue_button.clicked.connect(self.create_queue_requested)
         sources.addWidget(self.create_queue_button)
         outer.addLayout(sources)
@@ -1010,12 +1068,23 @@ class ResultsPage(QWidget):
         )
         self.confirmation_toggle.setVisible(False)
         self.confirmation_toggle.toggled.connect(self._confirmation_toggled)
+        self.confirmation_toggle.setToolTip(
+            self.tr(
+                "After confirming the queued species, mark the remaining applicable "
+                "detections as skipped. Disabling this option restores them."
+            )
+        )
         filters.addWidget(self.search, 2)
         filters.addWidget(self.species)
         filters.addWidget(QLabel(self.tr("Review status")))
         filters.addWidget(self.review)
         filters.addWidget(self.confirmation_toggle)
         outer.addLayout(filters)
+
+        self.guidance = QLabel()
+        self.guidance.setObjectName("muted")
+        self.guidance.setWordWrap(True)
+        outer.addWidget(self.guidance)
 
         self.table = QTableWidget(0, 8)
         self.table.setHorizontalHeaderLabels(
@@ -1047,6 +1116,12 @@ class ResultsPage(QWidget):
         self.count = QLabel(self.tr("%n detections", None, 0))
         self.count.setObjectName("muted")
         self.open_button = QPushButton(self.tr("Review selected"))
+        self.open_button.setToolTip(
+            self.tr(
+                "Open the selected detection for review. If no visible row is selected, "
+                "the Review tab starts with the first visible result."
+            )
+        )
         self.open_button.setProperty("primary", True)
         self.open_button.setEnabled(False)
         self.open_button.clicked.connect(self._open_current)
@@ -1115,7 +1190,19 @@ class ResultsPage(QWidget):
             self.review_order.setCurrentIndex(0)
             self.review_order.setEnabled(False)
             self.confirmation_toggle.setVisible(False)
+            self.guidance.setText(
+                self.tr(
+                    "Showing detections from the selected analysis run. Filter or sort "
+                    "the table, or create a review queue to save a reproducible subset."
+                )
+            )
         else:
+            self.guidance.setText(
+                self.tr(
+                    "Showing detections saved in this review queue. Review order controls "
+                    "which pending detection is presented next."
+                )
+            )
             self.review_order.setEnabled(True)
             index = self.review_order.findData(
                 self._queue_orders.get(queue_id, "queue")
@@ -1126,9 +1213,15 @@ class ResultsPage(QWidget):
             self.confirmation_toggle.setVisible(scope != "none")
             self.confirmation_toggle.setChecked(enabled)
             self.confirmation_toggle.setToolTip(
-                self.tr("Confirmation applies per location and date.")
+                self.tr(
+                    "After confirming the queued species, skip remaining detections "
+                    "from the same location and date. Disabling this option restores them."
+                )
                 if scope == "location_date"
-                else self.tr("Confirmation applies per location.")
+                else self.tr(
+                    "After confirming the queued species, skip remaining detections "
+                    "from the same location. Disabling this option restores them."
+                )
             )
             self.confirmation_toggle.blockSignals(False)
         self.review_order.blockSignals(False)
@@ -1725,6 +1818,7 @@ class SpectrogramView(QWidget):
 class ReviewPage(QWidget):
     save_requested = Signal(int, object, str, str, bool)
     bounds_requested = Signal(int, int, int, int, int)
+    help_requested = Signal(str)
 
     def __init__(self, class_catalog: list[SpeciesDefinition]) -> None:
         super().__init__()
@@ -1733,6 +1827,7 @@ class ReviewPage(QWidget):
             self.tr(
                 "Listen, inspect the surrounding context, and record your judgment."
             ),
+            lambda: self.help_requested.emit("review"),
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -2287,12 +2382,14 @@ class ReportsPage(QWidget):
     validated_report_changed = Signal(str)
     review_export_requested = Signal()
     label_export_requested = Signal()
+    help_requested = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
         page, outer = page_header(
             self.tr("Reports"),
             self.tr("Track review progress and export structured project results."),
+            lambda: self.help_requested.emit("reports"),
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -2753,6 +2850,30 @@ class ReportsPage(QWidget):
             QMessageBox.critical(self, self.tr("Could not export report"), str(error))
 
 
+class PageHelpDialog(QDialog):
+    """Display packaged, page-specific help without requiring internet access."""
+
+    documentation_requested = Signal()
+
+    def __init__(self, title: str, html: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(self.tr("%1 help").replace("%1", title))
+        self.resize(720, 620)
+        layout = QVBoxLayout(self)
+        browser = QTextBrowser()
+        browser.setOpenExternalLinks(True)
+        browser.setHtml(html)
+        layout.addWidget(browser, 1)
+        actions = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        documentation = actions.addButton(
+            self.tr("Full documentation online"),
+            QDialogButtonBox.ButtonRole.ActionRole,
+        )
+        documentation.clicked.connect(self.documentation_requested)
+        actions.rejected.connect(self.reject)
+        layout.addWidget(actions)
+
+
 class MainWindow(QMainWindow):
     def __init__(
         self,
@@ -2839,6 +2960,14 @@ class MainWindow(QMainWindow):
         self.analysis_page.resume_requested.connect(self._resume_analysis)
         self.analysis_page.import_requested.connect(self._start_import)
         self.analysis_page.cancel_requested.connect(self._cancel_analysis)
+        for help_page in (
+            self.project_page,
+            self.analysis_page,
+            self.results_page,
+            self.review_page,
+            self.reports_page,
+        ):
+            help_page.help_requested.connect(self._show_page_help)
         self._analysis_thread: QThread | None = None
         self._analysis_runner: AnalysisRunner | HawkEarsImportRunner | None = None
         self._export_thread: QThread | None = None
@@ -2970,6 +3099,9 @@ class MainWindow(QMainWindow):
         file_menu.addAction(quit_action)
 
         help_menu = self.menuBar().addMenu(self.tr("Help"))
+        page_help_action = QAction(self.tr("Help for this page"), self)
+        page_help_action.setShortcut("F1")
+        page_help_action.triggered.connect(self._show_current_page_help)
         documentation_action = QAction(self.tr("HawkEars documentation"), self)
         documentation_action.triggered.connect(
             lambda: self._open_help_url(f"{PROJECT_URL}/blob/main/GUI.md")
@@ -2984,9 +3116,152 @@ class MainWindow(QMainWindow):
         diagnostics_action.triggered.connect(self._copy_diagnostic_information)
         about_action = QAction(self.tr("About HawkEars"), self)
         about_action.triggered.connect(self._show_about)
-        help_menu.addActions([documentation_action, issue_action, log_action])
+        help_menu.addActions(
+            [page_help_action, documentation_action, issue_action, log_action]
+        )
         help_menu.addSeparator()
         help_menu.addActions([diagnostics_action, about_action])
+
+    def _show_current_page_help(self) -> None:
+        topics = {
+            0: "overview",
+            1: "project",
+            2: "analyze",
+            3: "results",
+            4: "review",
+            5: "reports",
+        }
+        self._show_page_help(topics.get(self.pages.currentIndex(), "overview"))
+
+    def _show_page_help(self, topic: str) -> None:
+        title, html = self._page_help_content(topic)
+        dialog = PageHelpDialog(title, html, self)
+        dialog.documentation_requested.connect(
+            lambda: self._open_help_url(f"{PROJECT_URL}/blob/main/GUI.md")
+        )
+        dialog.exec()
+
+    def _page_help_content(self, topic: str) -> tuple[str, str]:
+        content = {
+            "overview": (
+                self.tr("HawkEars"),
+                self.tr(
+                    "<h2>HawkEars workflow</h2>"
+                    "<p>Create or open a project, choose target species and recordings, "
+                    "run an analysis, inspect its detections, review selected detections, "
+                    "and export reports or labels.</p>"
+                    "<p>A project stores settings, analysis runs, detections, review "
+                    "queues, and review history. It does not copy the audio recordings, "
+                    "so keep those recordings available at their original paths.</p>"
+                ),
+            ),
+            "project": (
+                self.tr("Project"),
+                self.tr(
+                    "<h2>Define the project scope</h2>"
+                    "<h3>Target species</h3>"
+                    "<p>Select the species HawkEars should include in analysis results. "
+                    "The selection is saved with each analysis run, so changing it later "
+                    "does not alter earlier runs.</p>"
+                    "<h3>Recording directory</h3>"
+                    "<p>Choose the directory containing the audio recordings. Enable "
+                    "<b>Include recordings in subdirectories</b> when recordings are "
+                    "organized below that directory.</p>"
+                    "<p>The project stores paths to recordings rather than copies of the "
+                    "audio. Moving or deleting them prevents later review and playback.</p>"
+                ),
+            ),
+            "analyze": (
+                self.tr("Analyze"),
+                self.tr(
+                    "<h2>Run inference</h2>"
+                    "<p><b>Minimum score</b> excludes lower-confidence detections. "
+                    "<b>Ensemble models</b> can improve accuracy at the cost of time and "
+                    "memory. <b>Worker threads</b> process recordings concurrently, with "
+                    "each worker loading its own model ensemble.</p>"
+                    "<p><b>Variable-length labels</b> follow detected duration. A maximum "
+                    "length splits oversized labels consecutively without losing detected "
+                    "time. <b>Fixed-length segments</b> use equal time intervals.</p>"
+                    "<h3>Location and date</h3>"
+                    "<p>Location information can apply geographic occurrence filtering and "
+                    "location-specific heuristics. It may be supplied for the whole project "
+                    "or per recording in a CSV file.</p>"
+                    "<h3>Runs, cancellation, and resuming</h3>"
+                    "<p>A new run preserves its settings and results. Cancellation is "
+                    "cooperative: active recordings finish and are saved, but no more are "
+                    "started. Resume continues an incomplete run with its original inference "
+                    "settings, skips completed recordings, and uses the currently selected "
+                    "worker-thread count.</p>"
+                    "<p><b>Import analysis results</b> loads compatible Audacity or CSV "
+                    "output produced by the HawkEars command-line interface.</p>"
+                ),
+            ),
+            "results": (
+                self.tr("Results"),
+                self.tr(
+                    "<h2>Find and organize detections</h2>"
+                    "<p><b>Analysis run</b> selects the inference results to display. "
+                    "<b>Review queue</b> selects a saved subset created for a particular "
+                    "review purpose. Search, species, and review-state filters narrow the "
+                    "visible table.</p>"
+                    "<p>Click a table heading to sort visible rows. Table sorting changes "
+                    "only the display. <b>Review order</b> controls which pending queue "
+                    "member is presented next without changing queue membership.</p>"
+                    "<h3>Review queues</h3>"
+                    "<p>A queue is a saved, reproducible sample of one species from one "
+                    "analysis run. It is useful when reviewing every detection would be "
+                    "impractical. Sampling order preserves the order produced by the queue's "
+                    "strategy; the other review orders prioritize score or recording time.</p>"
+                    "<p>For supported presence queues, <b>Skip remaining after confirmation</b> "
+                    "marks remaining detections for the same location, or location and date, "
+                    "as skipped after the queued species is confirmed. Turning it off or "
+                    "changing the confirming review restores applicable detections.</p>"
+                    "<h3>Opening a detection</h3>"
+                    "<p>Double-click a row or select it and choose <b>Review selected</b>. "
+                    "Opening Review with no selected visible row starts at the first visible "
+                    "result.</p>"
+                    "<p><b>Time of day</b> is derived from the recording timestamp. "
+                    "<b>Detection offset</b> is the detection's position relative to the "
+                    "start of its recording. A dash means the required recording time is "
+                    "not available.</p>"
+                ),
+            ),
+            "review": (
+                self.tr("Review"),
+                self.tr(
+                    "<h2>Validate a detection</h2>"
+                    "<p>The spectrogram shows ten seconds around the detection. Play the "
+                    "whole context or only the detected interval. Playback gain and high- "
+                    "or low-pass filters affect listening only; they do not change the "
+                    "recording or analysis scores.</p>"
+                    "<p>Drag on the spectrogram and choose <b>Apply bounds</b> to revise time "
+                    "and frequency bounds. Mark the identification correct, incorrect, or "
+                    "uncertain. For an incorrect identification, select the corrected species.</p>"
+                    "<p><b>Save and next</b> stores the review and advances according to the "
+                    "current visible Results ordering. <b>Save and stop</b> stores it and "
+                    "returns without advancing. Reviews and corrections append revision "
+                    "history; original inference values remain available for reporting.</p>"
+                ),
+            ),
+            "reports": (
+                self.tr("Reports"),
+                self.tr(
+                    "<h2>Summarize and export work</h2>"
+                    "<p>Select an analysis run or all detections. Analysis coverage shows "
+                    "which target species were processed even when none were detected. Review "
+                    "queue and species tables summarize completed and remaining work.</p>"
+                    "<p><b>Review progress</b> reports detection and verdict counts. "
+                    "<b>Validated results</b> include accepted detections—those marked correct "
+                    "or reassigned to a corrected species—and can summarize presence, score "
+                    "accuracy, or first detections.</p>"
+                    "<p><b>Export reviewed detections</b> creates a detailed filtered CSV. "
+                    "<b>Export audio labels</b> creates Audacity label files or Raven selection "
+                    "tables per recording. The CSV buttons export the table or validated "
+                    "summary currently shown.</p>"
+                ),
+            ),
+        }
+        return content.get(topic, content["overview"])
 
     def _open_help_url(self, url: str) -> None:
         if not QDesktopServices.openUrl(QUrl(url)):
