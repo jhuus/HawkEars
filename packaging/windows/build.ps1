@@ -97,6 +97,7 @@ Assert-LastExitCode "Recording the Windows build environment"
     --include-package-data=librosa.util.example_data `
     --include-package=openvino `
     --include-package-data=hawkears `
+    --include-data-files="$Icon=hawkears/gui/ui/resources/hawkears.ico" `
     --windows-console-mode=disable `
     --windows-icon-from-ico=$Icon `
     --output-dir=$BuildRoot `

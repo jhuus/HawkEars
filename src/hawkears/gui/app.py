@@ -40,6 +40,10 @@ def main(argv: list[str] | None = None) -> int:
         DESKTOP_FILE_NAME,
         install_linux_desktop_integration,
     )
+    from hawkears.gui.windows_desktop import (
+        configure_windows_taskbar,
+        set_windows_app_user_model_id,
+    )
     from hawkears.gui.ui.resources import brand_icon
     from hawkears.gui.ui.theme import STYLESHEET
     from hawkears.gui.services.class_catalog import (
@@ -54,8 +58,9 @@ def main(argv: list[str] | None = None) -> int:
     from hawkears.gui.ui.setup_dialog import SetupDialog
 
     # Set the identity before QApplication initializes the platform integration.
-    # In particular, macOS otherwise derives the Dock name from the Python
-    # executable used by the console-script launcher.
+    # macOS otherwise derives the Dock name from the Python executable, while
+    # Windows groups the window under the console launcher's generic identity.
+    set_windows_app_user_model_id()
     QCoreApplication.setApplicationName("HawkEars")
     QCoreApplication.setOrganizationName("HawkEars")
     app = QApplication(application_arguments)
@@ -117,6 +122,11 @@ def main(argv: list[str] | None = None) -> int:
         application_paths=paths,
         initial_project=initial_project,
     )
+    launch_command = f'"{application_arguments[0]}" gui'
+    try:
+        configure_windows_taskbar(int(window.winId()), launch_command)
+    except OSError:
+        logger.warning("Could not configure Windows taskbar integration", exc_info=True)
     window.show()
     logger.info("Main window shown")
     result = app.exec()

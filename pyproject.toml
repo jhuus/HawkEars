@@ -85,6 +85,7 @@ packages = ["src/hawkears"]
 # importlib.resources.files("hawkears.install") can access them.
 [tool.hatch.build.targets.wheel.force-include]
 "install" = "hawkears/install"
+"packaging/windows/assets/hawkears.ico" = "hawkears/gui/ui/resources/hawkears.ico"
 
 [tool.hatch.build.targets.sdist]
 only-include = [
@@ -94,6 +95,7 @@ only-include = [
 
 [tool.hatch.build.targets.sdist.force-include]
 "install" = "hawkears/install"
+"packaging/windows/assets/hawkears.ico" = "packaging/windows/assets/hawkears.ico"
 
 [tool.coverage.run]
 source_pkgs = ["hawkears", "tests"]

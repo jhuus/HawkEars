@@ -42,8 +42,8 @@ Name: "fileassoc"; Description: "Associate .hawkears project files with HawkEars
 Source: "build\HawkEars.dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
-Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; AppUserModelID: "HawkEars.HawkEars"
+Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon; AppUserModelID: "HawkEars.HawkEars"
 
 [Registry]
 Root: HKA; Subkey: "Software\Classes\.hawkears\OpenWithProgids"; ValueType: string; ValueName: "HawkEars.Project"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
