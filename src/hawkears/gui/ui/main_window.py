@@ -1942,10 +1942,17 @@ class ReviewPage(QWidget):
         self.correction = QComboBox()
         self.correction.setEditable(True)
         self.correction.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        self.correction.addItems(
-            sorted(definition.common_name for definition in class_catalog)
+        self._correction_species_names = sorted(
+            definition.common_name for definition in class_catalog
         )
+        self.correction.addItems(self._correction_species_names)
         self.correction.setEnabled(False)
+        self.correction.setToolTip(
+            self.tr(
+                "Choose the correct species. The original detected species cannot "
+                "be selected for an incorrect verdict."
+            )
+        )
         self.correction.activated.connect(self._correction_selected)
         completer = self.correction.completer()
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
@@ -2013,6 +2020,7 @@ class ReviewPage(QWidget):
         self._detection_end_ms = 0
         self._detection_id: int | None = None
         self._displayed_species_name: str | None = None
+        self._original_species_name: str | None = None
         self._configure_review_keyboard_navigation()
 
     def _configure_review_keyboard_navigation(self) -> None:
@@ -2087,6 +2095,7 @@ class ReviewPage(QWidget):
         detection: DetectionResult,
         recording_path: Path,
         frequency_bounds: tuple[int, int] | None = None,
+        original_species_name: str | None = None,
     ) -> None:
         logger.info(
             "Showing detection id=%d species=%s recording=%s start_ms=%d end_ms=%d",
@@ -2100,11 +2109,11 @@ class ReviewPage(QWidget):
         self.detection_title.setText(f"{detection.species_name} · {score}")
         self._detection_id = detection.detection_id
         self._displayed_species_name = detection.species_name
-        species_index = self.correction.findText(detection.species_name)
-        if species_index < 0:
-            self.correction.addItem(detection.species_name)
-            species_index = self.correction.findText(detection.species_name)
-        self.correction.setCurrentIndex(species_index)
+        self._original_species_name = original_species_name or detection.species_name
+        for species_name in (detection.species_name, self._original_species_name):
+            if species_name not in self._correction_species_names:
+                self._correction_species_names.append(species_name)
+        self._correction_species_names.sort()
         self.verdict_group.setExclusive(False)
         for button in self.verdict_group.buttons():
             button.setChecked(
@@ -2456,10 +2465,21 @@ class ReviewPage(QWidget):
         )
         self.correction.setEnabled(incorrect)
         self.correction_label.setEnabled(incorrect)
-        if not incorrect and self._displayed_species_name is not None:
-            index = self.correction.findText(self._displayed_species_name)
-            if index >= 0:
-                self.correction.setCurrentIndex(index)
+        selected_species = self._displayed_species_name
+        if incorrect and selected_species == self._original_species_name:
+            selected_species = None
+        options = [
+            name
+            for name in self._correction_species_names
+            if not incorrect or name != self._original_species_name
+        ]
+        self.correction.blockSignals(True)
+        self.correction.clear()
+        self.correction.addItems(options)
+        self.correction.setCurrentIndex(
+            self.correction.findText(selected_species) if selected_species else -1
+        )
+        self.correction.blockSignals(False)
 
     def _save(self, advance: bool) -> None:
         checked = self.verdict_group.checkedButton()
@@ -3371,7 +3391,8 @@ class MainWindow(QMainWindow):
                     "recording or analysis scores.</p>"
                     "<p>Drag on the spectrogram and choose <b>Apply bounds</b> to revise time "
                     "and frequency bounds. Mark the identification correct, incorrect, or "
-                    "uncertain. For an incorrect identification, select the corrected species.</p>"
+                    "uncertain. For an incorrect identification, select a corrected species "
+                    "different from the original detected species.</p>"
                     "<p><b>Save and next</b> stores the review and advances according to the "
                     "current visible Results ordering. <b>Save and stop</b> stores it and "
                     "returns without advancing. <b>Previous detection</b> returns to the "
@@ -4298,6 +4319,9 @@ class MainWindow(QMainWindow):
             )
             return
         stored_detection = self._database.detections.get(detection_id)
+        original_species = self._database.species.get(
+            stored_detection.original.species_id
+        )
         recording = self._database.recordings.get(stored_detection.recording_id)
         frequency_bounds = (
             (
@@ -4312,6 +4336,7 @@ class MainWindow(QMainWindow):
             detection,
             recording.resolved_path(self._database.path),
             frequency_bounds,
+            original_species.common_name,
         )
         if record_history and (
             not self._review_history or self._review_history[-1] != detection_id
@@ -4391,6 +4416,21 @@ class MainWindow(QMainWindow):
                 self.tr("Select a supported species from the Correct species list."),
             )
             return
+        detection = self._database.detections.get(detection_id)
+        original_species = self._database.species.get(detection.original.species_id)
+        if (
+            verdict is ReviewVerdict.INCORRECT
+            and definition.canonical_key == original_species.canonical_key
+        ):
+            QMessageBox.warning(
+                self,
+                self.tr("Select a different species"),
+                self.tr(
+                    "An incorrect detection must be reassigned to a species other "
+                    "than the original detected species."
+                ),
+            )
+            return
         selected_queue_id = self.results_page.current_queue_id()
         next_detection_id = None
         if advance and selected_queue_id is None:
@@ -4401,7 +4441,6 @@ class MainWindow(QMainWindow):
             corrected_species = self._database.species.ensure_catalog_species(
                 definition
             )
-            detection = self._database.detections.get(detection_id)
             if detection.current.species_id != corrected_species.id:
                 self._database.detections.revise(
                     detection_id,

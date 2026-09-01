@@ -306,6 +306,8 @@ def test_correct_species_is_enabled_only_for_incorrect_verdict():
         page.incorrect_button.click()
         assert page.correction.isEnabled()
         assert page.correction_label.isEnabled()
+        assert page.correction.findText("Alder Flycatcher") == -1
+        assert page.correction.currentIndex() == -1
         page.correction.setCurrentText("Willow Flycatcher")
 
         page.correct_button.click()
@@ -315,6 +317,19 @@ def test_correct_species_is_enabled_only_for_incorrect_verdict():
 
         page.uncertain_button.click()
         assert not page.correction.isEnabled()
+
+        corrected = replace(
+            detection,
+            species_name="Willow Flycatcher",
+            review_verdict=ReviewVerdict.INCORRECT,
+        )
+        page.show_detection(
+            corrected,
+            Path("marsh.wav"),
+            original_species_name="Alder Flycatcher",
+        )
+        assert page.correction.findText("Alder Flycatcher") == -1
+        assert page.correction.currentText() == "Willow Flycatcher"
     finally:
         page.spectrogram.shutdown()
         page.close()
@@ -419,7 +434,10 @@ def test_save_and_next_emits_the_current_review():
     saved = []
     page.save_requested.connect(lambda *values: saved.append(values))
     page._detection_id = 42
-    page.correction.addItem("American Robin")
+    page._displayed_species_name = "American Robin"
+    page._original_species_name = "American Robin"
+    page._correction_species_names = ["American Robin"]
+    page.correction.addItems(page._correction_species_names)
     page.correction.setCurrentText("American Robin")
     page.show()
     app.processEvents()
@@ -444,7 +462,10 @@ def test_review_keyboard_shortcuts_and_contextual_focus():
     app = QApplication.instance() or QApplication([])
     page = main_window.ReviewPage([])
     page._detection_id = 42
-    page.correction.addItems(("American Robin", "Blue Jay"))
+    page._displayed_species_name = "American Robin"
+    page._original_species_name = "American Robin"
+    page._correction_species_names = ["American Robin", "Blue Jay"]
+    page.correction.addItems(page._correction_species_names)
     saved = []
     page.save_requested.connect(lambda *values: saved.append(values))
     page.show()
@@ -455,8 +476,9 @@ def test_review_keyboard_shortcuts_and_contextual_focus():
     assert page.incorrect_button.isChecked()
     assert page.correction.hasFocus()
 
-    page.correction.setCurrentIndex(1)
-    page.correction.activated.emit(1)
+    blue_jay_index = page.correction.findText("Blue Jay")
+    page.correction.setCurrentIndex(blue_jay_index)
+    page.correction.activated.emit(blue_jay_index)
     assert page.save_button.hasFocus()
 
     QTest.keyClick(
