@@ -1036,17 +1036,24 @@ class DetectionRepository:
         finally:
             connection.close()
 
-    def reviewed_detection_export(
+    def detection_export(
         self,
         *,
         run_id: Optional[int] = None,
-        outcome: str = "all",
+        outcome: str = "reviewed",
         species_id: Optional[int] = None,
         queue_id: Optional[int] = None,
     ) -> ReviewedDetectionExport:
-        """Return detailed reviewed detections using optional report filters."""
-        if outcome not in {"all", "accepted", "rejected"}:
-            raise ValueError(f"Unknown reviewed detection outcome: {outcome}")
+        """Return detailed detections and review data using optional filters."""
+        if outcome not in {
+            "all",
+            "reviewed",
+            "unreviewed",
+            "accepted",
+            "rejected",
+            "uncertain",
+        }:
+            raise ValueError(f"Unknown detection review state: {outcome}")
         columns = (
             "detection_id",
             "analysis_run_id",
@@ -1102,10 +1109,16 @@ class DetectionRepository:
             "(review.verdict = 'correct' OR "
             f"(review.verdict = 'incorrect' AND {corrected}))"
         )
-        if outcome == "accepted":
+        if outcome == "reviewed":
+            conditions.append("review.verdict IS NOT NULL")
+        elif outcome == "unreviewed":
+            conditions.append("review.verdict IS NULL")
+        elif outcome == "accepted":
             conditions.append(accepted)
         elif outcome == "rejected":
             conditions.append(f"review.verdict = 'incorrect' AND NOT ({corrected})")
+        elif outcome == "uncertain":
+            conditions.append("review.verdict = 'uncertain'")
         where_clause = " AND ".join(conditions)
         if where_clause:
             where_clause = "AND " + where_clause
@@ -1136,7 +1149,8 @@ class DetectionRepository:
                    detection.score,
                    CASE WHEN {accepted} THEN 'accepted'
                         WHEN review.verdict = 'incorrect' THEN 'rejected'
-                        ELSE 'uncertain' END AS review_outcome,
+                        WHEN review.verdict = 'uncertain' THEN 'uncertain'
+                        ELSE 'unreviewed' END AS review_outcome,
                    review.verdict AS review_verdict,
                    review.notes AS review_notes,
                    original_species.common_name AS original_species,
@@ -1170,7 +1184,7 @@ class DetectionRepository:
             JOIN species AS current_species
               ON current_species.id = current.species_id
             JOIN recording ON recording.id = detection.recording_id
-            JOIN review ON review.detection_id = detection.id
+            LEFT JOIN review ON review.detection_id = detection.id
             LEFT JOIN analysis_item ON analysis_item.id = detection.analysis_item_id
             LEFT JOIN analysis_run ON analysis_run.id = analysis_item.analysis_run_id
             LEFT JOIN (
@@ -1204,6 +1218,23 @@ class DetectionRepository:
             return ReviewedDetectionExport(columns, rows)
         finally:
             connection.close()
+
+    def reviewed_detection_export(
+        self,
+        *,
+        run_id: Optional[int] = None,
+        outcome: str = "all",
+        species_id: Optional[int] = None,
+        queue_id: Optional[int] = None,
+    ) -> ReviewedDetectionExport:
+        """Return reviewed detections for compatibility with existing callers."""
+        review_state = "reviewed" if outcome == "all" else outcome
+        return self.detection_export(
+            run_id=run_id,
+            outcome=review_state,
+            species_id=species_id,
+            queue_id=queue_id,
+        )
 
     def label_export(
         self,

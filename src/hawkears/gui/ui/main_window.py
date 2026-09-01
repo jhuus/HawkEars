@@ -2557,7 +2557,7 @@ class ReportsPage(QWidget):
         self.label_export_button.setEnabled(False)
         self.label_export_button.clicked.connect(self.label_export_requested)
         filters.addWidget(self.label_export_button)
-        self.review_export_button = QPushButton(self.tr("Export reviewed detections…"))
+        self.review_export_button = QPushButton(self.tr("Export detections…"))
         self.review_export_button.setEnabled(False)
         self.review_export_button.clicked.connect(self.review_export_requested)
         filters.addWidget(self.review_export_button)
@@ -2836,7 +2836,7 @@ class ReportsPage(QWidget):
         )
         self.corrections_value.setText(str(summary.correction_count))
         self.additional_value.setText(str(summary.additional_annotation_count))
-        self.review_export_button.setEnabled(summary.reviewed_count > 0)
+        self.review_export_button.setEnabled(summary.detection_count > 0)
         self.label_export_button.setEnabled(summary.detection_count > 0)
         self.table.setSortingEnabled(False)
         self.table.setRowCount(len(summary.species))
@@ -3448,7 +3448,8 @@ class MainWindow(QMainWindow):
                     "<b>Validated results</b> include accepted detections—those marked correct "
                     "or reassigned to a corrected species—and can summarize presence, score "
                     "accuracy, or first detections.</p>"
-                    "<p><b>Export reviewed detections</b> creates a detailed filtered CSV. "
+                    "<p><b>Export detections</b> creates a detailed filtered CSV containing "
+                    "all detections or selected review states. "
                     "<b>Export audio labels</b> creates Audacity label files or Raven selection "
                     "tables per recording. The CSV buttons export the table or validated "
                     "summary currently shown.</p>"
@@ -4262,8 +4263,8 @@ class MainWindow(QMainWindow):
         values = dialog.values()
         path, _ = QFileDialog.getSaveFileName(
             self,
-            self.tr("Export reviewed detections"),
-            str(self._database.path.parent / "hawkears-reviewed-detections.csv"),
+            self.tr("Export detections"),
+            str(self._database.path.parent / "hawkears-detections.csv"),
             self.tr("CSV files (*.csv)"),
         )
         if not path:
@@ -4271,7 +4272,7 @@ class MainWindow(QMainWindow):
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         QApplication.processEvents()
         try:
-            export = self._database.detections.reviewed_detection_export(
+            export = self._database.detections.detection_export(
                 run_id=run_id,
                 outcome=str(values["outcome"]),
                 species_id=(
@@ -4289,7 +4290,7 @@ class MainWindow(QMainWindow):
                 writer.writerows(export.rows)
         except (OSError, ValueError, sqlite3.DatabaseError) as error:
             QMessageBox.critical(
-                self, self.tr("Could not export reviewed detections"), str(error)
+                self, self.tr("Could not export detections"), str(error)
             )
         finally:
             QApplication.restoreOverrideCursor()

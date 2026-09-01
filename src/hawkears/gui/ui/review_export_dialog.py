@@ -1,4 +1,4 @@
-"""Filters for exporting detailed reviewed detections."""
+"""Filters for exporting detailed detections and review data."""
 
 from PySide6.QtWidgets import (
     QComboBox,
@@ -23,15 +23,15 @@ class ReviewExportDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(self.tr("Export reviewed detections"))
+        self.setWindowTitle(self.tr("Export detections"))
         self.setMinimumWidth(460)
 
         layout = QVBoxLayout(self)
         explanation = QLabel(
             self.tr(
-                "Export detailed review data, including original and corrected "
-                "species and boundaries. Accepted detections are marked correct "
-                "or reassigned to a corrected species."
+                "Export detailed detection and review data, including original and "
+                "current species and boundaries. Unreviewed detections have blank "
+                "verdict and review-notes fields."
             )
         )
         explanation.setWordWrap(True)
@@ -41,10 +41,13 @@ class ReviewExportDialog(QDialog):
         form.addRow(self.tr("Analysis run"), QLabel(run_label))
 
         self.outcome = QComboBox()
-        self.outcome.addItem(self.tr("All reviewed detections"), "all")
+        self.outcome.addItem(self.tr("Reviewed detections only"), "reviewed")
+        self.outcome.addItem(self.tr("All detections"), "all")
+        self.outcome.addItem(self.tr("Unreviewed detections"), "unreviewed")
         self.outcome.addItem(self.tr("Accepted detections"), "accepted")
         self.outcome.addItem(self.tr("Rejected detections"), "rejected")
-        form.addRow(self.tr("Review outcome"), self.outcome)
+        self.outcome.addItem(self.tr("Uncertain detections"), "uncertain")
+        form.addRow(self.tr("Review state"), self.outcome)
 
         self.species = QComboBox()
         self.species.addItem(self.tr("All species"), None)

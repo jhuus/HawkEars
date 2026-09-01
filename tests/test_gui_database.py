@@ -616,6 +616,31 @@ def test_label_export_applies_current_reviews_and_preserves_originals(tmp_path: 
     database.detections.add_additional_species(rejected.id, additional.id)
     database.detections.set_review(uncertain.id, ReviewVerdict.UNCERTAIN)
 
+    all_detections = database.detections.detection_export(
+        run_id=run_id, outcome="all"
+    )
+    all_columns = {name: index for index, name in enumerate(all_detections.columns)}
+    assert {row[0] for row in all_detections.rows} == {
+        accepted.id,
+        correction.id,
+        rejected.id,
+        uncertain.id,
+        unreviewed.id,
+    }
+    unreviewed_row = next(
+        row for row in all_detections.rows if row[0] == unreviewed.id
+    )
+    assert unreviewed_row[all_columns["review_outcome"]] == "unreviewed"
+    assert unreviewed_row[all_columns["review_verdict"]] is None
+    reviewed_only = database.detections.detection_export(
+        run_id=run_id, outcome="reviewed"
+    )
+    assert unreviewed.id not in {row[0] for row in reviewed_only.rows}
+    uncertain_only = database.detections.detection_export(
+        run_id=run_id, outcome="uncertain"
+    )
+    assert [row[0] for row in uncertain_only.rows] == [uncertain.id]
+
     current = database.detections.label_export(run_id=run_id)
     assert {(row.detection_id, row.species_name) for row in current} == {
         (accepted.id, "Common Nighthawk"),

@@ -156,7 +156,7 @@ Edits create a new detection revision. The original species and bounds remain av
 
 The Reports page summarizes analysis coverage, review queues and review progress by species. Validated reports include detections by species, presence by recording, presence by date and location, correctness by score range and first detections by species and date. Tables can be exported as CSV files.
 
-**Export reviewed detections** creates a detailed CSV filtered by outcome, species or review queue.
+**Export detections** creates a detailed CSV containing all detections or selected review states, optionally filtered by species or review queue.
 
 **Export audio labels** creates one Audacity label file or Raven selection table per recording. You can export current reviewed results or the original analysis results, choose species codes, common names or scientific names for labels, and control which review states are included. Existing label files are overwritten by default. Clear **Overwrite existing labels** to stop instead when a planned output file already exists.
 
