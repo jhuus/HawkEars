@@ -543,15 +543,12 @@ class AnalysisPage(QWidget):
             )
         )
         self.output.setToolTip(
-            self.tr(
-                "Choose whether detections follow the detected duration or use "
-                "equal-length time segments."
-            )
+            self.tr("Choose either variable- or fixed-length detection labels.")
         )
         self.max_label_length.setToolTip(
             self.tr(
-                "Split longer variable-length detections into consecutive labels "
-                "without discarding detected time."
+                "Set a maximum variable-label length. Longer detections are split "
+                "into multiple labels."
             )
         )
         form.addRow(self.tr("Inference device"), self.inference_device)
@@ -3208,9 +3205,10 @@ class MainWindow(QMainWindow):
                     "<p>Increasing <b>Worker threads</b> may reduce elapsed time, but uses "
                     "more memory. There is usually little benefit to using more than three "
                     "worker threads.</p>"
-                    "<p><b>Variable-length labels</b> follow detected duration. A maximum "
-                    "length splits oversized labels consecutively without losing detected "
-                    "time. <b>Fixed-length segments</b> use equal time intervals.</p>"
+                    "<p>Use <b>Label format</b> to choose either variable- or fixed-length "
+                    "detection labels. If you choose variable-length labels, you can specify "
+                    "a maximum length, in which case longer detections will be split into "
+                    "multiple labels.</p>"
                     "<h3>Location and date</h3>"
                     "<p>Location information can apply geographic occurrence filtering and "
                     "location-specific heuristics. It may be supplied for the whole project "
@@ -3222,7 +3220,8 @@ class MainWindow(QMainWindow):
                     "settings, skips completed recordings, and uses the currently selected "
                     "worker-thread count.</p>"
                     "<p><b>Import analysis results</b> loads compatible Audacity or CSV "
-                    "output produced by the HawkEars command-line interface.</p>"
+                    "output produced by the HawkEars command-line interface or exported "
+                    "in the Results tab.</p>"
                 ),
             ),
             "results": (
