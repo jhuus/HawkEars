@@ -3031,15 +3031,32 @@ class MainWindow(QMainWindow):
             "shows memory the operating system can provide without swapping. "
             "Virtual and GPU memory are not included."
         )
+        memory_card = QFrame()
+        memory_card.setObjectName("memoryCard")
+        memory_card.setToolTip(memory_tooltip)
+        memory_layout = QGridLayout(memory_card)
+        memory_layout.setContentsMargins(11, 9, 11, 9)
+        memory_layout.setHorizontalSpacing(8)
+        memory_layout.setVerticalSpacing(4)
+        memory_title = QLabel(self.tr("Memory"))
+        memory_title.setObjectName("memoryTitle")
+        memory_layout.addWidget(memory_title, 0, 0, 1, 2)
+        app_memory_name = QLabel(self.tr("HawkEars"))
+        app_memory_name.setObjectName("memoryLabel")
+        memory_layout.addWidget(app_memory_name, 1, 0)
         self.app_memory_label = QLabel()
-        self.app_memory_label.setObjectName("memoryStatus")
-        self.app_memory_label.setToolTip(memory_tooltip)
+        self.app_memory_label.setObjectName("memoryValue")
+        self.app_memory_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        memory_layout.addWidget(self.app_memory_label, 1, 1)
+        available_memory_name = QLabel(self.tr("Available"))
+        available_memory_name.setObjectName("memoryLabel")
+        memory_layout.addWidget(available_memory_name, 2, 0)
         self.available_memory_label = QLabel()
-        self.available_memory_label.setObjectName("memoryStatus")
-        self.available_memory_label.setToolTip(memory_tooltip)
-        layout.addWidget(self.app_memory_label)
-        layout.addWidget(self.available_memory_label)
-        layout.addSpacing(6)
+        self.available_memory_label.setObjectName("memoryValue")
+        self.available_memory_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        memory_layout.addWidget(self.available_memory_label, 2, 1)
+        layout.addWidget(memory_card)
+        layout.addSpacing(10)
         self.version_label = QLabel(self.tr("Version %1").replace("%1", __version__))
         self.version_label.setObjectName("brandSubtle")
         self.version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -3050,19 +3067,17 @@ class MainWindow(QMainWindow):
         """Refresh the compact, cross-platform sidebar memory summary."""
         memory = self._memory_snapshot()
         if memory is None:
-            self.app_memory_label.setText(self.tr("HawkEars: —"))
-            self.available_memory_label.setText(self.tr("Available: —"))
+            self.app_memory_label.setText("—")
+            self.available_memory_label.setText("—")
             return
 
         resident_bytes, available_bytes = memory
         gibibyte = 1024**3
         self.app_memory_label.setText(
-            self.tr("HawkEars: %1 GB").replace("%1", f"{resident_bytes / gibibyte:.1f}")
+            self.tr("%1 GB").replace("%1", f"{resident_bytes / gibibyte:.1f}")
         )
         self.available_memory_label.setText(
-            self.tr("Available: %1 GB").replace(
-                "%1", f"{available_bytes / gibibyte:.1f}"
-            )
+            self.tr("%1 GB").replace("%1", f"{available_bytes / gibibyte:.1f}")
         )
         critical = available_bytes < gibibyte
         if self.available_memory_label.property("critical") != critical:
