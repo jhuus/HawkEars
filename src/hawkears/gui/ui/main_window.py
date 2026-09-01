@@ -531,14 +531,15 @@ class AnalysisPage(QWidget):
         )
         self.models.setToolTip(
             self.tr(
-                "Combine predictions from this many models. More models generally "
-                "improve accuracy but increase analysis time and memory use."
+                "Set the size of the model ensemble. Using more models improves "
+                "accuracy, but takes longer and uses more memory."
             )
         )
         self.threads.setToolTip(
             self.tr(
-                "Process this many recordings concurrently. More workers may improve "
-                "throughput but each worker needs its own model ensemble and memory."
+                "Process this many recordings concurrently. Increasing worker threads "
+                "may reduce elapsed time, but uses more memory. There is usually little "
+                "benefit to using more than three worker threads."
             )
         )
         self.output.setToolTip(
@@ -2857,13 +2858,12 @@ class PageHelpDialog(QDialog):
 
     def __init__(self, title: str, html: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(self.tr("%1 help").replace("%1", title))
+        self.setModal(False)
         self.resize(720, 620)
         layout = QVBoxLayout(self)
-        browser = QTextBrowser()
-        browser.setOpenExternalLinks(True)
-        browser.setHtml(html)
-        layout.addWidget(browser, 1)
+        self.browser = QTextBrowser()
+        self.browser.setOpenExternalLinks(True)
+        layout.addWidget(self.browser, 1)
         actions = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         documentation = actions.addButton(
             self.tr("Full documentation online"),
@@ -2872,6 +2872,12 @@ class PageHelpDialog(QDialog):
         documentation.clicked.connect(self.documentation_requested)
         actions.rejected.connect(self.reject)
         layout.addWidget(actions)
+        self.set_content(title, html)
+
+    def set_content(self, title: str, html: str) -> None:
+        """Replace the topic shown in the reusable help window."""
+        self.setWindowTitle(self.tr("%1 help").replace("%1", title))
+        self.browser.setHtml(html)
 
 
 class MainWindow(QMainWindow):
@@ -2898,6 +2904,7 @@ class MainWindow(QMainWindow):
                 else []
             )
         self._class_catalog = class_catalog
+        self._page_help_dialog: PageHelpDialog | None = None
 
         root = QWidget()
         root.setObjectName("appRoot")
@@ -3150,11 +3157,16 @@ class MainWindow(QMainWindow):
 
     def _show_page_help(self, topic: str) -> None:
         title, html = self._page_help_content(topic)
-        dialog = PageHelpDialog(title, html, self)
-        dialog.documentation_requested.connect(
-            lambda: self._open_help_url(f"{PROJECT_URL}/blob/main/GUI.md")
-        )
-        dialog.exec()
+        if self._page_help_dialog is None:
+            self._page_help_dialog = PageHelpDialog(title, html, self)
+            self._page_help_dialog.documentation_requested.connect(
+                lambda: self._open_help_url(f"{PROJECT_URL}/blob/main/GUI.md")
+            )
+        else:
+            self._page_help_dialog.set_content(title, html)
+        self._page_help_dialog.show()
+        self._page_help_dialog.raise_()
+        self._page_help_dialog.activateWindow()
 
     def _page_help_content(self, topic: str) -> tuple[str, str]:
         content = {
@@ -3190,10 +3202,12 @@ class MainWindow(QMainWindow):
                 self.tr("Analyze"),
                 self.tr(
                     "<h2>Run inference</h2>"
-                    "<p><b>Minimum score</b> excludes lower-confidence detections. "
-                    "<b>Ensemble models</b> can improve accuracy at the cost of time and "
-                    "memory. <b>Worker threads</b> process recordings concurrently, with "
-                    "each worker loading its own model ensemble.</p>"
+                    "<p><b>Minimum score</b> excludes lower-confidence detections.</p>"
+                    "<p><b>Ensemble models</b> sets the size of the ensemble. Using more "
+                    "models improves accuracy, but takes longer and uses more memory.</p>"
+                    "<p>Increasing <b>Worker threads</b> may reduce elapsed time, but uses "
+                    "more memory. There is usually little benefit to using more than three "
+                    "worker threads.</p>"
                     "<p><b>Variable-length labels</b> follow detected duration. A maximum "
                     "length splits oversized labels consecutively without losing detected "
                     "time. <b>Fixed-length segments</b> use equal time intervals.</p>"

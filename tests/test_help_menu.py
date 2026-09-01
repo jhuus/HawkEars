@@ -74,6 +74,27 @@ def test_results_guidance_and_tooltips_explain_review_workflow(tmp_path):
         app.processEvents()
 
 
+def test_page_help_is_one_reusable_modeless_window(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(class_catalog=[], application_paths=ApplicationPaths(tmp_path))
+    try:
+        window._show_page_help("results")
+        dialog = window._page_help_dialog
+        assert dialog is not None
+        assert not dialog.isModal()
+        assert dialog.isVisible()
+        assert dialog.windowTitle() == "Results help"
+
+        window._show_page_help("analyze")
+        assert window._page_help_dialog is dialog
+        assert dialog.windowTitle() == "Analyze help"
+        assert "Run inference" in dialog.browser.toPlainText()
+    finally:
+        window.review_page.spectrogram.shutdown()
+        window.close()
+        app.processEvents()
+
+
 def test_main_window_shows_resident_and_available_memory(tmp_path, monkeypatch):
     gibibyte = 1024**3
 
