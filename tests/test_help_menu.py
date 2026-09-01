@@ -65,7 +65,8 @@ def test_results_guidance_and_tooltips_explain_review_workflow(tmp_path):
         assert "selected analysis run" in window.results_page.guidance.text()
         assert "reproducible subset" in window.results_page.create_queue_button.toolTip()
         assert "presented next" in window.results_page.review_order.toolTip()
-        assert "first visible result" in window.results_page.open_button.toolTip()
+        assert "first displayed result" in window.results_page.open_button.toolTip()
+        assert window.results_page.open_button.text() == "Review displayed results"
         assert "memory" in window.analysis_page.models.toolTip()
         assert "concurrently" in window.analysis_page.threads.toolTip()
     finally:

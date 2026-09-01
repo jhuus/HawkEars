@@ -1113,11 +1113,11 @@ class ResultsPage(QWidget):
         footer = QHBoxLayout()
         self.count = QLabel(self.tr("%n detections", None, 0))
         self.count.setObjectName("muted")
-        self.open_button = QPushButton(self.tr("Review selected"))
+        self.open_button = QPushButton(self.tr("Review displayed results"))
         self.open_button.setToolTip(
             self.tr(
-                "Open the selected detection for review. If no visible row is selected, "
-                "the Review tab starts with the first visible result."
+                "Start reviewing all results matching the current filters. Review begins "
+                "with the selected row, or the first displayed result if no row is selected."
             )
         )
         self.open_button.setProperty("primary", True)
@@ -3245,9 +3245,10 @@ class MainWindow(QMainWindow):
                     "as skipped after the queued species is confirmed. Turning it off or "
                     "changing the confirming review restores applicable detections.</p>"
                     "<h3>Opening a detection</h3>"
-                    "<p>Double-click a row or select it and choose <b>Review selected</b>. "
-                    "Opening Review with no selected visible row starts at the first visible "
-                    "result.</p>"
+                    "<p>Choose <b>Review displayed results</b> to review the results matching "
+                    "the current filters. Review begins with the selected row, or the first "
+                    "displayed result if no row is selected. You can also double-click a row "
+                    "to begin there.</p>"
                     "<p><b>Time of day</b> is derived from the recording timestamp. "
                     "<b>Detection offset</b> is the detection's position relative to the "
                     "start of its recording. A dash means the required recording time is "

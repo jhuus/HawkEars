@@ -68,7 +68,7 @@ The location dialog is shown when you click **Configure location**:
 
 The Results page displays detections from an analysis run or review queue. **Time of day** is calculated from the recording timestamp, and is shown as `—` when no usable start time is available. **Detection offset** is the detection's position relative to the start of its recording. Results can be filtered by text, species and review status. Click a column heading to sort the table.
 
-To review a single detection, double-click the row or select it and click **Review selected**. If no visible row is selected, the Review tab opens the first visible result.
+Click **Review displayed results** to review the results matching the current filters. Review begins with the selected row, or the first displayed result if no row is selected. You can also double-click a row to begin there.
 
 For a small analysis you may review all detections directly. For a large analysis, create a review queue to select a smaller, reproducible subset.
 
@@ -163,4 +163,3 @@ The Reports page summarizes analysis coverage, review queues and review progress
 <p align="left">
   <img src="images/GUI-ReportsPage.png" width="1450">
 </p>
-
