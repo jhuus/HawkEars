@@ -409,6 +409,35 @@ def test_results_choose_selected_visible_detection_or_first_visible():
     app.processEvents()
 
 
+def test_results_delete_button_tracks_and_emits_selected_queue():
+    app = QApplication.instance() or QApplication([])
+    page = ResultsPage()
+    queue = SimpleNamespace(
+        id=17,
+        name="Nighthawk sample",
+        species_name="Common Nighthawk",
+        reviewed_count=3,
+        detection_count=10,
+        skipped_count=1,
+        review_order="queue",
+        confirmation_scope="none",
+        confirmation_enabled=False,
+    )
+    requested = []
+    page.delete_queue_requested.connect(requested.append)
+
+    page.configure_queues([queue])
+    assert not page.delete_queue_button.isEnabled()
+    page.select_queue(17)
+    assert page.delete_queue_button.isEnabled()
+    assert page.current_queue_name() == "Nighthawk sample"
+    page.delete_queue_button.click()
+    assert requested == [17]
+
+    page.close()
+    app.processEvents()
+
+
 def test_review_previous_detection_button_is_explicit_and_opt_in():
     app = QApplication.instance() or QApplication([])
     page = main_window.ReviewPage([])

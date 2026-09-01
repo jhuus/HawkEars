@@ -710,6 +710,16 @@ def test_review_queue_applies_score_spacing_and_recording_limit(tmp_path: Path):
     assert queue.reviewed_count == 1
     assert queue.review_order == "queue"
 
+    database.review_queues.delete(queue_id)
+    assert database.review_queues.list_queues() == []
+    assert (
+        database.detections.get_result(detection_ids[0]).review_verdict
+        is ReviewVerdict.CORRECT
+    )
+    assert database.detections.get(detection_ids[0]).id == detection_ids[0]
+    with pytest.raises(LookupError):
+        database.review_queues.delete(queue_id)
+
 
 def test_stratified_review_queue_balances_score_bands_and_recordings(tmp_path: Path):
     database = create_project(tmp_path)

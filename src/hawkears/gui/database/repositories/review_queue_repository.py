@@ -1138,6 +1138,15 @@ class ReviewQueueRepository:
         finally:
             connection.close()
 
+    def delete(self, queue_id: int) -> None:
+        """Delete a saved queue and its membership without deleting reviews."""
+        with transaction(self.database_path) as connection:
+            cursor = connection.execute(
+                "DELETE FROM review_queue WHERE id = ?", (queue_id,)
+            )
+            if cursor.rowcount == 0:
+                raise LookupError(f"Review queue {queue_id} does not exist.")
+
     def recalculate(self, queue_id: int) -> None:
         """Rebuild reversible reviewed, pending, and auto-skipped item state."""
         with transaction(self.database_path) as connection:

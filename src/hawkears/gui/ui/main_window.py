@@ -988,6 +988,7 @@ class ResultsPage(QWidget):
     run_changed = Signal(object)
     queue_changed = Signal(object)
     create_queue_requested = Signal()
+    delete_queue_requested = Signal(int)
     review_order_changed = Signal(int, str)
     confirmation_changed = Signal(int, bool)
     help_requested = Signal(str)
@@ -1038,9 +1039,20 @@ class ResultsPage(QWidget):
         )
         self.create_queue_button.clicked.connect(self.create_queue_requested)
         sources.addWidget(self.create_queue_button)
+        self.delete_queue_button = QPushButton(self.tr("Delete queue…"))
+        self.delete_queue_button.setToolTip(
+            self.tr(
+                "Delete the selected review queue. Detections and completed reviews "
+                "are preserved."
+            )
+        )
+        self.delete_queue_button.setEnabled(False)
+        self.delete_queue_button.clicked.connect(self._delete_queue)
+        sources.addWidget(self.delete_queue_button)
         outer.addLayout(sources)
         self._queue_orders: dict[int, str] = {}
         self._queue_confirmation: dict[int, tuple[str, bool]] = {}
+        self._queue_names: dict[int, str] = {}
 
         filters = QHBoxLayout()
         self.search = QLineEdit()
@@ -1164,6 +1176,7 @@ class ResultsPage(QWidget):
             queue.id: (queue.confirmation_scope, queue.confirmation_enabled)
             for queue in queues
         }
+        self._queue_names = {queue.id: queue.name for queue in queues}
         self.queue.addItem(self.tr("No review queue"), None)
         for queue in queues:
             self.queue.addItem(
@@ -1226,6 +1239,16 @@ class ResultsPage(QWidget):
             )
             self.confirmation_toggle.blockSignals(False)
         self.review_order.blockSignals(False)
+        self.delete_queue_button.setEnabled(queue_id is not None)
+
+    def _delete_queue(self) -> None:
+        queue_id = self.current_queue_id()
+        if queue_id is not None:
+            self.delete_queue_requested.emit(queue_id)
+
+    def current_queue_name(self) -> str:
+        queue_id = self.current_queue_id()
+        return self._queue_names.get(queue_id, "") if queue_id is not None else ""
 
     def _confirmation_toggled(self, enabled: bool) -> None:
         queue_id = self.current_queue_id()
@@ -3074,6 +3097,7 @@ class MainWindow(QMainWindow):
             self._results_confirmation_changed
         )
         self.results_page.create_queue_requested.connect(self._create_review_queue)
+        self.results_page.delete_queue_requested.connect(self._delete_review_queue)
         self.reports_page.run_changed.connect(self._load_report_summary)
         self.reports_page.validated_report_changed.connect(self._load_validated_report)
         self.reports_page.review_export_requested.connect(
@@ -3366,6 +3390,8 @@ class MainWindow(QMainWindow):
                     "analysis run. It is useful when reviewing every detection would be "
                     "impractical. Sampling order preserves the order produced by the queue's "
                     "strategy; the other review orders prioritize score or recording time.</p>"
+                    "<p><b>Delete queue</b> removes the saved queue and its membership. "
+                    "It does not delete detections or completed reviews.</p>"
                     "<p>For supported presence queues, <b>Skip remaining after confirmation</b> "
                     "marks remaining detections for the same location, or location and date, "
                     "as skipped after the queued species is confirmed. Turning it off or "
@@ -4134,6 +4160,42 @@ class MainWindow(QMainWindow):
             )
             return
         self._load_results(selected_run_id=run_id, selected_queue_id=queue_id)
+
+    def _delete_review_queue(self, queue_id: int) -> None:
+        """Confirm and delete a queue while preserving detections and reviews."""
+        if self._database is None:
+            return
+        queue_name = self.results_page.current_queue_name()
+        confirmation = QMessageBox(self)
+        confirmation.setIcon(QMessageBox.Icon.Warning)
+        confirmation.setWindowTitle(self.tr("Delete review queue?"))
+        confirmation.setText(
+            self.tr(
+                "Delete the review queue “%1”?\n\nIts saved membership will be "
+                "removed. Detections and completed reviews will be preserved."
+            ).replace("%1", queue_name)
+        )
+        delete_button = confirmation.addButton(
+            self.tr("Delete queue"), QMessageBox.ButtonRole.DestructiveRole
+        )
+        cancel_button = confirmation.addButton(QMessageBox.StandardButton.Cancel)
+        confirmation.setDefaultButton(cancel_button)
+        confirmation.exec()
+        if confirmation.clickedButton() is not delete_button:
+            return
+        try:
+            self._database.review_queues.delete(queue_id)
+        except (LookupError, sqlite3.DatabaseError) as error:
+            QMessageBox.critical(
+                self, self.tr("Could not delete review queue"), str(error)
+            )
+            return
+        self._review_history.clear()
+        self.review_page.set_previous_enabled(False)
+        self._load_results(
+            selected_run_id=self.results_page.current_run_id(),
+            selected_queue_id=None,
+        )
 
     def _load_reports(self) -> None:
         if self._database is None:
