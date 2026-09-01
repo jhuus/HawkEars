@@ -7,8 +7,9 @@ from pathlib import Path
 import sys
 import uuid
 
-
 APP_USER_MODEL_ID = "HawkEars.HawkEars"
+_WINFUNCTYPE = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)
+_HRESULT = ctypes.c_int32
 
 
 class _GUID(ctypes.Structure):
@@ -48,15 +49,9 @@ class _PROPVARIANT(ctypes.Structure):
 
 _IID_PROPERTY_STORE = _GUID.from_string("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")
 _APP_USER_MODEL_FORMAT = "9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"
-_APP_USER_MODEL_ID_KEY = _PROPERTYKEY(
-    _GUID.from_string(_APP_USER_MODEL_FORMAT), 5
-)
-_RELAUNCH_COMMAND_KEY = _PROPERTYKEY(
-    _GUID.from_string(_APP_USER_MODEL_FORMAT), 2
-)
-_RELAUNCH_ICON_KEY = _PROPERTYKEY(
-    _GUID.from_string(_APP_USER_MODEL_FORMAT), 3
-)
+_APP_USER_MODEL_ID_KEY = _PROPERTYKEY(_GUID.from_string(_APP_USER_MODEL_FORMAT), 5)
+_RELAUNCH_COMMAND_KEY = _PROPERTYKEY(_GUID.from_string(_APP_USER_MODEL_FORMAT), 2)
+_RELAUNCH_ICON_KEY = _PROPERTYKEY(_GUID.from_string(_APP_USER_MODEL_FORMAT), 3)
 _VT_LPWSTR = 31
 
 
@@ -81,7 +76,7 @@ def configure_windows_taskbar(window_id: int, launch_command: str) -> None:
         ctypes.POINTER(_GUID),
         ctypes.POINTER(ctypes.c_void_p),
     ]
-    get_store.restype = ctypes.HRESULT
+    get_store.restype = _HRESULT
     result = get_store(
         wintypes.HWND(window_id),
         ctypes.byref(_IID_PROPERTY_STORE),
@@ -113,9 +108,7 @@ def _property_store_method(store: ctypes.c_void_p, index: int, *argument_types):
     vtable = ctypes.cast(
         store, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))
     ).contents
-    return ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p, *argument_types)(
-        vtable[index]
-    )
+    return _WINFUNCTYPE(_HRESULT, ctypes.c_void_p, *argument_types)(vtable[index])
 
 
 def _set_property(store: ctypes.c_void_p, key: _PROPERTYKEY, value: str) -> None:

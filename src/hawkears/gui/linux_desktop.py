@@ -10,7 +10,6 @@ import sys
 
 from hawkears.gui.ui.resources import brand_icon_path
 
-
 DESKTOP_FILE_NAME = "hawkears.desktop"
 
 
