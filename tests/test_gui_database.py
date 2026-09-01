@@ -29,6 +29,15 @@ def test_create_and_open_project(tmp_path: Path):
     reopened = ProjectDatabase.open(database.path)
     assert reopened.project.get().name == "Wetland Survey"
 
+    connection = connect(database.path, readonly=True)
+    try:
+        analysis_run_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(analysis_run)")
+        }
+    finally:
+        connection.close()
+    assert {"process_id", "process_started_at"} <= analysis_run_columns
+
 
 def test_rejects_non_project_database(tmp_path: Path):
     path = tmp_path / "unrelated.sqlite"
