@@ -16,6 +16,7 @@ from PySide6.QtCore import (
     QBuffer,
     QByteArray,
     QElapsedTimer,
+    QEvent,
     QIODevice,
     QObject,
     QSettings,
@@ -35,6 +36,8 @@ from PySide6.QtGui import (
     QPainter,
     QPen,
     QPixmap,
+    QKeySequence,
+    QShortcut,
 )
 from PySide6.QtMultimedia import (
     QAudioFormat,
@@ -1916,6 +1919,9 @@ class ReviewPage(QWidget):
         self.correct_button = QPushButton(self.tr("✓  Correct"))
         self.incorrect_button = QPushButton(self.tr("×  Incorrect"))
         self.uncertain_button = QPushButton(self.tr("?  Uncertain"))
+        self.correct_button.setToolTip(self.tr("Mark correct (Alt+C)"))
+        self.incorrect_button.setToolTip(self.tr("Mark incorrect (Alt+I)"))
+        self.uncertain_button.setToolTip(self.tr("Mark uncertain (Alt+U)"))
         self.verdict_group = QButtonGroup(self)
         for button, verdict in (
             (self.correct_button, ReviewVerdict.CORRECT),
@@ -1940,6 +1946,7 @@ class ReviewPage(QWidget):
             sorted(definition.common_name for definition in class_catalog)
         )
         self.correction.setEnabled(False)
+        self.correction.activated.connect(self._correction_selected)
         completer = self.correction.completer()
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         completer.setFilterMode(Qt.MatchFlag.MatchContains)
@@ -1957,15 +1964,19 @@ class ReviewPage(QWidget):
         self.previous_button.setToolTip(
             self.tr(
                 "Return to the previously opened detection. Unsaved changes to the "
-                "current detection are not saved."
+                "current detection are not saved. (Alt+Left)"
             )
         )
         self.previous_button.setEnabled(False)
         self.previous_button.clicked.connect(self.previous_requested)
         self.save_stop_button = QPushButton(self.tr("Save and stop"))
+        self.save_stop_button.setToolTip(self.tr("Save and stop (Ctrl+Shift+Enter)"))
         self.save_stop_button.setEnabled(False)
         self.save_stop_button.clicked.connect(lambda: self._save(False))
         self.save_button = QPushButton(self.tr("Save and next"))
+        self.save_button.setToolTip(
+            self.tr("Save and open the next detection (Ctrl+Enter)")
+        )
         self.save_button.setProperty("primary", True)
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(lambda: self._save(True))
@@ -2002,6 +2013,70 @@ class ReviewPage(QWidget):
         self._detection_end_ms = 0
         self._detection_id: int | None = None
         self._displayed_species_name: str | None = None
+        self._configure_review_keyboard_navigation()
+
+    def _configure_review_keyboard_navigation(self) -> None:
+        """Configure shortcuts and an efficient review-first tab order."""
+        shortcuts = (
+            ("Alt+C", self.correct_button.click),
+            ("Alt+I", self.incorrect_button.click),
+            ("Alt+U", self.uncertain_button.click),
+            ("Ctrl+Return", lambda: self._save(True)),
+            ("Ctrl+Shift+Return", lambda: self._save(False)),
+            ("Alt+Left", self.previous_button.click),
+        )
+        self._review_shortcuts: list[QShortcut] = []
+        for key, callback in shortcuts:
+            shortcut = QShortcut(QKeySequence(key), self)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(callback)
+            self._review_shortcuts.append(shortcut)
+
+        tab_order = (
+            self.correct_button,
+            self.incorrect_button,
+            self.uncertain_button,
+            self.correction,
+            self.notes,
+            self.previous_button,
+            self.save_stop_button,
+            self.save_button,
+            self.play_context_button,
+            self.play_detection_button,
+            self.playback_gain,
+            self.high_pass,
+            self.low_pass,
+            self.clear_bounds_button,
+            self.apply_bounds_button,
+        )
+        for current, following in zip(tab_order, tab_order[1:]):
+            QWidget.setTabOrder(current, following)
+
+        # A plain Space shortcut would consume spaces typed into Notes or the
+        # editable species selector. Event filters let those widgets and focused
+        # buttons keep their normal Space behavior.
+        for widget in (self, *self.findChildren(QWidget)):
+            widget.installEventFilter(self)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if (
+            event.type() == QEvent.Type.KeyPress
+            and event.key() == Qt.Key.Key_Space  # type: ignore[attr-defined]
+            and event.modifiers() == Qt.KeyboardModifier.NoModifier  # type: ignore[attr-defined]
+            and self.isVisible()
+            and self.play_detection_button.isEnabled()
+        ):
+            focus = QApplication.focusWidget()
+            editing_text = focus is not None and (
+                focus is self.notes
+                or self.notes.isAncestorOf(focus)
+                or focus is self.correction
+                or self.correction.isAncestorOf(focus)
+            )
+            if not editing_text and not isinstance(focus, QPushButton):
+                self._play_detection()
+                return True
+        return super().eventFilter(watched, event)
 
     def set_previous_enabled(self, enabled: bool) -> None:
         """Enable navigation to the previously opened detection."""
@@ -2064,6 +2139,7 @@ class ReviewPage(QWidget):
             detection.end_ms / 1000,
             frequency_bounds,
         )
+        self.correct_button.setFocus()
 
     @Slot(object)
     def _selection_changed(
@@ -2359,6 +2435,18 @@ class ReviewPage(QWidget):
         self._update_correction_control()
         self.save_button.setEnabled(True)
         self.save_stop_button.setEnabled(True)
+        checked = self.verdict_group.checkedButton()
+        if (
+            checked is not None
+            and checked.property("verdictValue") == ReviewVerdict.INCORRECT.value
+        ):
+            self.correction.setFocus()
+        else:
+            self.save_button.setFocus()
+
+    def _correction_selected(self) -> None:
+        """Move directly to the primary save action after a species choice."""
+        self.save_button.setFocus()
 
     def _update_correction_control(self) -> None:
         checked = self.verdict_group.checkedButton()
@@ -3290,6 +3378,16 @@ class MainWindow(QMainWindow):
                     "detection you previously opened without saving current unsaved edits. "
                     "Reviews and corrections append revision "
                     "history; original inference values remain available for reporting.</p>"
+                    "<h3>Keyboard workflow</h3>"
+                    "<p>Use <b>Alt+C</b>, <b>Alt+I</b>, or <b>Alt+U</b> to mark a detection "
+                    "correct, incorrect, or uncertain. Correct and uncertain move focus to "
+                    "Save and next; incorrect moves focus to Correct species. Selecting a "
+                    "corrected species then moves focus to Save and next.</p>"
+                    "<p>Use <b>Ctrl+Enter</b> to save and advance, <b>Ctrl+Shift+Enter</b> to "
+                    "save and stop, and <b>Alt+Left</b> for the previous detection. "
+                    "<b>Space</b> plays or stops the detection unless you are typing in Notes, "
+                    "choosing a species, or using a focused button. Tab moves through verdicts, "
+                    "review details, save actions, and then playback controls.</p>"
                 ),
             ),
             "reports": (

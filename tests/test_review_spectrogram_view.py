@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 from PySide6.QtCore import QRect
 from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QTableWidgetItem
 
 from hawkears.gui.database.records import (
@@ -420,9 +421,12 @@ def test_save_and_next_emits_the_current_review():
     page._detection_id = 42
     page.correction.addItem("American Robin")
     page.correction.setCurrentText("American Robin")
+    page.show()
+    app.processEvents()
 
     page.correct_button.click()
     assert page.save_button.isEnabled()
+    assert page.save_button.hasFocus()
     page.save_button.click()
 
     assert len(saved) == 1
@@ -430,6 +434,44 @@ def test_save_and_next_emits_the_current_review():
     assert saved[0][1] == ReviewVerdict.CORRECT
     assert saved[0][2] == "American Robin"
     assert saved[0][4] is True
+
+    page.spectrogram.shutdown()
+    page.close()
+    app.processEvents()
+
+
+def test_review_keyboard_shortcuts_and_contextual_focus():
+    app = QApplication.instance() or QApplication([])
+    page = main_window.ReviewPage([])
+    page._detection_id = 42
+    page.correction.addItems(("American Robin", "Blue Jay"))
+    saved = []
+    page.save_requested.connect(lambda *values: saved.append(values))
+    page.show()
+    page.correct_button.setFocus()
+    app.processEvents()
+
+    QTest.keyClick(page.correct_button, Qt.Key.Key_I, Qt.KeyboardModifier.AltModifier)
+    assert page.incorrect_button.isChecked()
+    assert page.correction.hasFocus()
+
+    page.correction.setCurrentIndex(1)
+    page.correction.activated.emit(1)
+    assert page.save_button.hasFocus()
+
+    QTest.keyClick(
+        page.save_button,
+        Qt.Key.Key_Return,
+        Qt.KeyboardModifier.ControlModifier,
+    )
+    assert len(saved) == 1
+    assert saved[0][1] == ReviewVerdict.INCORRECT
+    assert saved[0][2] == "Blue Jay"
+    assert saved[0][4] is True
+
+    page.notes.setFocus()
+    QTest.keyClick(page.notes, Qt.Key.Key_Space)
+    assert page.notes.toPlainText() == " "
 
     page.spectrogram.shutdown()
     page.close()
