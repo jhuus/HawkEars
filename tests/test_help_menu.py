@@ -57,6 +57,9 @@ def test_main_window_shows_resident_and_available_memory(tmp_path, monkeypatch):
         assert window.app_memory_label.text() == "HawkEars: 1.2 GB"
         assert window.available_memory_label.text() == "Available: 0.8 GB"
         assert window.available_memory_label.property("critical") is True
+        diagnostics = window._diagnostic_information()
+        assert "HawkEars resident memory: 1.2 GB" in diagnostics
+        assert "System memory available: 0.8 GB" in diagnostics
         assert "Virtual and GPU memory are not included" in (
             window.available_memory_label.toolTip()
         )

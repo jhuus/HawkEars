@@ -170,6 +170,14 @@ class AnalysisRunSummary:
 
 
 @dataclass(frozen=True)
+class ResumableAnalysisRun:
+    id: int
+    status: str
+    completed_recordings: int
+    total_recordings: int
+
+
+@dataclass(frozen=True)
 class ReviewQueueSummary:
     id: int
     name: str

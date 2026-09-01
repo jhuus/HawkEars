@@ -163,6 +163,62 @@ class DetectionRepository:
                 )
         return len(detections)
 
+    def replace_inferred_for_item(
+        self,
+        recording_id: int,
+        analysis_item_id: int,
+        detections: Sequence[tuple[int, int, int, float]],
+    ) -> int:
+        """Atomically checkpoint one completed recording and its detections.
+
+        Each detection contains species ID, start milliseconds, end milliseconds,
+        and score. Existing inference output for an incomplete item is replaced so
+        retrying after an interruption cannot create duplicates.
+        """
+        with transaction(self.database_path) as connection:
+            connection.execute(
+                "DELETE FROM detection WHERE analysis_item_id = ?",
+                (analysis_item_id,),
+            )
+            for species_id, start_ms, end_ms, score in detections:
+                self._validate_bounds(
+                    connection, recording_id, start_ms, end_ms, None, None
+                )
+                cursor = connection.execute(
+                    """
+                    INSERT INTO detection(
+                        recording_id, analysis_item_id, source, score
+                    ) VALUES (?, ?, 'inference', ?)
+                    """,
+                    (recording_id, analysis_item_id, score),
+                )
+                if cursor.lastrowid is None:
+                    raise RuntimeError("SQLite did not return the new detection ID.")
+                revision = connection.execute(
+                    """
+                    INSERT INTO detection_revision(
+                        detection_id, revision_number, species_id, start_ms, end_ms
+                    ) VALUES (?, 1, ?, ?, ?)
+                    """,
+                    (cursor.lastrowid, species_id, start_ms, end_ms),
+                )
+                if revision.lastrowid is None:
+                    raise RuntimeError("SQLite did not return the new revision ID.")
+                connection.execute(
+                    "UPDATE detection SET current_revision_id = ? WHERE id = ?",
+                    (revision.lastrowid, cursor.lastrowid),
+                )
+            connection.execute(
+                """
+                UPDATE analysis_item
+                SET status = 'completed', error_message = NULL,
+                    finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                WHERE id = ? AND recording_id = ?
+                """,
+                (analysis_item_id, recording_id),
+            )
+        return len(detections)
+
     def create_cli_imported_many(
         self,
         import_batch_id: int,

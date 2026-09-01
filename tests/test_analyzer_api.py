@@ -5,7 +5,10 @@ import threading
 import pandas as pd
 import numpy as np
 
-from hawkears.core.analysis_result import AnalysisProgress
+from hawkears.core.analysis_result import (
+    AnalysisProgress,
+    AnalysisRecordingResult,
+)
 from hawkears.core.analyzer import Analyzer
 
 
@@ -139,10 +142,18 @@ def test_analyzer_returns_structured_results_and_progress(tmp_path: Path):
             )
             with self._dataframes_lock:
                 self.result_dataframes.append((recording_path, dataframe))
+            if self.recording_callback is not None:
+                self.recording_callback(
+                    AnalysisRecordingResult(
+                        recording_path,
+                        self._dataframe_detections(recording_path, dataframe),
+                    )
+                )
             self._recording_finished(recording_path, progress_callback)
 
     analyzer._process_recordings = MethodType(process, analyzer)
-    progress = []
+    progress: list[AnalysisProgress] = []
+    recording_results: list[AnalysisRecordingResult] = []
 
     result = analyzer.run(
         str(tmp_path),
@@ -151,6 +162,7 @@ def test_analyzer_returns_structured_results_and_progress(tmp_path: Path):
         quiet=True,
         return_results=True,
         progress_callback=progress.append,
+        recording_callback=recording_results.append,
     )
 
     assert result is not None
@@ -162,6 +174,11 @@ def test_analyzer_returns_structured_results_and_progress(tmp_path: Path):
     assert result.detections[0].species == "Marsh Wren"
     assert result.detections[0].start_time == 2.5
     assert [item.percent_complete for item in progress] == [0.0, 50.0, 100.0]
+    assert sorted(item.recording_path.name for item in recording_results) == [
+        "first.wav",
+        "second.wav",
+    ]
+    assert recording_results[0].detections[0].species == "Marsh Wren"
 
 
 def test_variable_labels_are_split_without_losing_coverage():

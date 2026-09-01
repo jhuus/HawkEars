@@ -10,7 +10,7 @@ from pathlib import Path
 import signal
 import threading
 import time
-from typing import Callable, Collection, Optional
+from typing import Callable, Collection, Optional, Sequence
 
 import click
 
@@ -19,7 +19,11 @@ from britekit.core import util
 from britekit.core.util import cli_help_from_doc
 
 from hawkears.core.config_loader import get_config
-from hawkears.core.analysis_result import AnalysisProgress, AnalysisResult
+from hawkears.core.analysis_result import (
+    AnalysisProgress,
+    AnalysisRecordingResult,
+    AnalysisResult,
+)
 
 
 def analyze(
@@ -48,7 +52,9 @@ def analyze(
     max_label_length: Optional[float] = None,
     return_results: bool = False,
     progress_callback: Optional[Callable[[AnalysisProgress], None]] = None,
+    recording_callback: Optional[Callable[[AnalysisRecordingResult], None]] = None,
     cancellation_callback: Optional[Callable[[], bool]] = None,
+    recording_paths: Optional[Sequence[Path]] = None,
     include_names: Optional[Collection[str]] = None,
     raise_errors: bool = False,
     data_root: Path | str | None = None,
@@ -91,8 +97,12 @@ def analyze(
     - max_label_length: Maximum length in seconds for variable-duration labels.
       Longer labels are split into consecutive labels without discarding coverage.
     - progress_callback: Optional callback receiving progress notifications.
+    - recording_callback: Optional callback receiving detections as each recording
+      completes. The callback finishes before completion progress is reported.
     - cancellation_callback: Optional callback checked between recordings. Return true
       to stop the analysis after recordings already in progress finish.
+    - recording_paths: Optional explicit recordings to process instead of discovering
+      every supported recording beneath input_path.
     - include_names: Optional authoritative collection of model class names to include,
       avoiding an include-list file and the configured default exclusion list.
     - raise_errors: Re-raise inference and validation errors for application callers.
@@ -276,7 +286,9 @@ def analyze(
             quiet,
             return_results=return_results,
             progress_callback=progress_callback,
+            recording_callback=recording_callback,
             cancellation_callback=cancellation_callback,
+            recording_paths_override=recording_paths,
         )
 
         if not quiet:

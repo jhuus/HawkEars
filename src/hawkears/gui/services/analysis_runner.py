@@ -13,6 +13,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 from hawkears import __version__
 from hawkears.commands._analyze import analyze
 from hawkears.core.analysis_result import AnalysisProgress
+from hawkears.core.analysis_result import AnalysisRecordingResult
 from hawkears.core.analyzer import find_recording_paths
 from hawkears.gui.database import ProjectDatabase
 from hawkears.gui.database.records import Recording, Species
@@ -35,6 +36,8 @@ class AnalysisRunner(QObject):
         species: Sequence[Species],
         settings: Mapping[str, object],
         data_root: Path | None = None,
+        *,
+        resume_run_id: int | None = None,
     ) -> None:
         super().__init__()
         self.database_path = database_path
@@ -43,9 +46,15 @@ class AnalysisRunner(QObject):
         self.species = list(species)
         self.settings = dict(settings)
         self.data_root = data_root
+        self.resume_run_id = resume_run_id
         self.run_id: int | None = None
         self._cancel_requested = threading.Event()
         self._completed_paths: set[Path] = set()
+        self._checkpoint_lock = threading.Lock()
+        self._recording_by_path: dict[Path, Recording] = {}
+        self._item_ids: dict[int, int] = {}
+        self._species_by_name: dict[str, Species] = {}
+        self._database: ProjectDatabase | None = None
 
     def cancel(self) -> None:
         """Request a thread-safe stop between recordings."""
@@ -57,19 +66,46 @@ class AnalysisRunner(QObject):
         phase = "preparing"
         saved_count = 0
         try:
-            paths = [
-                Path(path).resolve()
-                for path in find_recording_paths(
-                    str(self.recording_directory), self.recurse
+            if self.resume_run_id is None:
+                paths = [
+                    Path(path).resolve()
+                    for path in find_recording_paths(
+                        str(self.recording_directory), self.recurse
+                    )
+                ]
+                if not paths:
+                    raise ValueError("No supported audio recordings were found.")
+                recordings = [database.recordings.get_or_add(path) for path in paths]
+            else:
+                self.run_id = self.resume_run_id
+                snapshot = database.analysis.settings(self.run_id)
+                snapshot["num_threads"] = self.settings.get(
+                    "num_threads", snapshot.get("num_threads", 1)
                 )
-            ]
-            if not paths:
-                raise ValueError("No supported audio recordings were found.")
-            recordings = [database.recordings.get_or_add(path) for path in paths]
+                self.settings = snapshot
+                recordings = [
+                    database.recordings.get(recording_id)
+                    for recording_id in database.analysis.incomplete_recording_ids(
+                        self.run_id
+                    )
+                ]
+                paths = [
+                    recording.resolved_path(self.database_path)
+                    for recording in recordings
+                ]
+                if not paths:
+                    raise ValueError(
+                        "This analysis run has no recordings left to resume."
+                    )
+
             location = self.settings.get("location", {})
             location = location if isinstance(location, dict) else {}
-            recording_metadata = self._recording_metadata(location, recordings)
-            if location.get("mode") == "filelist":
+            recording_metadata = (
+                self._recording_metadata(location, recordings)
+                if self.resume_run_id is None
+                else {}
+            )
+            if self.resume_run_id is None and location.get("mode") == "filelist":
                 matched = [
                     (path, recording)
                     for path, recording in zip(paths, recordings)
@@ -81,21 +117,32 @@ class AnalysisRunner(QObject):
                     )
                 paths = [item[0] for item in matched]
                 recordings = [item[1] for item in matched]
-            self.run_id = database.analysis.create_run(
-                __version__,
-                self.settings,
-                species_ids=[item.id for item in self.species],
-                recording_ids=[item.id for item in recordings],
-                recording_metadata=recording_metadata,
-            )
+            if self.run_id is None:
+                self.run_id = database.analysis.create_run(
+                    __version__,
+                    self.settings,
+                    species_ids=[item.id for item in self.species],
+                    recording_ids=[item.id for item in recordings],
+                    recording_metadata=recording_metadata,
+                )
             database.analysis.set_run_status(self.run_id, "running")
             item_ids = database.analysis.item_ids(self.run_id)
-            for item_id in item_ids.values():
-                database.analysis.set_item_status(item_id, "running")
+            for recording in recordings:
+                database.analysis.set_item_status(item_ids[recording.id], "running")
+
+            self._database = database
+            self._recording_by_path = {
+                path: recording for path, recording in zip(paths, recordings)
+            }
+            self._item_ids = item_ids
+            self._species_by_name = {
+                (item.class_name or item.common_name): item for item in self.species
+            }
+            saved_count = database.analysis.detection_count(self.run_id)
 
             date = self._date_value(location)
             phase = "analyzing"
-            result = analyze(
+            analyze(
                 input_path=str(self.recording_directory),
                 output_path=str(self.output_directory(self.run_id)),
                 rtype=None,
@@ -130,66 +177,38 @@ class AnalysisRunner(QObject):
                 label_field="names",
                 recurse=self.recurse,
                 quiet=True,
-                return_results=True,
+                return_results=False,
                 progress_callback=self._report_progress,
+                recording_callback=self._checkpoint_recording,
                 cancellation_callback=self._cancel_requested.is_set,
+                recording_paths=paths,
                 include_names=[
                     item.class_name or item.common_name for item in self.species
                 ],
                 raise_errors=True,
                 data_root=self.data_root,
             )
-            if result is None:
-                raise RuntimeError("HawkEars did not return an analysis result.")
-
-            self.saving_results.emit()
-            phase = "converting"
-            recording_by_path = {
-                path: recording for path, recording in zip(paths, recordings)
-            }
-            species_by_name = {
-                (item.class_name or item.common_name): item for item in self.species
-            }
-            rows = []
-            for detection in result.detections:
-                recording = recording_by_path[detection.recording_path.resolve()]
-                detected_species = species_by_name[detection.species]
-                start_ms = round(detection.start_time * 1000)
-                end_ms = max(start_ms + 1, round(detection.end_time * 1000))
-                rows.append(
-                    (
-                        recording.id,
-                        item_ids[recording.id],
-                        detected_species.id,
-                        start_ms,
-                        end_ms,
-                        detection.score,
-                    )
-                )
-            phase = "saving"
-            saved_count = database.detections.create_inferred_many(rows)
             phase = "finalizing"
+            saved_count = database.analysis.detection_count(self.run_id)
             was_cancelled = self._cancel_requested.is_set() and len(
                 self._completed_paths
             ) < len(paths)
-            for recording in recordings:
-                database.analysis.set_item_status(
-                    item_ids[recording.id],
-                    (
-                        "completed"
-                        if not was_cancelled
-                        or recording.resolved_path(self.database_path)
-                        in self._completed_paths
-                        else "cancelled"
-                    ),
-                )
             if was_cancelled:
+                database.analysis.mark_unfinished_items(self.run_id, "cancelled")
                 database.analysis.set_run_status(self.run_id, "cancelled")
                 self.cancelled.emit(self.run_id, saved_count)
             else:
                 database.analysis.set_run_status(self.run_id, "completed")
                 self.completed.emit(self.run_id, saved_count)
         except Exception as error:
+            if self.run_id is not None:
+                try:
+                    saved_count = database.analysis.detection_count(self.run_id)
+                except Exception:
+                    logger.exception(
+                        "Could not count saved detections for failed run %d",
+                        self.run_id,
+                    )
             details = traceback.format_exc()
             logger.exception(
                 "Analysis run failed while %s; run_id=%s; saved_detections=%d",
@@ -199,6 +218,9 @@ class AnalysisRunner(QObject):
             )
             if self.run_id is not None:
                 try:
+                    database.analysis.mark_unfinished_items(
+                        self.run_id, "failed", error_message=str(error)
+                    )
                     database.analysis.set_run_status(
                         self.run_id, "failed", error_message=str(error)
                     )
@@ -207,6 +229,25 @@ class AnalysisRunner(QObject):
                         "Could not mark failed analysis run %d as failed", self.run_id
                     )
             self.failed.emit(self._failure_message(error, phase, saved_count), details)
+
+    def _checkpoint_recording(self, result: AnalysisRecordingResult) -> None:
+        """Persist one recording before inference reports it as completed."""
+        if self._database is None:
+            raise RuntimeError("Analysis persistence is not initialized.")
+        path = result.recording_path.resolve()
+        recording = self._recording_by_path[path]
+        rows = []
+        for detection in result.detections:
+            detected_species = self._species_by_name[detection.species]
+            start_ms = round(detection.start_time * 1000)
+            end_ms = max(start_ms + 1, round(detection.end_time * 1000))
+            rows.append((detected_species.id, start_ms, end_ms, detection.score))
+        with self._checkpoint_lock:
+            self._database.detections.replace_inferred_for_item(
+                recording.id,
+                self._item_ids[recording.id],
+                rows,
+            )
 
     def _failure_message(self, error: Exception, phase: str, saved_count: int) -> str:
         run = (

@@ -85,6 +85,7 @@ from hawkears.gui.database.records import (
     AnalysisRunSummary,
     DetectionResult,
     ReportSummary,
+    ResumableAnalysisRun,
     ReviewQueueSummary,
     ReviewVerdict,
     SpeciesDefinition,
@@ -444,6 +445,7 @@ class ProjectPage(QWidget):
 class AnalysisPage(QWidget):
     settings_changed = Signal(object)
     run_requested = Signal()
+    resume_requested = Signal(int)
     cancel_requested = Signal()
     import_requested = Signal(object)
 
@@ -560,6 +562,9 @@ class AnalysisPage(QWidget):
         self.run_button = QPushButton(self.tr("Run analysis"))
         self.run_button.setProperty("primary", True)
         self.run_button.clicked.connect(self._start_run)
+        self.resume_button = QPushButton(self.tr("Resume incomplete run"))
+        self.resume_button.setVisible(False)
+        self.resume_button.clicked.connect(self._start_resume)
         self.import_button = QPushButton(self.tr("Import analysis results…"))
         self.import_button.clicked.connect(self._choose_import_directory)
         self.cancel_button = QPushButton(self.tr("Cancel"))
@@ -571,6 +576,7 @@ class AnalysisPage(QWidget):
         actions.addStretch()
         actions.addWidget(self.import_button)
         actions.addWidget(self.cancel_button)
+        actions.addWidget(self.resume_button)
         actions.addWidget(self.run_button)
         run.addLayout(actions)
         columns.addWidget(run_card, 3)
@@ -582,6 +588,7 @@ class AnalysisPage(QWidget):
         self._scope_ready = False
         self._import_ready = False
         self._editable = False
+        self._resumable_run_id: int | None = None
         self.threshold.valueChanged.connect(self._threshold_changed)
         self.models.valueChanged.connect(self._emit_settings)
         self.threads.valueChanged.connect(self._emit_settings)
@@ -676,6 +683,27 @@ class AnalysisPage(QWidget):
             "location": dict(self._location_settings),
         }
 
+    def configure_resume(self, run: ResumableAnalysisRun | None) -> None:
+        """Show the newest run that can continue from recording checkpoints."""
+        self._resumable_run_id = run.id if run is not None else None
+        self.resume_button.setVisible(run is not None)
+        if run is None:
+            return
+        self.resume_button.setText(
+            self.tr("Resume run %1 (%2/%3 complete)")
+            .replace("%1", str(run.id))
+            .replace("%2", str(run.completed_recordings))
+            .replace("%3", str(run.total_recordings))
+        )
+        self.resume_button.setToolTip(
+            self.tr(
+                "Continue with the run's original inference settings and the "
+                "currently selected worker-thread count. Completed recordings "
+                "will be skipped."
+            )
+        )
+        self.resume_button.setEnabled(not self._running)
+
     def _update_location_summary(self) -> None:
         catalog = None
         if self._location_catalog_path.is_file():
@@ -746,10 +774,25 @@ class AnalysisPage(QWidget):
         self.progress.setValue(0)
         self.status.setText(self.tr("Preparing models…"))
         self.run_button.setEnabled(False)
+        self.resume_button.setEnabled(False)
         self.import_button.setEnabled(False)
         self.cancel_button.setEnabled(True)
         self.cancel_button.setVisible(True)
         self.run_requested.emit()
+
+    def _start_resume(self) -> None:
+        if self._resumable_run_id is None or self._running:
+            return
+        self._running = True
+        self._run_started_at = time.monotonic()
+        self.progress.setValue(0)
+        self.status.setText(self.tr("Preparing models to resume…"))
+        self.run_button.setEnabled(False)
+        self.resume_button.setEnabled(False)
+        self.import_button.setEnabled(False)
+        self.cancel_button.setEnabled(True)
+        self.cancel_button.setVisible(True)
+        self.resume_requested.emit(self._resumable_run_id)
 
     def _choose_import_directory(self) -> None:
         if not self._import_ready or self._running:
@@ -766,6 +809,7 @@ class AnalysisPage(QWidget):
         self.progress.setRange(0, 0)
         self.status.setText(self.tr("Validating and importing analysis results…"))
         self.run_button.setEnabled(False)
+        self.resume_button.setEnabled(False)
         self.import_button.setEnabled(False)
         self.cancel_button.setVisible(False)
         self.import_requested.emit(Path(path))
@@ -821,6 +865,7 @@ class AnalysisPage(QWidget):
         self.cancel_button.setVisible(False)
         self.run_button.setText(self.tr("Run again"))
         self.run_button.setEnabled(self._scope_ready)
+        self.resume_button.setEnabled(self._resumable_run_id is not None)
         self.import_button.setEnabled(self._import_ready)
 
     def analysis_saving_results(self) -> None:
@@ -847,6 +892,7 @@ class AnalysisPage(QWidget):
         self.cancel_button.setVisible(False)
         self.run_button.setText(self.tr("Run again"))
         self.run_button.setEnabled(self._scope_ready)
+        self.resume_button.setEnabled(self._resumable_run_id is not None)
         self.import_button.setEnabled(self._import_ready)
 
     def analysis_failed(self) -> None:
@@ -856,6 +902,7 @@ class AnalysisPage(QWidget):
         self.status.setText(self.tr("Analysis failed"))
         self.cancel_button.setVisible(False)
         self.run_button.setEnabled(self._scope_ready)
+        self.resume_button.setEnabled(self._resumable_run_id is not None)
         self.import_button.setEnabled(self._import_ready)
 
     def analysis_cancelled(self, detection_count: int) -> None:
@@ -869,6 +916,7 @@ class AnalysisPage(QWidget):
         self.cancel_button.setVisible(False)
         self.run_button.setText(self.tr("Run again"))
         self.run_button.setEnabled(self._scope_ready)
+        self.resume_button.setEnabled(self._resumable_run_id is not None)
         self.import_button.setEnabled(self._import_ready)
 
     def reset_run_status(self) -> None:
@@ -881,6 +929,7 @@ class AnalysisPage(QWidget):
         self.cancel_button.setVisible(False)
         self.run_button.setText(self.tr("Run analysis"))
         self.run_button.setEnabled(self._scope_ready)
+        self.resume_button.setEnabled(self._resumable_run_id is not None)
         self.import_button.setEnabled(self._import_ready)
 
     @property
@@ -2787,6 +2836,7 @@ class MainWindow(QMainWindow):
         self.project_page.edit_species_requested.connect(self._edit_species)
         self.analysis_page.settings_changed.connect(self._save_analysis_settings)
         self.analysis_page.run_requested.connect(self._start_analysis)
+        self.analysis_page.resume_requested.connect(self._resume_analysis)
         self.analysis_page.import_requested.connect(self._start_import)
         self.analysis_page.cancel_requested.connect(self._cancel_analysis)
         self._analysis_thread: QThread | None = None
@@ -2869,28 +2919,37 @@ class MainWindow(QMainWindow):
 
     def _update_memory_status(self) -> None:
         """Refresh the compact, cross-platform sidebar memory summary."""
-        try:
-            resident_bytes = self._memory_process.memory_info().rss
-            system_memory = psutil.virtual_memory()
-        except (psutil.Error, OSError):
+        memory = self._memory_snapshot()
+        if memory is None:
             self.app_memory_label.setText(self.tr("HawkEars: —"))
             self.available_memory_label.setText(self.tr("Available: —"))
             return
 
+        resident_bytes, available_bytes = memory
         gibibyte = 1024**3
         self.app_memory_label.setText(
             self.tr("HawkEars: %1 GB").replace("%1", f"{resident_bytes / gibibyte:.1f}")
         )
         self.available_memory_label.setText(
             self.tr("Available: %1 GB").replace(
-                "%1", f"{system_memory.available / gibibyte:.1f}"
+                "%1", f"{available_bytes / gibibyte:.1f}"
             )
         )
-        critical = system_memory.available < gibibyte
+        critical = available_bytes < gibibyte
         if self.available_memory_label.property("critical") != critical:
             self.available_memory_label.setProperty("critical", critical)
             self.available_memory_label.style().unpolish(self.available_memory_label)
             self.available_memory_label.style().polish(self.available_memory_label)
+
+    def _memory_snapshot(self) -> tuple[int, int] | None:
+        """Return resident process and system-available memory in bytes."""
+        try:
+            return (
+                self._memory_process.memory_info().rss,
+                psutil.virtual_memory().available,
+            )
+        except (psutil.Error, OSError):
+            return None
 
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu(self.tr("File"))
@@ -2950,6 +3009,13 @@ class MainWindow(QMainWindow):
 
     def _diagnostic_information(self) -> str:
         project_path = str(self._database.path) if self._database is not None else "—"
+        memory = self._memory_snapshot()
+        if memory is None:
+            resident_memory = available_memory = "—"
+        else:
+            gibibyte = 1024**3
+            resident_memory = f"{memory[0] / gibibyte:.1f} GB"
+            available_memory = f"{memory[1] / gibibyte:.1f} GB"
         return "\n".join(
             (
                 self.tr("HawkEars: %1").replace("%1", __version__),
@@ -2957,6 +3023,8 @@ class MainWindow(QMainWindow):
                 self.tr("Qt: %1").replace("%1", qVersion()),
                 self.tr("Platform: %1").replace("%1", platform.platform()),
                 self.tr("Inference device: %1").replace("%1", str(util.get_device())),
+                self.tr("HawkEars resident memory: %1").replace("%1", resident_memory),
+                self.tr("System memory available: %1").replace("%1", available_memory),
                 self.tr("Data directory: %1").replace(
                     "%1", str(self._application_paths.data_root)
                 ),
@@ -3056,6 +3124,9 @@ class MainWindow(QMainWindow):
         self._project_open = True
         self.close_project_action.setEnabled(True)
         self._database = database
+        recovered_runs = database.analysis.recover_interrupted_runs()
+        if recovered_runs:
+            logger.warning("Recovered interrupted analysis runs: %s", recovered_runs)
         self._remember_project(database.path)
         self._refresh_welcome_recent_projects()
         self.setWindowTitle(self.tr("HawkEars — %1").replace("%1", name))
@@ -3077,8 +3148,7 @@ class MainWindow(QMainWindow):
             and bool(self._database.species.list_project_species())
         )
         has_completed_run = any(
-            run.status == "completed"
-            or (run.status == "cancelled" and run.detection_count > 0)
+            run.status == "completed" or run.detection_count > 0
             for run in self._database.analysis.list_runs()
         )
         for index, button in enumerate(self.nav_buttons):
@@ -3152,6 +3222,9 @@ class MainWindow(QMainWindow):
             editable=True,
             project_directory=self._database.path.parent,
         )
+        self.analysis_page.configure_resume(
+            self._database.analysis.latest_resumable_run()
+        )
         self._update_navigation()
 
     def _save_recording_scope(self, directory: Path | None, recurse: bool) -> None:
@@ -3186,7 +3259,6 @@ class MainWindow(QMainWindow):
             self.analysis_page.analysis_failed()
             return
 
-        thread = QThread(self)
         runner = AnalysisRunner(
             self._database.path,
             recording_directory,
@@ -3195,6 +3267,31 @@ class MainWindow(QMainWindow):
             self.analysis_page.current_settings(),
             self._application_paths.data_root,
         )
+        self._launch_analysis_runner(runner)
+
+    def _resume_analysis(self, run_id: int) -> None:
+        if self._database is None or self._analysis_thread is not None:
+            self.analysis_page.analysis_failed()
+            return
+        project = self._database.project.get()
+        recording_directory = project.resolved_recording_directory(self._database.path)
+        species = self._database.species.list_for_analysis_run(run_id)
+        if recording_directory is None or not species:
+            self.analysis_page.analysis_failed()
+            return
+        runner = AnalysisRunner(
+            self._database.path,
+            recording_directory,
+            project.recurse,
+            species,
+            self.analysis_page.current_settings(),
+            self._application_paths.data_root,
+            resume_run_id=run_id,
+        )
+        self._launch_analysis_runner(runner)
+
+    def _launch_analysis_runner(self, runner: AnalysisRunner) -> None:
+        thread = QThread(self)
         runner.moveToThread(thread)
         thread.started.connect(runner.run)
         runner.progress_changed.connect(self.analysis_page.update_progress)
@@ -3217,6 +3314,7 @@ class MainWindow(QMainWindow):
         self._update_navigation()
         self._load_results(selected_run_id=run_id)
         self.analysis_page.analysis_completed(detection_count)
+        self._load_recording_scope()
 
     def _start_import(self, output_directory: Path) -> None:
         if self._database is None or self._analysis_thread is not None:
@@ -3270,9 +3368,13 @@ class MainWindow(QMainWindow):
         self._update_navigation()
         self._load_results(selected_run_id=run_id)
         self.analysis_page.analysis_cancelled(detection_count)
+        self._load_recording_scope()
 
     def _analysis_failed(self, message: str, details: str) -> None:
         self.analysis_page.analysis_failed()
+        self._update_navigation()
+        self._load_results()
+        self._load_recording_scope()
         dialog = QMessageBox(self)
         dialog.setIcon(QMessageBox.Icon.Critical)
         dialog.setWindowTitle(self.tr("Analysis failed"))
@@ -3342,6 +3444,7 @@ class MainWindow(QMainWindow):
         )
         self.project_page.configure_species_summary([], selection_enabled=False)
         self.analysis_page.reset_run_status()
+        self.analysis_page.configure_resume(None)
         self.results_page.configure_runs([])
         self.results_page.configure_queues([])
         self.results_page.set_detections([])

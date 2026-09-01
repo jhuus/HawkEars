@@ -191,3 +191,24 @@ class SpeciesRepository:
                     """)]
         finally:
             connection.close()
+
+    def list_for_analysis_run(self, run_id: int) -> List[Species]:
+        """Return the immutable target-species snapshot for an analysis run."""
+        connection = connect(self.database_path, readonly=True)
+        try:
+            return [
+                _species_from_row(row)
+                for row in connection.execute(
+                    """
+                SELECT species.*
+                FROM species
+                JOIN analysis_run_species
+                  ON analysis_run_species.species_id = species.id
+                WHERE analysis_run_species.analysis_run_id = ?
+                ORDER BY species.common_name COLLATE NOCASE
+                """,
+                    (run_id,),
+                )
+            ]
+        finally:
+            connection.close()

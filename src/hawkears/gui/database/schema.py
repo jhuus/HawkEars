@@ -7,7 +7,7 @@ import sqlite3
 from hawkears.gui.database.connection import connect
 from hawkears.gui.database.errors import InvalidProjectError, MigrationError
 
-LATEST_SCHEMA_VERSION = 20
+LATEST_SCHEMA_VERSION = 21
 
 
 def migrate(path: Path) -> None:

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication, QTableWidgetItem
 
 from hawkears.gui.database.records import (
     DetectionResult,
+    ResumableAnalysisRun,
     ReviewVerdict,
     SpeciesDefinition,
 )
@@ -100,6 +101,37 @@ def test_analysis_page_uses_device_defaults_for_unset_project_settings(
     assert page.current_settings()["min_score"] == 0.7
     assert page.current_settings()["max_models"] == 3
     assert page.current_settings()["num_threads"] == 4
+    page.close()
+    app.processEvents()
+
+
+def test_analysis_page_offers_resume_with_current_thread_count(
+    tmp_path: Path, monkeypatch
+):
+    monkeypatch.setattr(
+        main_window,
+        "analysis_setting_defaults",
+        lambda paths: {
+            "min_score": 0.7,
+            "max_models": 3,
+            "num_threads": 1,
+            "segment_len": None,
+            "max_label_length": None,
+        },
+    )
+    app = QApplication.instance() or QApplication([])
+    page = AnalysisPage(ApplicationPaths(tmp_path))
+    resumed: list[int] = []
+    page.resume_requested.connect(resumed.append)
+    page.threads.setValue(1)
+    page.configure_resume(ResumableAnalysisRun(7, "failed", 3, 5))
+
+    assert not page.resume_button.isHidden()
+    assert page.resume_button.text() == "Resume run 7 (3/5 complete)"
+    page._start_resume()
+
+    assert resumed == [7]
+    assert page.current_settings()["num_threads"] == 1
     page.close()
     app.processEvents()
 

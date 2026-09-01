@@ -23,7 +23,7 @@ def test_create_and_open_project(tmp_path: Path):
 
     assert database.path.is_file()
     assert database.project.get().name == "Wetland Survey"
-    assert schema_version(database.path) == 20
+    assert schema_version(database.path) == 21
     assert ProjectDatabase.is_project(database.path)
 
     reopened = ProjectDatabase.open(database.path)
@@ -571,9 +571,7 @@ def test_label_export_applies_current_reviews_and_preserves_originals(tmp_path: 
         ebird_code="comnig",
     )
     additional = database.species.add("Common Yellowthroat", species_code="COYE")
-    recording = database.recordings.add(
-        tmp_path / "night.wav", sample_rate=16_000
-    )
+    recording = database.recordings.add(tmp_path / "night.wav", sample_rate=16_000)
     run_id = database.analysis.create_run(
         "2.3.0",
         {"min_score": 0.6},

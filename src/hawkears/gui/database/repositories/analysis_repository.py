@@ -1,12 +1,19 @@
 """Analysis-run and per-recording work-item persistence."""
 
 import json
+import os
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
+import psutil
+
 from hawkears.gui.database.connection import transaction
 from hawkears.gui.database.connection import connect
-from hawkears.gui.database.records import AnalysisRunSummary, SpeciesProcessingSummary
+from hawkears.gui.database.records import (
+    AnalysisRunSummary,
+    ResumableAnalysisRun,
+    SpeciesProcessingSummary,
+)
 
 
 class AnalysisRepository:
@@ -73,24 +80,176 @@ class AnalysisRepository:
         allowed = {"pending", "running", "completed", "cancelled", "failed"}
         if status not in allowed:
             raise ValueError(f"Invalid analysis run status: {status}")
+        process_id = os.getpid() if status == "running" else None
+        process_started_at = (
+            psutil.Process(process_id).create_time() if process_id is not None else None
+        )
         with transaction(self.database_path) as connection:
             connection.execute(
                 """
                 UPDATE analysis_run
                 SET status = ?, error_message = ?,
+                    process_id = ?, process_started_at = ?,
                     started_at = CASE
                         WHEN ? = 'running' AND started_at IS NULL
                         THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                         ELSE started_at
                     END,
                     finished_at = CASE
+                        WHEN ? = 'running' THEN NULL
                         WHEN ? IN ('completed', 'cancelled', 'failed')
                         THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                         ELSE finished_at
                     END
                 WHERE id = ?
                 """,
-                (status, error_message, status, status, run_id),
+                (
+                    status,
+                    error_message,
+                    process_id,
+                    process_started_at,
+                    status,
+                    status,
+                    status,
+                    run_id,
+                ),
+            )
+
+    def recover_interrupted_runs(self) -> list[int]:
+        """Make runs left active by a terminated process safely resumable."""
+        with transaction(self.database_path) as connection:
+            run_ids = [
+                row["id"]
+                for row in connection.execute("""
+                    SELECT id, process_id, process_started_at
+                    FROM analysis_run WHERE status = 'running'
+                    """)
+                if not self._process_is_running(
+                    row["process_id"], row["process_started_at"]
+                )
+            ]
+            if not run_ids:
+                return []
+            placeholders = ",".join("?" for _ in run_ids)
+            connection.execute(
+                f"""
+                UPDATE analysis_item
+                SET status = 'failed',
+                    error_message = 'HawkEars stopped before this recording completed',
+                    finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                WHERE analysis_run_id IN ({placeholders})
+                  AND status != 'completed'
+                """,
+                run_ids,
+            )
+            connection.execute(
+                f"""
+                UPDATE analysis_run
+                SET status = 'failed',
+                    error_message = 'HawkEars stopped before the run completed',
+                    finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                WHERE id IN ({placeholders})
+                """,
+                run_ids,
+            )
+        return run_ids
+
+    @staticmethod
+    def _process_is_running(
+        process_id: Optional[int], process_started_at: Optional[float]
+    ) -> bool:
+        if process_id is None or process_started_at is None:
+            return False
+        try:
+            process = psutil.Process(process_id)
+            return (
+                process.is_running()
+                and abs(process.create_time() - process_started_at) < 0.01
+            )
+        except (psutil.Error, OSError):
+            return False
+
+    def latest_resumable_run(self) -> Optional[ResumableAnalysisRun]:
+        """Return the newest native run with recordings left to process."""
+        connection = connect(self.database_path, readonly=True)
+        try:
+            row = connection.execute("""
+                SELECT analysis_run.id, analysis_run.status,
+                       count(CASE WHEN analysis_item.status = 'completed' THEN 1 END)
+                           AS completed_recordings,
+                       count(analysis_item.id) AS total_recordings
+                FROM analysis_run
+                JOIN analysis_item
+                  ON analysis_item.analysis_run_id = analysis_run.id
+                LEFT JOIN analysis_run_import
+                  ON analysis_run_import.analysis_run_id = analysis_run.id
+                WHERE analysis_run.status IN ('cancelled', 'failed')
+                  AND analysis_run_import.analysis_run_id IS NULL
+                GROUP BY analysis_run.id
+                HAVING completed_recordings < total_recordings
+                ORDER BY analysis_run.id DESC
+                LIMIT 1
+                """).fetchone()
+            if row is None:
+                return None
+            return ResumableAnalysisRun(
+                id=row["id"],
+                status=row["status"],
+                completed_recordings=row["completed_recordings"],
+                total_recordings=row["total_recordings"],
+            )
+        finally:
+            connection.close()
+
+    def incomplete_recording_ids(self, run_id: int) -> list[int]:
+        connection = connect(self.database_path, readonly=True)
+        try:
+            return [
+                row["recording_id"]
+                for row in connection.execute(
+                    """
+                    SELECT recording_id FROM analysis_item
+                    WHERE analysis_run_id = ? AND status != 'completed'
+                    ORDER BY id
+                    """,
+                    (run_id,),
+                )
+            ]
+        finally:
+            connection.close()
+
+    def detection_count(self, run_id: int) -> int:
+        connection = connect(self.database_path, readonly=True)
+        try:
+            return int(
+                connection.execute(
+                    """
+                    SELECT count(detection.id)
+                    FROM analysis_item
+                    LEFT JOIN detection
+                      ON detection.analysis_item_id = analysis_item.id
+                    WHERE analysis_item.analysis_run_id = ?
+                    """,
+                    (run_id,),
+                ).fetchone()[0]
+            )
+        finally:
+            connection.close()
+
+    def mark_unfinished_items(
+        self, run_id: int, status: str, *, error_message: Optional[str] = None
+    ) -> None:
+        if status not in {"cancelled", "failed"}:
+            raise ValueError(f"Invalid unfinished analysis-item status: {status}")
+        with transaction(self.database_path) as connection:
+            connection.execute(
+                """
+                UPDATE analysis_item
+                SET status = ?, error_message = ?,
+                    finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                WHERE analysis_run_id = ? AND status != 'completed'
+                """,
+                (status, error_message, run_id),
             )
 
     def link_import(self, run_id: int, import_batch_id: int) -> None:

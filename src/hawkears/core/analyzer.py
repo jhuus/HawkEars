@@ -7,7 +7,7 @@ import logging
 import os
 from pathlib import Path
 import threading
-from typing import Callable, Collection, Optional
+from typing import Callable, Collection, Optional, Sequence
 
 import polars as pl
 import pandas as pd
@@ -19,6 +19,7 @@ from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.class_manager import ClassManager
 from hawkears.core.analysis_result import (
     AnalysisProgress,
+    AnalysisRecordingResult,
     AnalysisResult,
     InferenceDetection,
 )
@@ -209,6 +210,10 @@ class Analyzer:
                     logging.info(
                         f"No predictions generated for {recording_path} (length = {predictor.audio.seconds():.2f} seconds)"
                     )
+                if self.recording_callback is not None:
+                    self.recording_callback(
+                        AnalysisRecordingResult(Path(recording_path), ())
+                    )
                 self._recording_finished(recording_path, progress_callback)
                 continue
 
@@ -243,12 +248,25 @@ class Analyzer:
                     )
 
             dataframe = None
-            if self.do_csv or self.do_raven or self.return_results:
+            if (
+                self.do_csv
+                or self.do_raven
+                or self.return_results
+                or self.recording_callback is not None
+            ):
                 dataframe = predictor.get_dataframe(
                     None, frame_map, None, recording_stem
                 )
                 dataframe = self._filter_output_dataframe(dataframe)
                 dataframe = self._split_long_dataframe_labels(dataframe)
+
+            if self.recording_callback is not None:
+                self.recording_callback(
+                    AnalysisRecordingResult(
+                        Path(recording_path),
+                        self._dataframe_detections(Path(recording_path), dataframe),
+                    )
+                )
 
             if self.do_csv:
                 rarities_df = (
@@ -298,6 +316,21 @@ class Analyzer:
                     recording_path=Path(recording_path),
                 )
             )
+
+    @staticmethod
+    def _dataframe_detections(
+        recording_path: Path, dataframe: pd.DataFrame
+    ) -> tuple[InferenceDetection, ...]:
+        return tuple(
+            InferenceDetection(
+                recording_path=recording_path,
+                species=str(row["name"]),
+                start_time=float(row["start_time"]),
+                end_time=float(row["end_time"]),
+                score=float(row["score"]),
+            )
+            for row in dataframe.to_dict("records")
+        )
 
     def _update_frame_map(self, frame_map, recording_name):
         """
@@ -526,7 +559,9 @@ class Analyzer:
         *,
         return_results: bool = False,
         progress_callback: Optional[Callable[[AnalysisProgress], None]] = None,
+        recording_callback: Optional[Callable[[AnalysisRecordingResult], None]] = None,
         cancellation_callback: Optional[Callable[[], bool]] = None,
+        recording_paths_override: Optional[Sequence[Path]] = None,
     ) -> AnalysisResult | None:
         """
         Run inference.
@@ -542,13 +577,21 @@ class Analyzer:
         - top (bool): If true, show the top scores for the first spectrogram, then stop.
         - return_results (bool): Return detections directly instead of relying on output files.
         - progress_callback: Called initially and whenever a recording finishes.
+        - recording_callback: Called with detections after each recording completes.
         - cancellation_callback: Checked before starting each recording. Returning true
           stops scheduling further work after active recordings finish.
+        - recording_paths_override: Explicit recordings to process instead of
+          discovering them from input_path.
         """
 
         self.quiet = quiet
         self.return_results = return_results
-        recording_paths = self._get_recording_paths(input_path, recurse)
+        self.recording_callback = recording_callback
+        recording_paths = (
+            [str(Path(path)) for path in recording_paths_override]
+            if recording_paths_override is not None
+            else self._get_recording_paths(input_path, recurse)
+        )
 
         cfg = self.cfg.hawkears
         self.check_occurrence = False

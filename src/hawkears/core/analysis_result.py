@@ -31,6 +31,14 @@ class AnalysisProgress:
 
 
 @dataclass(frozen=True)
+class AnalysisRecordingResult:
+    """Structured detections completed for one recording."""
+
+    recording_path: Path
+    detections: tuple[InferenceDetection, ...]
+
+
+@dataclass(frozen=True)
 class AnalysisResult:
     """Complete structured output from an inference run."""
 
