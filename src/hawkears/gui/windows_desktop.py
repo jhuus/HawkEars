@@ -13,9 +13,12 @@ APP_USER_MODEL_ID = "HawkEars.HawkEars"
 
 class _GUID(ctypes.Structure):
     _fields_ = [
-        ("Data1", wintypes.DWORD),
-        ("Data2", wintypes.WORD),
-        ("Data3", wintypes.WORD),
+        # Windows GUID fields have fixed widths. ``wintypes.DWORD`` aliases
+        # ``c_ulong``, which is eight bytes on some non-Windows platforms and
+        # prevents this module from even being imported there.
+        ("Data1", ctypes.c_uint32),
+        ("Data2", ctypes.c_uint16),
+        ("Data3", ctypes.c_uint16),
         ("Data4", ctypes.c_ubyte * 8),
     ]
 
@@ -25,7 +28,7 @@ class _GUID(ctypes.Structure):
 
 
 class _PROPERTYKEY(ctypes.Structure):
-    _fields_ = [("fmtid", _GUID), ("pid", wintypes.DWORD)]
+    _fields_ = [("fmtid", _GUID), ("pid", ctypes.c_uint32)]
 
 
 class _PROPVARIANT_VALUE(ctypes.Union):
