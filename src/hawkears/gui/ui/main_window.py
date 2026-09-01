@@ -2092,6 +2092,16 @@ class ReviewPage(QWidget):
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if (
             event.type() == QEvent.Type.KeyPress
+            and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)  # type: ignore[attr-defined]
+            and event.modifiers() == Qt.KeyboardModifier.NoModifier  # type: ignore[attr-defined]
+            and self.isVisible()
+        ):
+            focus = QApplication.focusWidget()
+            if isinstance(focus, QPushButton) and focus.isEnabled():
+                focus.click()
+                return True
+        if (
+            event.type() == QEvent.Type.KeyPress
             and event.key() == Qt.Key.Key_Space  # type: ignore[attr-defined]
             and event.modifiers() == Qt.KeyboardModifier.NoModifier  # type: ignore[attr-defined]
             and self.isVisible()

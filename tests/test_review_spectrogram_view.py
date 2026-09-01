@@ -524,6 +524,14 @@ def test_review_keyboard_shortcuts_and_contextual_focus():
     QTest.keyClick(page.notes, Qt.Key.Key_Space)
     assert page.notes.toPlainText() == " "
 
+    saved.clear()
+    page.correct_button.click()
+    assert page.save_button.hasFocus()
+    QTest.keyClick(page.save_button, Qt.Key.Key_Return)
+    assert len(saved) == 1
+    assert saved[0][1] == ReviewVerdict.CORRECT
+    assert saved[0][4] is True
+
     page.spectrogram.shutdown()
     page.close()
     app.processEvents()
