@@ -62,6 +62,8 @@ $EnvironmentLock = Join-Path $BuildRoot "requirements-windows-cu126.txt"
 (& $Python -m pip freeze) | Set-Content -Encoding UTF8 $EnvironmentLock
 Assert-LastExitCode "Recording the Windows build environment"
 
+# PyAV's compiled modules import av.utils through cython.cimports, which Nuitka
+# cannot discover through normal Python import analysis.
 & $Python -m nuitka `
     --mode=standalone `
     --enable-plugin=pyside6 `
@@ -90,6 +92,7 @@ Assert-LastExitCode "Recording the Windows build environment"
     --nofollow-import-to=timm.optim `
     --include-module=britekit.core.predictor `
     --include-module=britekit.occurrence_db.occurrence_pickle `
+    --include-module=av.utils `
     --include-package=hawkears.heuristics.canada `
     --include-package=hawkears.install.canada `
     --include-package=scipy._external.array_api_compat `
