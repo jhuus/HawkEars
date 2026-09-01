@@ -1816,6 +1816,7 @@ class SpectrogramView(QWidget):
 class ReviewPage(QWidget):
     save_requested = Signal(int, object, str, str, bool)
     bounds_requested = Signal(int, int, int, int, int)
+    previous_requested = Signal()
     help_requested = Signal(str)
 
     def __init__(self, class_catalog: list[SpeciesDefinition]) -> None:
@@ -1952,6 +1953,15 @@ class ReviewPage(QWidget):
         review.addLayout(form)
         review.addStretch()
         save_actions = QHBoxLayout()
+        self.previous_button = QPushButton(self.tr("Previous detection"))
+        self.previous_button.setToolTip(
+            self.tr(
+                "Return to the previously opened detection. Unsaved changes to the "
+                "current detection are not saved."
+            )
+        )
+        self.previous_button.setEnabled(False)
+        self.previous_button.clicked.connect(self.previous_requested)
         self.save_stop_button = QPushButton(self.tr("Save and stop"))
         self.save_stop_button.setEnabled(False)
         self.save_stop_button.clicked.connect(lambda: self._save(False))
@@ -1959,6 +1969,8 @@ class ReviewPage(QWidget):
         self.save_button.setProperty("primary", True)
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(lambda: self._save(True))
+        save_actions.addWidget(self.previous_button)
+        save_actions.addStretch()
         save_actions.addWidget(self.save_stop_button)
         save_actions.addWidget(self.save_button)
         review.addLayout(save_actions)
@@ -1990,6 +2002,10 @@ class ReviewPage(QWidget):
         self._detection_end_ms = 0
         self._detection_id: int | None = None
         self._displayed_species_name: str | None = None
+
+    def set_previous_enabled(self, enabled: bool) -> None:
+        """Enable navigation to the previously opened detection."""
+        self.previous_button.setEnabled(enabled)
 
     def show_detection(
         self,
@@ -2902,6 +2918,7 @@ class MainWindow(QMainWindow):
             )
         self._class_catalog = class_catalog
         self._page_help_dialog: PageHelpDialog | None = None
+        self._review_history: list[int] = []
 
         root = QWidget()
         root.setObjectName("appRoot")
@@ -2939,7 +2956,7 @@ class MainWindow(QMainWindow):
         self.welcome.create_requested.connect(self._create_project)
         self.welcome.open_requested.connect(self._open_project)
         self.welcome.recent_open_requested.connect(self._open_project_path)
-        self.results_page.review_requested.connect(self._open_review)
+        self.results_page.review_requested.connect(self._start_review)
         self.results_page.run_changed.connect(self._results_run_changed)
         self.results_page.queue_changed.connect(self._results_queue_changed)
         self.results_page.review_order_changed.connect(
@@ -2957,6 +2974,7 @@ class MainWindow(QMainWindow):
         self.reports_page.label_export_requested.connect(self._export_audio_labels)
         self.review_page.save_requested.connect(self._save_review)
         self.review_page.bounds_requested.connect(self._apply_detection_bounds)
+        self.review_page.previous_requested.connect(self._open_previous_review)
         self.project_page.recording_scope_changed.connect(self._save_recording_scope)
         self.project_page.edit_species_requested.connect(self._edit_species)
         self.analysis_page.settings_changed.connect(self._save_analysis_settings)
@@ -3268,7 +3286,9 @@ class MainWindow(QMainWindow):
                     "uncertain. For an incorrect identification, select the corrected species.</p>"
                     "<p><b>Save and next</b> stores the review and advances according to the "
                     "current visible Results ordering. <b>Save and stop</b> stores it and "
-                    "returns without advancing. Reviews and corrections append revision "
+                    "returns without advancing. <b>Previous detection</b> returns to the "
+                    "detection you previously opened without saving current unsaved edits. "
+                    "Reviews and corrections append revision "
                     "history; original inference values remain available for reporting.</p>"
                 ),
             ),
@@ -3779,7 +3799,7 @@ class MainWindow(QMainWindow):
         if detection_id is None:
             self._show_page(4)
             return
-        self._open_review(detection_id)
+        self._start_review(detection_id)
 
     def _show_page(self, index: int) -> None:
         if index == 5:
@@ -4161,7 +4181,12 @@ class MainWindow(QMainWindow):
         self._export_runner = None
         self.reports_page.set_label_export_busy(False)
 
-    def _open_review(self, detection_id: int) -> None:
+    def _start_review(self, detection_id: int) -> None:
+        """Start a new review navigation history from a Results selection."""
+        self._review_history.clear()
+        self._open_review(detection_id)
+
+    def _open_review(self, detection_id: int, *, record_history: bool = True) -> None:
         logger.info("Opening review: detection_id=%d", detection_id)
         if self._database is None:
             return
@@ -4190,7 +4215,19 @@ class MainWindow(QMainWindow):
             recording.resolved_path(self._database.path),
             frequency_bounds,
         )
+        if record_history and (
+            not self._review_history or self._review_history[-1] != detection_id
+        ):
+            self._review_history.append(detection_id)
+        self.review_page.set_previous_enabled(len(self._review_history) > 1)
         self._show_page(4)
+
+    def _open_previous_review(self) -> None:
+        """Return to the preceding detection in the current review history."""
+        if len(self._review_history) <= 1:
+            return
+        self._review_history.pop()
+        self._open_review(self._review_history[-1], record_history=False)
 
     def _apply_detection_bounds(
         self,

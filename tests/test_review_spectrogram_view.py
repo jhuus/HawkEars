@@ -393,6 +393,49 @@ def test_results_choose_selected_visible_detection_or_first_visible():
     app.processEvents()
 
 
+def test_review_previous_detection_button_is_explicit_and_opt_in():
+    app = QApplication.instance() or QApplication([])
+    page = main_window.ReviewPage([])
+    requested = []
+    page.previous_requested.connect(lambda: requested.append(True))
+
+    assert page.previous_button.text() == "Previous detection"
+    assert not page.previous_button.isEnabled()
+    assert "Unsaved changes" in page.previous_button.toolTip()
+
+    page.set_previous_enabled(True)
+    page.previous_button.click()
+    assert requested == [True]
+
+    page.spectrogram.shutdown()
+    page.close()
+    app.processEvents()
+
+
+def test_save_and_next_emits_the_current_review():
+    app = QApplication.instance() or QApplication([])
+    page = main_window.ReviewPage([])
+    saved = []
+    page.save_requested.connect(lambda *values: saved.append(values))
+    page._detection_id = 42
+    page.correction.addItem("American Robin")
+    page.correction.setCurrentText("American Robin")
+
+    page.correct_button.click()
+    assert page.save_button.isEnabled()
+    page.save_button.click()
+
+    assert len(saved) == 1
+    assert saved[0][0] == 42
+    assert saved[0][1] == ReviewVerdict.CORRECT
+    assert saved[0][2] == "American Robin"
+    assert saved[0][4] is True
+
+    page.spectrogram.shutdown()
+    page.close()
+    app.processEvents()
+
+
 def test_results_search_matches_partial_recording_date():
     app = QApplication.instance() or QApplication([])
     page = ResultsPage()
