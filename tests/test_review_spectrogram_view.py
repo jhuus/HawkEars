@@ -758,6 +758,50 @@ def test_results_page_updates_one_detection_without_rebuilding_rows():
     app.processEvents()
 
 
+def test_results_page_preserves_species_sort_when_review_is_saved():
+    app = QApplication.instance() or QApplication([])
+    page = ResultsPage()
+    detections = [
+        DetectionResult(
+            detection_id=index,
+            analysis_run_id=1,
+            analysis_run_name="Run 1",
+            species_name=species_name,
+            score=score,
+            recording_name=f"recording-{index}.wav",
+            start_ms=1_000,
+            end_ms=4_000,
+            recorded_at=None,
+            latitude=None,
+            longitude=None,
+            region_code=None,
+            location_name=None,
+            review_verdict=None,
+            review_notes="",
+        )
+        for index, species_name, score in (
+            (1, "Blue Jay", 0.7),
+            (2, "American Robin", 0.9),
+            (3, "Common Raven", 0.8),
+        )
+    ]
+    page.set_detections(detections)
+    page.table.sortItems(0, Qt.SortOrder.AscendingOrder)
+
+    page.update_detection(
+        replace(detections[0], review_verdict=ReviewVerdict.CORRECT)
+    )
+
+    header = page.table.horizontalHeader()
+    assert header.sortIndicatorSection() == 0
+    assert header.sortIndicatorOrder() == Qt.SortOrder.AscendingOrder
+    assert [
+        page.table.item(row, 0).text() for row in range(page.table.rowCount())
+    ] == ["American Robin", "Blue Jay", "Common Raven"]
+    page.close()
+    app.processEvents()
+
+
 def test_spectrogram_selection_maps_to_time_and_frequency_bounds():
     app = QApplication.instance() or QApplication([])
     view = SpectrogramView()

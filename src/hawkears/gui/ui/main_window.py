@@ -1396,6 +1396,10 @@ class ResultsPage(QWidget):
                 != detection.detection_id
             ):
                 continue
+            header = self.table.horizontalHeader()
+            sort_column = header.sortIndicatorSection()
+            sort_order = header.sortIndicatorOrder()
+            sorting_enabled = self.table.isSortingEnabled()
             self.table.setSortingEnabled(False)
             values = self._detection_values(detection)
             for column, value in enumerate(values):
@@ -1413,8 +1417,9 @@ class ResultsPage(QWidget):
                     )
             if self.species.findText(detection.species_name) < 0:
                 self.species.addItem(detection.species_name)
-            self.table.setSortingEnabled(True)
-            self.table.sortItems(1, Qt.SortOrder.DescendingOrder)
+            self.table.setSortingEnabled(sorting_enabled)
+            if sorting_enabled:
+                self.table.sortItems(sort_column, sort_order)
             self._apply_filters()
             return
 
