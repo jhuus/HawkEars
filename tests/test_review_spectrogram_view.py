@@ -452,6 +452,18 @@ def test_results_choose_selected_visible_detection_or_first_visible():
     app.processEvents()
 
 
+def test_results_defaults_to_score_descending_sort():
+    app = QApplication.instance() or QApplication([])
+    page = ResultsPage()
+    header = page.table.horizontalHeader()
+
+    assert header.sortIndicatorSection() == 1
+    assert header.sortIndicatorOrder() == Qt.SortOrder.DescendingOrder
+
+    page.close()
+    app.processEvents()
+
+
 def test_results_defaults_to_latest_run_and_preserves_explicit_all_selection():
     app = QApplication.instance() or QApplication([])
     page = ResultsPage()
@@ -741,7 +753,11 @@ def test_results_page_updates_one_detection_without_rebuilding_rows():
         for index, score in ((1, 0.9), (2, 0.8))
     ]
     page.set_detections(detections)
-    untouched_item = page.table.item(1, 0)
+    untouched_item = next(
+        page.table.item(row, 0)
+        for row in range(page.table.rowCount())
+        if page.table.item(row, 0).data(Qt.ItemDataRole.UserRole) == 2
+    )
 
     page.update_detection(
         replace(
@@ -751,9 +767,17 @@ def test_results_page_updates_one_detection_without_rebuilding_rows():
         )
     )
 
-    assert page.table.item(0, 0).text() == "American Robin"
-    assert page.table.item(0, 7).text() == "Correct"
-    assert page.table.item(1, 0) is untouched_item
+    updated_row = next(
+        row
+        for row in range(page.table.rowCount())
+        if page.table.item(row, 0).data(Qt.ItemDataRole.UserRole) == 1
+    )
+    assert page.table.item(updated_row, 0).text() == "American Robin"
+    assert page.table.item(updated_row, 7).text() == "Correct"
+    assert any(
+        page.table.item(row, 0) is untouched_item
+        for row in range(page.table.rowCount())
+    )
     page.close()
     app.processEvents()
 

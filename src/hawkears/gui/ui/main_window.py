@@ -1164,6 +1164,7 @@ class ResultsPage(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSortingEnabled(True)
+        self.table.sortItems(1, Qt.SortOrder.DescendingOrder)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setMinimumSectionSize(55)
@@ -2653,7 +2654,6 @@ class ReportsPage(QWidget):
             ("reviewed_value", self.tr("Reviewed")),
             ("confirmed_value", self.tr("Confirmed")),
             ("corrections_value", self.tr("Corrections")),
-            ("additional_value", self.tr("Additional species")),
         )
         for attribute, label in metric_definitions:
             frame, box = card_layout()
@@ -2739,7 +2739,7 @@ class ReportsPage(QWidget):
         self.export_button.clicked.connect(self._export_csv)
         header.addWidget(self.export_button)
         report_layout.addLayout(header)
-        self.table = QTableWidget(0, 10)
+        self.table = QTableWidget(0, 9)
         self.table.setHorizontalHeaderLabels(
             [
                 self.tr("Species"),
@@ -2751,11 +2751,11 @@ class ReportsPage(QWidget):
                 self.tr("Uncertain"),
                 self.tr("Needs review"),
                 self.tr("Corrections"),
-                self.tr("Additional"),
             ]
         )
         self.table.setAlternatingRowColors(True)
         self.table.setSortingEnabled(True)
+        self.table.sortItems(0, Qt.SortOrder.AscendingOrder)
         self.table.setMinimumHeight(210)
         self.table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Stretch
@@ -2902,10 +2902,13 @@ class ReportsPage(QWidget):
                     item = QTableWidgetItem()
                     item.setData(Qt.ItemDataRole.DisplayRole, value)
                 self.validated_table.setItem(row_number, column_number, item)
-        if report.columns:
-            self.validated_table.horizontalHeader().setSectionResizeMode(
-                0, QHeaderView.ResizeMode.Stretch
+        header = self.validated_table.horizontalHeader()
+        for column in range(1, len(report.columns)):
+            header.setSectionResizeMode(
+                column, QHeaderView.ResizeMode.ResizeToContents
             )
+        if report.columns:
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.validated_table.setSortingEnabled(True)
         self.validated_export_button.setEnabled(bool(report.rows))
 
@@ -2919,7 +2922,6 @@ class ReportsPage(QWidget):
             self._percentage(summary.correct_count, summary.reviewed_count)
         )
         self.corrections_value.setText(str(summary.correction_count))
-        self.additional_value.setText(str(summary.additional_annotation_count))
         self.review_export_button.setEnabled(summary.detection_count > 0)
         self.label_export_button.setEnabled(summary.detection_count > 0)
         self.table.setSortingEnabled(False)
@@ -2935,7 +2937,6 @@ class ReportsPage(QWidget):
                 item.uncertain_count,
                 item.needs_review_count,
                 item.correction_count,
-                item.additional_annotation_count,
             )
             for column, value in enumerate(values):
                 if column == 2:
@@ -3025,7 +3026,6 @@ class ReportsPage(QWidget):
                         "uncertain",
                         "needs_review",
                         "corrections",
-                        "additional_annotations",
                     )
                 )
                 for item in self._summary.species:
@@ -3042,7 +3042,6 @@ class ReportsPage(QWidget):
                             item.uncertain_count,
                             item.needs_review_count,
                             item.correction_count,
-                            item.additional_annotation_count,
                         )
                     )
         except OSError as error:
