@@ -14,7 +14,7 @@ infer:
   segment_len: null
   label_field: "codes"
   scaling_coefficient: 1.0
-  scaling_intercept: 1.3
+  scaling_intercept: 1.2
 hawkears:
   heuristics_manager: "hawkears.heuristics.canada.main.CanadaHeuristicsManager"
   taxonomy_file: "data/taxonomy.csv"
