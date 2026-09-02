@@ -57,6 +57,7 @@ def test_analysis_runner_persists_direct_results(tmp_path: Path, monkeypatch):
         [species],
         {
             "min_score": 0.6,
+            "min_label_length": 0.5,
             "location": {"mode": "filelist", "path": str(filelist)},
         },
         tmp_path / "hawkears-data",
@@ -72,6 +73,7 @@ def test_analysis_runner_persists_direct_results(tmp_path: Path, monkeypatch):
         tmp_path / "survey" / "analysis" / "1"
     )
     assert analyze_arguments["data_root"] == tmp_path / "hawkears-data"
+    assert analyze_arguments["min_label_length"] == 0.5
     connection = connect(project_path, readonly=True)
     try:
         assert (

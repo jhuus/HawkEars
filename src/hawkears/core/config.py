@@ -47,6 +47,8 @@ class HawkEarsConfig:
     low_band_ckpt_folder: str = "data/ckpt-low-band"
     # Split variable-duration labels longer than this many seconds.
     max_label_length: Optional[float] = None
+    # Omit variable-duration labels shorter than this many seconds.
+    min_label_length: Optional[float] = None
     # Merge a trailing split fragment at or below this duration, distributing
     # it across the preceding pieces so no very short label is created.
     max_label_length_merge_threshold: float = 0.5

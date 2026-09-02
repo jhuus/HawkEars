@@ -5,6 +5,7 @@
 import glob
 from copy import deepcopy
 import logging
+import math
 import os
 from pathlib import Path
 import signal
@@ -24,6 +25,31 @@ from hawkears.core.analysis_result import (
     AnalysisRecordingResult,
     AnalysisResult,
 )
+
+
+def _validate_label_length_limits(cfg) -> None:
+    maximum = cfg.hawkears.max_label_length
+    minimum = cfg.hawkears.min_label_length
+    if maximum is not None and maximum <= 0:
+        raise ValueError("max_label_length must be greater than zero.")
+    if cfg.hawkears.max_label_length_merge_threshold < 0:
+        raise ValueError("max_label_length_merge_threshold cannot be negative.")
+    if minimum is not None and minimum <= 0:
+        raise ValueError("min_label_length must be greater than zero.")
+    if minimum is not None and not math.isclose(
+        minimum * 4, round(minimum * 4), rel_tol=0.0, abs_tol=1e-9
+    ):
+        raise ValueError("min_label_length must be a multiple of 0.25 seconds.")
+    if cfg.infer.segment_len is not None and maximum is not None:
+        raise ValueError(
+            "max_label_length can only be used with variable-length labels."
+        )
+    if cfg.infer.segment_len is not None and minimum is not None:
+        raise ValueError(
+            "min_label_length can only be used with variable-length labels."
+        )
+    if minimum is not None and maximum is not None and minimum > maximum:
+        raise ValueError("min_label_length cannot exceed max_label_length.")
 
 
 def analyze(
@@ -50,6 +76,7 @@ def analyze(
     quiet: bool = False,
     *,
     max_label_length: Optional[float] = None,
+    min_label_length: Optional[float] = None,
     return_results: bool = False,
     progress_callback: Optional[Callable[[AnalysisProgress], None]] = None,
     recording_callback: Optional[Callable[[AnalysisRecordingResult], None]] = None,
@@ -95,7 +122,10 @@ def analyze(
     - quiet (bool): If true, suppress most console messages.
     - return_results (bool): If true, return structured detections directly.
     - max_label_length: Maximum length in seconds for variable-duration labels.
-      Longer labels are split into consecutive labels without discarding coverage.
+      Longer labels are split into consecutive labels.
+    - min_label_length: Minimum length in seconds for variable-duration labels.
+      Shorter labels, including pieces created by max_label_length, are omitted.
+      Must be a multiple of 0.25 seconds.
     - progress_callback: Optional callback receiving progress notifications.
     - recording_callback: Optional callback receiving detections as each recording
       completes. The callback finishes before completion progress is reported.
@@ -209,21 +239,10 @@ def analyze(
 
         if max_label_length is not None:
             cfg.hawkears.max_label_length = max_label_length
+        if min_label_length is not None:
+            cfg.hawkears.min_label_length = min_label_length
 
-        if (
-            cfg.hawkears.max_label_length is not None
-            and cfg.hawkears.max_label_length <= 0
-        ):
-            raise ValueError("max_label_length must be greater than zero.")
-        if cfg.hawkears.max_label_length_merge_threshold < 0:
-            raise ValueError("max_label_length_merge_threshold cannot be negative.")
-        if (
-            cfg.infer.segment_len is not None
-            and cfg.hawkears.max_label_length is not None
-        ):
-            raise ValueError(
-                "max_label_length can only be used with variable-length labels."
-            )
+        _validate_label_length_limits(cfg)
 
         if max_models is not None:
             cfg.infer.max_models = max_models
@@ -414,6 +433,11 @@ def analyze(
     help="Maximum variable label length in seconds. Longer labels are split without gaps.",
 )
 @click.option(
+    "--min-label-length",
+    type=click.FloatRange(min=0.0, min_open=True),
+    help="Minimum variable label length in seconds. Must be a multiple of 0.25; shorter labels are omitted.",
+)
+@click.option(
     "--models",
     "max_models",
     type=click.IntRange(1, 6),
@@ -471,6 +495,7 @@ def _analyze_cmd(
     num_threads: Optional[int],
     segment_len: Optional[float],
     max_label_length: Optional[float],
+    min_label_length: Optional[float],
     max_models: Optional[int],
     label_field: Optional[str],
     recurse: bool,
@@ -533,6 +558,7 @@ def _analyze_cmd(
             low_band,
             quiet,
             max_label_length=max_label_length,
+            min_label_length=min_label_length,
             cancellation_callback=cancel_requested.is_set,
         )
     finally:

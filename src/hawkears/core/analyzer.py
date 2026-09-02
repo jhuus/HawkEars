@@ -259,6 +259,7 @@ class Analyzer:
                 )
                 dataframe = self._filter_output_dataframe(dataframe)
                 dataframe = self._split_long_dataframe_labels(dataframe)
+                dataframe = self._filter_short_dataframe_labels(dataframe)
 
             if self.recording_callback is not None:
                 self.recording_callback(
@@ -279,6 +280,7 @@ class Analyzer:
                 if rarities_df is not None:
                     rarities_df = self._filter_output_dataframe(rarities_df)
                     rarities_df = self._split_long_dataframe_labels(rarities_df)
+                    rarities_df = self._filter_short_dataframe_labels(rarities_df)
                 with self._dataframes_lock:
                     self.dataframes.append(dataframe)
                     if rarities_df is not None:
@@ -390,6 +392,7 @@ class Analyzer:
         """
         try:
             labels = self._split_long_labels(predictor.get_frame_labels(frame_map))
+            labels = self._filter_short_labels(labels)
             keep_all_scores = self.cfg.infer.min_score > 0
             labels = {
                 self.class_mgr.effective_label(name): [
@@ -453,6 +456,21 @@ class Analyzer:
                     split[name].append(type(label)(label.score, start, end))
         return split
 
+    def _filter_short_labels(self, labels):
+        """Omit variable labels shorter than the configured minimum."""
+        minimum = self.cfg.hawkears.min_label_length
+        if self.cfg.infer.segment_len is not None or minimum is None:
+            return labels
+        tolerance = 1e-9
+        return {
+            name: [
+                label
+                for label in class_labels
+                if label.end_time - label.start_time >= minimum - tolerance
+            ]
+            for name, class_labels in labels.items()
+        }
+
     def _split_label_range(
         self,
         start: float,
@@ -513,6 +531,14 @@ class Analyzer:
         import pandas as pd
 
         return pd.DataFrame(rows, columns=dataframe.columns).reset_index(drop=True)
+
+    def _filter_short_dataframe_labels(self, dataframe):
+        """Apply the variable-label minimum to a predictor dataframe."""
+        minimum = self.cfg.hawkears.min_label_length
+        if self.cfg.infer.segment_len is not None or minimum is None or dataframe.empty:
+            return dataframe
+        durations = dataframe["end_time"] - dataframe["start_time"]
+        return dataframe.loc[durations >= minimum - 1e-9].reset_index(drop=True)
 
     def _save_raven_table(
         self, dataframe, file_path: str, recording_path: Path

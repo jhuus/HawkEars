@@ -1,4 +1,5 @@
 from pathlib import Path
+from collections import namedtuple
 from types import MethodType, SimpleNamespace
 import threading
 
@@ -59,6 +60,7 @@ def test_output_filter_removes_excluded_classes_and_zero_padding():
 def test_audacity_output_reads_min_score_once(tmp_path: Path):
     class InferConfig:
         reads = 0
+        segment_len = None
 
         @property
         def min_score(self):
@@ -67,7 +69,9 @@ def test_audacity_output_reads_min_score_once(tmp_path: Path):
 
     infer = InferConfig()
     analyzer = Analyzer.__new__(Analyzer)
-    analyzer.cfg = SimpleNamespace(infer=infer)
+    analyzer.cfg = SimpleNamespace(
+        hawkears=SimpleNamespace(min_label_length=None), infer=infer
+    )
     analyzer.class_mgr = SimpleNamespace(
         effective_label=lambda label: label,
     )
@@ -229,3 +233,55 @@ def test_variable_label_merge_threshold_can_be_overridden():
         (7.0, 10.0),
         (10.0, 10.5),
     ]
+
+
+def test_short_variable_labels_are_filtered_after_splitting():
+    analyzer = Analyzer.__new__(Analyzer)
+    analyzer.cfg = SimpleNamespace(
+        hawkears=SimpleNamespace(min_label_length=0.5),
+        infer=SimpleNamespace(segment_len=None),
+    )
+    dataframe = pd.DataFrame(
+        [
+            {"start_time": 0.0, "end_time": 0.25, "score": 0.8},
+            {"start_time": 1.0, "end_time": 1.5 - 1e-12, "score": 0.9},
+            {"start_time": 2.0, "end_time": 2.75, "score": 0.7},
+        ]
+    )
+
+    filtered = analyzer._filter_short_dataframe_labels(dataframe)
+
+    assert list(zip(filtered.start_time, filtered.end_time)) == [
+        (1.0, 1.5 - 1e-12),
+        (2.0, 2.75),
+    ]
+
+
+def test_short_audacity_labels_are_filtered():
+    analyzer = Analyzer.__new__(Analyzer)
+    analyzer.cfg = SimpleNamespace(
+        hawkears=SimpleNamespace(min_label_length=0.5),
+        infer=SimpleNamespace(segment_len=None),
+    )
+    Label = namedtuple("Label", "score start_time end_time")
+    labels = {
+        "Marsh Wren": [
+            Label(0.8, 0.0, 0.25),
+            Label(0.9, 1.0, 1.5),
+        ]
+    }
+
+    filtered = analyzer._filter_short_labels(labels)
+
+    assert filtered == {"Marsh Wren": [Label(0.9, 1.0, 1.5)]}
+
+
+def test_minimum_label_length_does_not_filter_fixed_labels():
+    analyzer = Analyzer.__new__(Analyzer)
+    analyzer.cfg = SimpleNamespace(
+        hawkears=SimpleNamespace(min_label_length=0.5),
+        infer=SimpleNamespace(segment_len=0.25),
+    )
+    dataframe = pd.DataFrame([{"start_time": 0.0, "end_time": 0.25, "score": 0.8}])
+
+    assert analyzer._filter_short_dataframe_labels(dataframe) is dataframe

@@ -67,6 +67,7 @@ def test_analysis_defaults_choose_model_count_for_device(
         "num_threads": 1,
         "segment_len": None,
         "max_label_length": None,
+        "min_label_length": None,
     }
 
 
@@ -102,6 +103,10 @@ def test_analysis_page_uses_device_defaults_for_unset_project_settings(
     assert page.current_settings()["min_score"] == 0.7
     assert page.current_settings()["max_models"] == 3
     assert page.current_settings()["num_threads"] == 4
+    assert page.min_label_length.value() == 0
+    assert page.min_label_length.singleStep() == 0.25
+    assert page.min_label_length.decimals() == 2
+    assert page.current_settings()["min_label_length"] is None
     page.close()
     app.processEvents()
 
@@ -189,12 +194,49 @@ def test_zero_threshold_forces_fixed_length_labels(tmp_path: Path, monkeypatch):
     assert page.output.currentData() == "fixed"
     assert not page.output.isEnabled()
     assert page.segment_length.isEnabled()
+    assert not page.min_label_length.isEnabled()
     assert not page.max_label_length.isEnabled()
     assert page.current_settings()["segment_len"] == 3.0
 
     page.threshold.setValue(0.1)
     assert page.output.isEnabled()
     assert page.output.currentData() == "fixed"
+    page.close()
+    app.processEvents()
+
+
+def test_analysis_page_saves_variable_label_length_limits(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        main_window,
+        "analysis_setting_defaults",
+        lambda paths: {
+            "min_score": 0.7,
+            "max_models": 3,
+            "num_threads": 1,
+            "segment_len": None,
+            "max_label_length": None,
+            "min_label_length": None,
+        },
+    )
+    app = QApplication.instance() or QApplication([])
+    page = AnalysisPage(ApplicationPaths(tmp_path))
+    page.configure(
+        {"min_label_length": 0.5, "max_label_length": 3.0},
+        recording_directory=None,
+        recurse=False,
+        species_count=1,
+        editable=True,
+    )
+
+    assert page.min_label_length.isEnabled()
+    assert page.min_label_length.value() == 0.5
+    assert page.current_settings()["min_label_length"] == 0.5
+    assert page.current_settings()["max_label_length"] == 3.0
+
+    page.max_label_length.setValue(0)
+    assert page.min_label_length.maximum() == 600
+    page.min_label_length.setValue(0)
+    assert page.current_settings()["min_label_length"] is None
     page.close()
     app.processEvents()
 

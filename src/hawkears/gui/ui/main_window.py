@@ -161,6 +161,7 @@ def analysis_setting_defaults(paths: ApplicationPaths) -> dict[str, object]:
         "num_threads": 1,
         "segment_len": config.infer.segment_len,
         "max_label_length": config.hawkears.max_label_length,
+        "min_label_length": getattr(config.hawkears, "min_label_length", None),
     }
 
 
@@ -529,6 +530,11 @@ class AnalysisPage(QWidget):
         self.max_label_length.setDecimals(0)
         self.max_label_length.setSuffix(self.tr(" seconds"))
         self.max_label_length.setSpecialValueText(self.tr("No limit"))
+        self.min_label_length = QDoubleSpinBox()
+        self.min_label_length.setRange(0, 600)
+        self.min_label_length.setSingleStep(0.25)
+        self.min_label_length.setDecimals(2)
+        self.min_label_length.setSuffix(self.tr(" seconds"))
         self.threshold.setToolTip(
             self.tr("Exclude detections whose confidence score is below this value.")
         )
@@ -554,6 +560,12 @@ class AnalysisPage(QWidget):
                 "into multiple labels."
             )
         )
+        self.min_label_length.setToolTip(
+            self.tr(
+                "Omit variable-length labels shorter than this duration. "
+                "Set to zero to keep labels of any length."
+            )
+        )
         form.addRow(self.tr("Inference device"), self.inference_device)
         form.addRow(self.tr("Minimum score"), self.threshold)
         form.addRow(self.tr("Ensemble models"), self.models)
@@ -562,6 +574,8 @@ class AnalysisPage(QWidget):
         self.segment_length_label = QLabel(self.tr("Fixed segment length"))
         self.segment_length_label.setEnabled(False)
         form.addRow(self.segment_length_label, self.segment_length)
+        self.min_label_length_label = QLabel(self.tr("Minimum variable label length"))
+        form.addRow(self.min_label_length_label, self.min_label_length)
         self.max_label_length_label = QLabel(self.tr("Maximum variable label length"))
         form.addRow(self.max_label_length_label, self.max_label_length)
         settings.addLayout(form)
@@ -581,6 +595,7 @@ class AnalysisPage(QWidget):
             self.threads,
             self.output,
             self.segment_length,
+            self.min_label_length,
             self.max_label_length,
             self.location_button,
         )
@@ -640,7 +655,8 @@ class AnalysisPage(QWidget):
         self.threads.valueChanged.connect(self._emit_settings)
         self.output.currentIndexChanged.connect(self._label_format_changed)
         self.segment_length.valueChanged.connect(self._emit_settings)
-        self.max_label_length.valueChanged.connect(self._emit_settings)
+        self.min_label_length.valueChanged.connect(self._emit_settings)
+        self.max_label_length.valueChanged.connect(self._max_label_length_changed)
 
     def configure(
         self,
@@ -664,6 +680,8 @@ class AnalysisPage(QWidget):
         )
         maximum = settings.get("max_label_length", defaults["max_label_length"])
         self.max_label_length.setValue(float(maximum) if maximum is not None else 0)
+        minimum = settings.get("min_label_length", defaults.get("min_label_length"))
+        self.min_label_length.setValue(float(minimum) if minimum is not None else 0)
         location = settings.get("location", {"mode": "none"})
         self._location_settings = (
             dict(location) if isinstance(location, dict) else {"mode": "none"}
@@ -719,6 +737,7 @@ class AnalysisPage(QWidget):
 
     def current_settings(self) -> dict[str, object]:
         maximum = self.max_label_length.value()
+        minimum = self.min_label_length.value()
         fixed_length = self.output.currentData() == "fixed"
         return {
             "min_score": self.threshold.value(),
@@ -726,6 +745,7 @@ class AnalysisPage(QWidget):
             "num_threads": self.threads.value(),
             "segment_len": self.segment_length.value() if fixed_length else None,
             "max_label_length": (maximum if not fixed_length and maximum > 0 else None),
+            "min_label_length": (minimum if not fixed_length and minimum > 0 else None),
             "location": dict(self._location_settings),
         }
 
@@ -799,6 +819,11 @@ class AnalysisPage(QWidget):
         self._update_label_controls()
         self._emit_settings()
 
+    def _max_label_length_changed(self) -> None:
+        maximum = self.max_label_length.value()
+        self.min_label_length.setMaximum(maximum if maximum > 0 else 600)
+        self._emit_settings()
+
     def _update_label_controls(self) -> None:
         zero_threshold = self.threshold.value() == 0
         if zero_threshold and self.output.currentData() != "fixed":
@@ -809,6 +834,8 @@ class AnalysisPage(QWidget):
         self.output.setEnabled(self._editable and not zero_threshold)
         self.segment_length.setEnabled(self._editable and fixed_length)
         self.segment_length_label.setEnabled(self._editable and fixed_length)
+        self.min_label_length.setEnabled(self._editable and not fixed_length)
+        self.min_label_length_label.setEnabled(self._editable and not fixed_length)
         self.max_label_length.setEnabled(self._editable and not fixed_length)
         self.max_label_length_label.setEnabled(self._editable and not fixed_length)
 
@@ -3367,8 +3394,8 @@ class MainWindow(QMainWindow):
                     "worker threads.</p>"
                     "<p>Use <b>Label format</b> to choose either variable- or fixed-length "
                     "detection labels. If you choose variable-length labels, you can specify "
-                    "a maximum length, in which case longer detections will be split into "
-                    "multiple labels.</p>"
+                    "a minimum length to omit shorter detections, or a maximum length to "
+                    "split longer detections into multiple labels.</p>"
                     "<h3>Location and date</h3>"
                     "<p>Location information can apply geographic occurrence filtering and "
                     "location-specific heuristics. It may be supplied for the whole project "
