@@ -221,6 +221,25 @@ class NumericTableWidgetItem(QTableWidgetItem):
         return super().__lt__(other)
 
 
+class RecordingTableWidgetItem(QTableWidgetItem):
+    """Sort recordings chronologically when their names match."""
+
+    SECONDARY_SORT_ROLE = Qt.ItemDataRole.UserRole + 1
+    PRIMARY_SORT_ROLE = Qt.ItemDataRole.UserRole + 2
+
+    def __init__(self, recording_name: str, start_ms: int) -> None:
+        super().__init__(recording_name)
+        self.setData(self.PRIMARY_SORT_ROLE, recording_name)
+        self.setData(self.SECONDARY_SORT_ROLE, start_ms)
+
+    def __lt__(self, other: QTableWidgetItem) -> bool:
+        left_name = str(self.data(self.PRIMARY_SORT_ROLE))
+        right_name = str(other.data(self.PRIMARY_SORT_ROLE))
+        left_offset = int(self.data(self.SECONDARY_SORT_ROLE))
+        right_offset = int(other.data(self.SECONDARY_SORT_ROLE))
+        return (left_name, left_offset) < (right_name, right_offset)
+
+
 class WelcomePage(QWidget):
     create_requested = Signal()
     open_requested = Signal()
@@ -1034,6 +1053,7 @@ class ResultsPage(QWidget):
         sources = QHBoxLayout()
         sources.addWidget(QLabel(self.tr("Analysis run")))
         self.run = QComboBox()
+        self._run_selection_initialized = False
         self.run.currentIndexChanged.connect(
             lambda: self.run_changed.emit(self.run.currentData())
         )
@@ -1174,7 +1194,6 @@ class ResultsPage(QWidget):
         current = self.run.currentData()
         self.run.blockSignals(True)
         self.run.clear()
-        self.run.addItem(self.tr("All detections"), None)
         for run in runs:
             label = run.name or self.tr("Run %1").replace("%1", str(run.id))
             date = run.created_at[:10]
@@ -1184,9 +1203,17 @@ class ResultsPage(QWidget):
                 .replace("%2", date),
                 run.id,
             )
-        selected = self.run.findData(current)
-        if selected < 0 and runs:
-            selected = 1
+        self.run.addItem(self.tr("All detections"), None)
+        if not runs:
+            selected = 0
+            self._run_selection_initialized = False
+        elif not self._run_selection_initialized:
+            selected = 0
+            self._run_selection_initialized = True
+        else:
+            selected = self.run.findData(current)
+            if selected < 0:
+                selected = 0
         self.run.setCurrentIndex(max(0, selected))
         self.run.blockSignals(False)
 
@@ -1349,7 +1376,11 @@ class ResultsPage(QWidget):
                 ),
             )
             for column, value in enumerate(values):
-                item = QTableWidgetItem(value)
+                item = (
+                    RecordingTableWidgetItem(value, detection.start_ms)
+                    if column == 2
+                    else QTableWidgetItem(value)
+                )
                 item.setData(Qt.ItemDataRole.UserRole, detection.detection_id)
                 self.table.setItem(row, column, item)
         self.table.setSortingEnabled(not preserve_order)
@@ -1371,6 +1402,15 @@ class ResultsPage(QWidget):
                 item = self.table.item(row, column)
                 item.setText(value)
                 item.setData(Qt.ItemDataRole.UserRole, detection.detection_id)
+                if column == 2:
+                    item.setData(
+                        RecordingTableWidgetItem.PRIMARY_SORT_ROLE,
+                        detection.recording_name,
+                    )
+                    item.setData(
+                        RecordingTableWidgetItem.SECONDARY_SORT_ROLE,
+                        detection.start_ms,
+                    )
             if self.species.findText(detection.species_name) < 0:
                 self.species.addItem(detection.species_name)
             self.table.setSortingEnabled(True)
@@ -1999,10 +2039,12 @@ class ReviewPage(QWidget):
         self.correction.setEnabled(False)
         self.correction.setToolTip(
             self.tr(
-                "Choose the correct species. The original detected species cannot "
-                "be selected for an incorrect verdict."
+                "Optionally choose the correct species. Leave this blank when the "
+                "identification is incorrect but the correct species is unknown. The "
+                "original detected species cannot be selected for an incorrect verdict."
             )
         )
+        self.correction.lineEdit().setPlaceholderText(self.tr("Optional"))
         self.correction.activated.connect(self._correction_selected)
         completer = self.correction.completer()
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
@@ -2010,7 +2052,7 @@ class ReviewPage(QWidget):
         self.notes = QTextEdit()
         self.notes.setPlaceholderText(self.tr("Optional review notes"))
         self.notes.setMinimumHeight(110)
-        self.correction_label = QLabel(self.tr("Correct species"))
+        self.correction_label = QLabel(self.tr("Correct species (optional)"))
         self.correction_label.setEnabled(False)
         form.addRow(self.correction_label, self.correction)
         form.addRow(self.tr("Notes"), self.notes)
@@ -3454,8 +3496,9 @@ class MainWindow(QMainWindow):
                     "recording or analysis scores.</p>"
                     "<p>Drag on the spectrogram and choose <b>Apply bounds</b> to revise time "
                     "and frequency bounds. Mark the identification correct, incorrect, or "
-                    "uncertain. For an incorrect identification, select a corrected species "
-                    "different from the original detected species.</p>"
+                    "uncertain. For an incorrect identification, you may select a corrected "
+                    "species different from the original detected species, or leave Correct "
+                    "species blank when the correct identification is unknown.</p>"
                     "<p><b>Save and next</b> stores the review and advances according to the "
                     "current visible Results ordering. <b>Save and stop</b> stores it and "
                     "returns without advancing. <b>Previous detection</b> returns to the "
@@ -3465,8 +3508,9 @@ class MainWindow(QMainWindow):
                     "<h3>Keyboard workflow</h3>"
                     "<p>Use <b>Alt+C</b>, <b>Alt+I</b>, or <b>Alt+U</b> to mark a detection "
                     "correct, incorrect, or uncertain. Correct and uncertain move focus to "
-                    "Save and next; incorrect moves focus to Correct species. Selecting a "
-                    "corrected species then moves focus to Save and next.</p>"
+                    "Save and next; incorrect moves focus to the optional Correct species "
+                    "field. Selecting a corrected species then moves focus to Save and next; "
+                    "you can also leave it blank and use the save shortcut.</p>"
                     "<p>Use <b>Ctrl+Enter</b> to save and advance, <b>Ctrl+Shift+Enter</b> to "
                     "save and stop, and <b>Alt+Left</b> for the previous detection. "
                     "<b>Space</b> plays or stops the detection unless you are typing in Notes, "
@@ -4501,15 +4545,19 @@ class MainWindow(QMainWindow):
         )
         if self._database is None:
             return
-        definition = next(
-            (
-                item
-                for item in self._class_catalog
-                if item.common_name == corrected_species_name
-            ),
-            None,
+        definition = (
+            next(
+                (
+                    item
+                    for item in self._class_catalog
+                    if item.common_name == corrected_species_name
+                ),
+                None,
+            )
+            if corrected_species_name
+            else None
         )
-        if definition is None:
+        if corrected_species_name and definition is None:
             QMessageBox.warning(
                 self,
                 self.tr("Select a species"),
@@ -4520,6 +4568,7 @@ class MainWindow(QMainWindow):
         original_species = self._database.species.get(detection.original.species_id)
         if (
             verdict is ReviewVerdict.INCORRECT
+            and definition is not None
             and definition.canonical_key == original_species.canonical_key
         ):
             QMessageBox.warning(
@@ -4538,15 +4587,16 @@ class MainWindow(QMainWindow):
                 detection_id
             )
         try:
-            corrected_species = self._database.species.ensure_catalog_species(
-                definition
-            )
-            if detection.current.species_id != corrected_species.id:
-                self._database.detections.revise(
-                    detection_id,
-                    species_id=corrected_species.id,
-                    notes="Species corrected during review.",
+            if definition is not None:
+                corrected_species = self._database.species.ensure_catalog_species(
+                    definition
                 )
+                if detection.current.species_id != corrected_species.id:
+                    self._database.detections.revise(
+                        detection_id,
+                        species_id=corrected_species.id,
+                        notes="Species corrected during review.",
+                    )
             self._database.detections.set_review(detection_id, verdict, notes=notes)
             self._database.review_queues.recalculate_for_detection(detection_id)
         except (LookupError, ValueError, sqlite3.DatabaseError) as error:

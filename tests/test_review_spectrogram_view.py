@@ -13,6 +13,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QTableWidgetItem
 
 from hawkears.gui.database.records import (
+    AnalysisRunSummary,
     DetectionResult,
     ResumableAnalysisRun,
     ReviewVerdict,
@@ -451,6 +452,81 @@ def test_results_choose_selected_visible_detection_or_first_visible():
     app.processEvents()
 
 
+def test_results_defaults_to_latest_run_and_preserves_explicit_all_selection():
+    app = QApplication.instance() or QApplication([])
+    page = ResultsPage()
+    runs = [
+        AnalysisRunSummary(
+            id=2,
+            name="Latest run",
+            status="complete",
+            created_at="2026-09-02T12:00:00",
+            detection_count=20,
+        ),
+        AnalysisRunSummary(
+            id=1,
+            name="Earlier run",
+            status="complete",
+            created_at="2026-09-01T12:00:00",
+            detection_count=10,
+        ),
+    ]
+
+    page.configure_runs(runs)
+    assert page.current_run_id() == 2
+    assert page.run.itemData(page.run.count() - 1) is None
+    assert page.run.itemText(page.run.count() - 1) == "All detections"
+
+    page.run.setCurrentIndex(page.run.findData(None))
+    page.configure_runs(runs)
+    assert page.current_run_id() is None
+
+    page.configure_runs([])
+    page.configure_runs(runs)
+    assert page.current_run_id() == 2
+    page.close()
+    app.processEvents()
+
+
+def test_results_sort_recording_uses_detection_offset_as_tiebreaker():
+    app = QApplication.instance() or QApplication([])
+    page = ResultsPage()
+    detections = [
+        DetectionResult(
+            detection_id=index,
+            analysis_run_id=1,
+            analysis_run_name="Run 1",
+            species_name="Alder Flycatcher",
+            score=score,
+            recording_name=recording_name,
+            start_ms=start_ms,
+            end_ms=start_ms + 2_000,
+            recorded_at=None,
+            latitude=None,
+            longitude=None,
+            region_code=None,
+            location_name=None,
+            review_verdict=None,
+            review_notes="",
+        )
+        for index, recording_name, start_ms, score in (
+            (1, "b.wav", 1_000, 0.7),
+            (2, "a.wav", 8_000, 0.9),
+            (3, "a.wav", 2_000, 0.6),
+        )
+    ]
+    page.set_detections(detections)
+
+    page.table.sortItems(2, Qt.SortOrder.AscendingOrder)
+
+    assert [
+        page.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        for row in range(page.table.rowCount())
+    ] == [3, 2, 1]
+    page.close()
+    app.processEvents()
+
+
 def test_results_delete_button_tracks_and_emits_selected_queue():
     app = QApplication.instance() or QApplication([])
     page = ResultsPage()
@@ -523,6 +599,31 @@ def test_save_and_next_emits_the_current_review():
     assert saved[0][1] == ReviewVerdict.CORRECT
     assert saved[0][2] == "American Robin"
     assert saved[0][4] is True
+
+    page.spectrogram.shutdown()
+    page.close()
+    app.processEvents()
+
+
+def test_incorrect_review_can_be_saved_without_a_corrected_species():
+    app = QApplication.instance() or QApplication([])
+    page = main_window.ReviewPage([])
+    saved = []
+    page.save_requested.connect(lambda *values: saved.append(values))
+    page._detection_id = 42
+    page._displayed_species_name = "American Robin"
+    page._original_species_name = "American Robin"
+    page.show()
+    app.processEvents()
+
+    page.incorrect_button.click()
+    assert page.correction.currentIndex() == -1
+    assert "unknown" in page.correction.toolTip()
+    page.save_button.click()
+
+    assert len(saved) == 1
+    assert saved[0][1] == ReviewVerdict.INCORRECT
+    assert saved[0][2] == ""
 
     page.spectrogram.shutdown()
     page.close()
