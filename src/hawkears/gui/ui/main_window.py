@@ -1967,6 +1967,7 @@ class ReviewPage(QWidget):
         playback = QHBoxLayout()
         self.play_context_button = QPushButton(self.tr("▶  Play context"))
         self.play_detection_button = QPushButton(self.tr("Play detection"))
+        self.play_detection_button.setToolTip(self.tr("Play detection (Alt+P)"))
         self.play_context_button.setEnabled(False)
         self.play_detection_button.setEnabled(False)
         self.play_context_button.clicked.connect(self._play_context)
@@ -2127,6 +2128,7 @@ class ReviewPage(QWidget):
             ("Alt+C", self.correct_button.click),
             ("Alt+I", self.incorrect_button.click),
             ("Alt+U", self.uncertain_button.click),
+            ("Alt+P", self.play_detection_button.click),
             ("Ctrl+Return", lambda: self._save(True)),
             ("Ctrl+Shift+Return", lambda: self._save(False)),
             ("Alt+Left", self.previous_button.click),
@@ -2904,9 +2906,7 @@ class ReportsPage(QWidget):
                 self.validated_table.setItem(row_number, column_number, item)
         header = self.validated_table.horizontalHeader()
         for column in range(1, len(report.columns)):
-            header.setSectionResizeMode(
-                column, QHeaderView.ResizeMode.ResizeToContents
-            )
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         if report.columns:
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.validated_table.setSortingEnabled(True)

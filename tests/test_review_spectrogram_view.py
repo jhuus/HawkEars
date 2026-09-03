@@ -656,6 +656,17 @@ def test_review_keyboard_shortcuts_and_contextual_focus():
     page.correct_button.setFocus()
     app.processEvents()
 
+    play_requests = []
+    page.play_detection_button.setEnabled(True)
+    page.play_detection_button.clicked.connect(lambda: play_requests.append(True))
+    QTest.keyClick(
+        page.play_detection_button,
+        Qt.Key.Key_P,
+        Qt.KeyboardModifier.AltModifier,
+    )
+    assert play_requests == [True]
+    assert page.play_detection_button.toolTip() == "Play detection (Alt+P)"
+
     QTest.keyClick(page.correct_button, Qt.Key.Key_I, Qt.KeyboardModifier.AltModifier)
     assert page.incorrect_button.isChecked()
     assert page.correction.hasFocus()
