@@ -24,6 +24,7 @@ from hawkears.gui.services.spectrogram import ReviewSpectrogram
 from hawkears.gui.ui import main_window
 from hawkears.gui.ui.main_window import (
     AnalysisPage,
+    RenameAnalysisRunDialog,
     ResultsPage,
     ReviewPage,
     SpectrogramView,
@@ -486,10 +487,12 @@ def test_results_defaults_to_latest_run_and_preserves_explicit_all_selection():
 
     page.configure_runs(runs)
     assert page.current_run_id() == 2
+    assert page.rename_run_button.isEnabled()
     assert page.run.itemData(page.run.count() - 1) is None
     assert page.run.itemText(page.run.count() - 1) == "All detections"
 
     page.run.setCurrentIndex(page.run.findData(None))
+    assert not page.rename_run_button.isEnabled()
     page.configure_runs(runs)
     assert page.current_run_id() is None
 
@@ -497,6 +500,34 @@ def test_results_defaults_to_latest_run_and_preserves_explicit_all_selection():
     page.configure_runs(runs)
     assert page.current_run_id() == 2
     page.close()
+    app.processEvents()
+
+
+def test_results_requests_rename_for_selected_run():
+    app = QApplication.instance() or QApplication([])
+    page = ResultsPage()
+    page.configure_runs(
+        [AnalysisRunSummary(1, None, "completed", "2026-09-02T12:00:00", 3)]
+    )
+    requested = []
+    page.rename_run_requested.connect(requested.append)
+
+    page.rename_run_button.click()
+
+    assert requested == [1]
+    page.close()
+    app.processEvents()
+
+
+def test_rename_analysis_run_dialog_has_room_for_its_title():
+    app = QApplication.instance() or QApplication([])
+    dialog = RenameAnalysisRunDialog(2, "Basic inference")
+
+    assert dialog.windowTitle() == "Rename analysis run"
+    assert dialog.minimumWidth() == 400
+    assert dialog.run_name() == "Basic inference"
+
+    dialog.close()
     app.processEvents()
 
 

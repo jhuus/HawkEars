@@ -1029,9 +1029,42 @@ class AnalysisPage(QWidget):
         return self._running
 
 
+class RenameAnalysisRunDialog(QDialog):
+    def __init__(
+        self, run_id: int, name: str | None, parent: QWidget | None = None
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(self.tr("Rename analysis run"))
+        self.setMinimumWidth(400)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(
+            QLabel(
+                self.tr("Name (leave blank to use Run %1)").replace(
+                    "%1", str(run_id)
+                )
+            )
+        )
+        self.name = QLineEdit(name or "")
+        self.name.selectAll()
+        layout.addWidget(self.name)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def run_name(self) -> str:
+        return self.name.text()
+
+
 class ResultsPage(QWidget):
     review_requested = Signal(int)
     run_changed = Signal(object)
+    rename_run_requested = Signal(int)
     queue_changed = Signal(object)
     create_queue_requested = Signal()
     delete_queue_requested = Signal(int)
@@ -1054,10 +1087,15 @@ class ResultsPage(QWidget):
         sources.addWidget(QLabel(self.tr("Analysis run")))
         self.run = QComboBox()
         self._run_selection_initialized = False
-        self.run.currentIndexChanged.connect(
-            lambda: self.run_changed.emit(self.run.currentData())
-        )
+        self.run.currentIndexChanged.connect(self._run_selected)
         sources.addWidget(self.run, 1)
+        self.rename_run_button = QPushButton(self.tr("Rename…"))
+        self.rename_run_button.setToolTip(
+            self.tr("Change the display name of the selected analysis run.")
+        )
+        self.rename_run_button.setEnabled(False)
+        self.rename_run_button.clicked.connect(self._rename_run)
+        sources.addWidget(self.rename_run_button)
         sources.addWidget(QLabel(self.tr("Review queue")))
         self.queue = QComboBox()
         self.queue.currentIndexChanged.connect(self._queue_selected)
@@ -1217,6 +1255,17 @@ class ResultsPage(QWidget):
                 selected = 0
         self.run.setCurrentIndex(max(0, selected))
         self.run.blockSignals(False)
+        self.rename_run_button.setEnabled(self.current_run_id() is not None)
+
+    def _run_selected(self) -> None:
+        run_id = self.current_run_id()
+        self.rename_run_button.setEnabled(run_id is not None)
+        self.run_changed.emit(run_id)
+
+    def _rename_run(self) -> None:
+        run_id = self.current_run_id()
+        if run_id is not None:
+            self.rename_run_requested.emit(run_id)
 
     def current_run_id(self) -> int | None:
         value = self.run.currentData()
@@ -3172,6 +3221,7 @@ class MainWindow(QMainWindow):
         self.welcome.recent_open_requested.connect(self._open_project_path)
         self.results_page.review_requested.connect(self._start_review)
         self.results_page.run_changed.connect(self._results_run_changed)
+        self.results_page.rename_run_requested.connect(self._rename_analysis_run)
         self.results_page.queue_changed.connect(self._results_queue_changed)
         self.results_page.review_order_changed.connect(
             self._results_review_order_changed
@@ -4074,6 +4124,22 @@ class MainWindow(QMainWindow):
         self.results_page.select_queue(None)
         self.results_page.queue.blockSignals(False)
         self._load_detection_results(run_id)
+
+    def _rename_analysis_run(self, run_id: int) -> None:
+        if self._database is None:
+            return
+        run = next(
+            (item for item in self._database.analysis.list_runs() if item.id == run_id),
+            None,
+        )
+        if run is None:
+            return
+        dialog = RenameAnalysisRunDialog(run_id, run.name, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._database.analysis.rename_run(run_id, dialog.run_name())
+        self._load_results(selected_run_id=run_id)
+        self.reports_page.configure_runs(self._database.analysis.list_runs())
 
     def _results_queue_changed(self, queue_id: object = None) -> None:
         logger.info("Review queue selection changed: queue_id=%s", queue_id)

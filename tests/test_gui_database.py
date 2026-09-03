@@ -138,6 +138,20 @@ def test_analysis_run_settings_are_retrieved_from_run_snapshot(tmp_path: Path):
     assert database.analysis.settings(run_id) == {"min_score": 0.72}
 
 
+def test_analysis_run_can_be_renamed_and_restored_to_default(tmp_path: Path):
+    database = create_project(tmp_path)
+    run_id = database.analysis.create_run("2.3.0", {}, species_ids=[], recording_ids=[])
+
+    database.analysis.rename_run(run_id, "  Spring migration  ")
+    assert database.analysis.list_runs()[0].name == "Spring migration"
+
+    database.analysis.rename_run(run_id, "  ")
+    assert database.analysis.list_runs()[0].name is None
+
+    with pytest.raises(ValueError, match="does not exist"):
+        database.analysis.rename_run(run_id + 1, "Missing")
+
+
 def test_project_species_can_be_replaced_from_supported_catalog(tmp_path: Path):
     database = create_project(tmp_path)
     definitions = [

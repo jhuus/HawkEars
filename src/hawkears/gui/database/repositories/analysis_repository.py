@@ -115,6 +115,17 @@ class AnalysisRepository:
                 ),
             )
 
+    def rename_run(self, run_id: int, name: Optional[str]) -> None:
+        """Set a run's display name, or restore its generated name when blank."""
+        normalized_name = name.strip() if name is not None else ""
+        with transaction(self.database_path) as connection:
+            cursor = connection.execute(
+                "UPDATE analysis_run SET name = ? WHERE id = ?",
+                (normalized_name or None, run_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError(f"Analysis run {run_id} does not exist.")
+
     def recover_interrupted_runs(self) -> list[int]:
         """Make runs left active by a terminated process safely resumable."""
         with transaction(self.database_path) as connection:
