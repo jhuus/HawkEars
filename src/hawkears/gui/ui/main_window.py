@@ -66,6 +66,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QProgressBar,
+    QProgressDialog,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -105,6 +106,7 @@ from hawkears.gui.services.location_catalog import (
     LocationCatalogError,
 )
 from hawkears.gui.services.analysis_runner import AnalysisRunner
+from hawkears.gui.services.analysis_run_delete_runner import AnalysisRunDeleteRunner
 from hawkears.gui.services.import_runner import HawkEarsImportRunner
 from hawkears.gui.services.label_export_runner import LabelExportRunner
 from hawkears.gui.services.spectrogram import (
@@ -1040,9 +1042,7 @@ class RenameAnalysisRunDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(
             QLabel(
-                self.tr("Name (leave blank to use Run %1)").replace(
-                    "%1", str(run_id)
-                )
+                self.tr("Name (leave blank to use Run %1)").replace("%1", str(run_id))
             )
         )
         self.name = QLineEdit(name or "")
@@ -1050,8 +1050,7 @@ class RenameAnalysisRunDialog(QDialog):
         layout.addWidget(self.name)
 
         buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -1061,10 +1060,75 @@ class RenameAnalysisRunDialog(QDialog):
         return self.name.text()
 
 
+class AnalysisRunsDialog(QDialog):
+    rename_requested = Signal(int)
+    delete_requested = Signal(int)
+
+    def __init__(
+        self, runs: list[AnalysisRunSummary], parent: QWidget | None = None
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(self.tr("Manage analysis runs"))
+        self.setMinimumWidth(520)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(self.tr("Analysis run")))
+        self.run = QComboBox()
+        self.run.currentIndexChanged.connect(self._selection_changed)
+        layout.addWidget(self.run)
+
+        actions = QHBoxLayout()
+        self.rename_button = QPushButton(self.tr("Rename…"))
+        self.rename_button.clicked.connect(self._rename)
+        actions.addWidget(self.rename_button)
+        self.delete_button = QPushButton(self.tr("Delete…"))
+        self.delete_button.clicked.connect(self._delete)
+        actions.addWidget(self.delete_button)
+        actions.addStretch()
+        close_button = QPushButton(self.tr("Close"))
+        close_button.clicked.connect(self.accept)
+        actions.addWidget(close_button)
+        layout.addLayout(actions)
+        self.configure_runs(runs)
+
+    def configure_runs(
+        self, runs: list[AnalysisRunSummary], selected_run_id: int | None = None
+    ) -> None:
+        current = (
+            selected_run_id if selected_run_id is not None else self.run.currentData()
+        )
+        self.run.blockSignals(True)
+        self.run.clear()
+        for run in runs:
+            label = run.name or self.tr("Run %1").replace("%1", str(run.id))
+            self.run.addItem(
+                self.tr("%1 · %2 · %n detections", None, run.detection_count)
+                .replace("%1", label)
+                .replace("%2", run.created_at[:10]),
+                run.id,
+            )
+        selected = self.run.findData(current)
+        self.run.setCurrentIndex(max(0, selected))
+        self.run.blockSignals(False)
+        self._selection_changed()
+
+    def _selection_changed(self) -> None:
+        enabled = self.run.currentData() is not None
+        self.rename_button.setEnabled(enabled)
+        self.delete_button.setEnabled(enabled)
+
+    def _rename(self) -> None:
+        if self.run.currentData() is not None:
+            self.rename_requested.emit(int(self.run.currentData()))
+
+    def _delete(self) -> None:
+        if self.run.currentData() is not None:
+            self.delete_requested.emit(int(self.run.currentData()))
+
+
 class ResultsPage(QWidget):
     review_requested = Signal(int)
     run_changed = Signal(object)
-    rename_run_requested = Signal(int)
+    manage_runs_requested = Signal()
     queue_changed = Signal(object)
     create_queue_requested = Signal()
     delete_queue_requested = Signal(int)
@@ -1089,13 +1153,11 @@ class ResultsPage(QWidget):
         self._run_selection_initialized = False
         self.run.currentIndexChanged.connect(self._run_selected)
         sources.addWidget(self.run, 1)
-        self.rename_run_button = QPushButton(self.tr("Rename…"))
-        self.rename_run_button.setToolTip(
-            self.tr("Change the display name of the selected analysis run.")
-        )
-        self.rename_run_button.setEnabled(False)
-        self.rename_run_button.clicked.connect(self._rename_run)
-        sources.addWidget(self.rename_run_button)
+        self.manage_runs_button = QPushButton(self.tr("Manage…"))
+        self.manage_runs_button.setToolTip(self.tr("Rename or delete analysis runs."))
+        self.manage_runs_button.setEnabled(False)
+        self.manage_runs_button.clicked.connect(self.manage_runs_requested)
+        sources.addWidget(self.manage_runs_button)
         sources.addWidget(QLabel(self.tr("Review queue")))
         self.queue = QComboBox()
         self.queue.currentIndexChanged.connect(self._queue_selected)
@@ -1255,17 +1317,11 @@ class ResultsPage(QWidget):
                 selected = 0
         self.run.setCurrentIndex(max(0, selected))
         self.run.blockSignals(False)
-        self.rename_run_button.setEnabled(self.current_run_id() is not None)
+        self.manage_runs_button.setEnabled(bool(runs))
 
     def _run_selected(self) -> None:
         run_id = self.current_run_id()
-        self.rename_run_button.setEnabled(run_id is not None)
         self.run_changed.emit(run_id)
-
-    def _rename_run(self) -> None:
-        run_id = self.current_run_id()
-        if run_id is not None:
-            self.rename_run_requested.emit(run_id)
 
     def current_run_id(self) -> int | None:
         value = self.run.currentData()
@@ -3231,7 +3287,7 @@ class MainWindow(QMainWindow):
         self.welcome.recent_open_requested.connect(self._open_project_path)
         self.results_page.review_requested.connect(self._start_review)
         self.results_page.run_changed.connect(self._results_run_changed)
-        self.results_page.rename_run_requested.connect(self._rename_analysis_run)
+        self.results_page.manage_runs_requested.connect(self._manage_analysis_runs)
         self.results_page.queue_changed.connect(self._results_queue_changed)
         self.results_page.review_order_changed.connect(
             self._results_review_order_changed
@@ -3269,6 +3325,10 @@ class MainWindow(QMainWindow):
         self._analysis_runner: AnalysisRunner | HawkEarsImportRunner | None = None
         self._export_thread: QThread | None = None
         self._export_runner: LabelExportRunner | None = None
+        self._run_delete_thread: QThread | None = None
+        self._run_delete_runner: AnalysisRunDeleteRunner | None = None
+        self._run_delete_progress: QProgressDialog | None = None
+        self._run_management_dialog: AnalysisRunsDialog | None = None
         self._build_menu()
         self._refresh_welcome_recent_projects()
         if initial_project is not None:
@@ -3666,7 +3726,7 @@ class MainWindow(QMainWindow):
         )
 
     def _create_project(self) -> None:
-        if self._analysis_thread is not None or self._export_thread is not None:
+        if self._project_task_running():
             self._show_project_busy_message()
             return
         project_directory = self._project_directory(create=True)
@@ -3690,7 +3750,7 @@ class MainWindow(QMainWindow):
             self._activate_project(database.project.get().name, database=database)
 
     def _open_project(self) -> None:
-        if self._analysis_thread is not None or self._export_thread is not None:
+        if self._project_task_running():
             self._show_project_busy_message()
             return
         project_directory = self._project_directory()
@@ -3705,7 +3765,7 @@ class MainWindow(QMainWindow):
 
     def _open_project_path(self, path: Path) -> None:
         logger.info("Opening project: %s", path)
-        if self._analysis_thread is not None or self._export_thread is not None:
+        if self._project_task_running():
             self._show_project_busy_message()
             return
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
@@ -4074,15 +4134,26 @@ class MainWindow(QMainWindow):
         self.pages.setCurrentIndex(0)
 
     def _show_project_busy_message(self) -> None:
-        title = (
-            self.tr("Analysis is running")
-            if self._analysis_thread is not None
-            else self.tr("Export is running")
-        )
+        if self._analysis_thread is not None:
+            title = self.tr("Analysis is running")
+        elif self._run_delete_thread is not None:
+            title = self.tr("Analysis run deletion is in progress")
+        else:
+            title = self.tr("Export is running")
         QMessageBox.information(
             self,
             title,
             self.tr("Wait for the current task to finish before changing projects."),
+        )
+
+    def _project_task_running(self) -> bool:
+        return any(
+            task is not None
+            for task in (
+                self._analysis_thread,
+                self._export_thread,
+                self._run_delete_thread,
+            )
         )
 
     def _review_results_selection(self) -> None:
@@ -4150,6 +4221,143 @@ class MainWindow(QMainWindow):
         self._database.analysis.rename_run(run_id, dialog.run_name())
         self._load_results(selected_run_id=run_id)
         self.reports_page.configure_runs(self._database.analysis.list_runs())
+
+    def _manage_analysis_runs(self) -> None:
+        if self._database is None:
+            return
+        dialog = AnalysisRunsDialog(self._database.analysis.list_runs(), self)
+
+        def rename(run_id: int) -> None:
+            run = next(
+                (
+                    item
+                    for item in self._database.analysis.list_runs()
+                    if item.id == run_id
+                ),
+                None,
+            )
+            if run is None:
+                return
+            rename_dialog = RenameAnalysisRunDialog(run_id, run.name, dialog)
+            if rename_dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            try:
+                self._database.analysis.rename_run(run_id, rename_dialog.run_name())
+            except (ValueError, sqlite3.DatabaseError) as error:
+                QMessageBox.critical(
+                    self, self.tr("Could not rename analysis run"), str(error)
+                )
+                return
+            runs = self._database.analysis.list_runs()
+            dialog.configure_runs(runs, run_id)
+            self._load_results(selected_run_id=run_id)
+            self.reports_page.configure_runs(runs)
+
+        def delete(run_id: int) -> None:
+            run = next(
+                (
+                    item
+                    for item in self._database.analysis.list_runs()
+                    if item.id == run_id
+                ),
+                None,
+            )
+            if run is None:
+                return
+            run_name = run.name or self.tr("Run %1").replace("%1", str(run.id))
+            confirmation = QMessageBox(dialog)
+            confirmation.setIcon(QMessageBox.Icon.Warning)
+            confirmation.setWindowTitle(self.tr("Delete analysis run?"))
+            confirmation.setText(
+                self.tr(
+                    "Permanently delete “%1”?\n\nIts detections, revisions, reviews, "
+                    "and review queues will also be deleted. This cannot be undone."
+                ).replace("%1", run_name)
+            )
+            delete_button = confirmation.addButton(
+                self.tr("Delete run"), QMessageBox.ButtonRole.DestructiveRole
+            )
+            cancel_button = confirmation.addButton(QMessageBox.StandardButton.Cancel)
+            confirmation.setDefaultButton(cancel_button)
+            confirmation.exec()
+            if confirmation.clickedButton() is not delete_button:
+                return
+            self._start_analysis_run_delete(run_id, run_name, dialog)
+
+        dialog.rename_requested.connect(rename)
+        dialog.delete_requested.connect(delete)
+        self._run_management_dialog = dialog
+        dialog.exec()
+        if self._run_delete_thread is None:
+            self._run_management_dialog = None
+
+    def _start_analysis_run_delete(
+        self, run_id: int, run_name: str, dialog: AnalysisRunsDialog
+    ) -> None:
+        if self._database is None or self._run_delete_thread is not None:
+            return
+        progress = QProgressDialog(dialog)
+        progress.setWindowTitle(self.tr("Deleting analysis run"))
+        progress.setLabelText(
+            self.tr("Deleting “%1” and its associated results…").replace("%1", run_name)
+        )
+        progress.setCancelButton(None)
+        progress.setRange(0, 0)
+        progress.setMinimumDuration(0)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setAutoClose(False)
+        progress.show()
+        QApplication.processEvents()
+
+        thread = QThread(self)
+        runner = AnalysisRunDeleteRunner(self._database.path, run_id)
+        runner.moveToThread(thread)
+        thread.started.connect(runner.run)
+        runner.completed.connect(self._analysis_run_delete_completed)
+        runner.failed.connect(self._analysis_run_delete_failed)
+        runner.completed.connect(thread.quit)
+        runner.failed.connect(thread.quit)
+        thread.finished.connect(runner.deleteLater)
+        thread.finished.connect(self._run_delete_finished)
+        self._run_delete_thread = thread
+        self._run_delete_runner = runner
+        self._run_delete_progress = progress
+        thread.start()
+
+    @Slot(int)
+    def _analysis_run_delete_completed(self, _run_id: int) -> None:
+        if self._run_delete_progress is not None:
+            self._run_delete_progress.close()
+        if self._database is None:
+            return
+        runs = self._database.analysis.list_runs()
+        if self._run_management_dialog is not None:
+            self._run_management_dialog.configure_runs(runs)
+        self._review_history.clear()
+        self.review_page.set_previous_enabled(False)
+        self._load_results()
+        self.reports_page.configure_runs(runs)
+        self.analysis_page.configure_resume(
+            self._database.analysis.latest_resumable_run()
+        )
+
+    @Slot(str)
+    def _analysis_run_delete_failed(self, message: str) -> None:
+        if self._run_delete_progress is not None:
+            self._run_delete_progress.close()
+        QMessageBox.critical(self, self.tr("Could not delete analysis run"), message)
+
+    def _run_delete_finished(self) -> None:
+        if self._run_delete_thread is not None:
+            self._run_delete_thread.deleteLater()
+        self._run_delete_thread = None
+        self._run_delete_runner = None
+        self._run_delete_progress = None
+        if (
+            self._run_management_dialog is not None
+            and not self._run_management_dialog.isVisible()
+        ):
+            self._run_management_dialog = None
 
     def _results_queue_changed(self, queue_id: object = None) -> None:
         logger.info("Review queue selection changed: queue_id=%s", queue_id)
@@ -4710,6 +4918,17 @@ class MainWindow(QMainWindow):
                 self.tr("Analysis is running"),
                 self.tr(
                     "Wait for the current analysis to finish before closing HawkEars."
+                ),
+            )
+            event.ignore()
+            return
+        if self._run_delete_thread is not None:
+            QMessageBox.information(
+                self,
+                self.tr("Analysis run deletion is in progress"),
+                self.tr(
+                    "Wait for the analysis run to finish deleting before closing "
+                    "HawkEars."
                 ),
             )
             event.ignore()

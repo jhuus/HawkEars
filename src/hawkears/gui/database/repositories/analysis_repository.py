@@ -126,6 +126,27 @@ class AnalysisRepository:
             if cursor.rowcount == 0:
                 raise ValueError(f"Analysis run {run_id} does not exist.")
 
+    def delete_run(self, run_id: int) -> None:
+        """Delete a non-running analysis run and all dependent results."""
+        with transaction(self.database_path) as connection:
+            row = connection.execute(
+                "SELECT status FROM analysis_run WHERE id = ?", (run_id,)
+            ).fetchone()
+            if row is None:
+                raise LookupError(f"Analysis run {run_id} does not exist.")
+            if row["status"] == "running":
+                raise ValueError("A running analysis run cannot be deleted.")
+            import_row = connection.execute(
+                "SELECT import_batch_id FROM analysis_run_import WHERE analysis_run_id = ?",
+                (run_id,),
+            ).fetchone()
+            connection.execute("DELETE FROM analysis_run WHERE id = ?", (run_id,))
+            if import_row is not None:
+                connection.execute(
+                    "DELETE FROM import_batch WHERE id = ?",
+                    (import_row["import_batch_id"],),
+                )
+
     def recover_interrupted_runs(self) -> list[int]:
         """Make runs left active by a terminated process safely resumable."""
         with transaction(self.database_path) as connection:

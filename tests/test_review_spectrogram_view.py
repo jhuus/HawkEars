@@ -23,6 +23,7 @@ from hawkears.core.app_paths import ApplicationPaths
 from hawkears.gui.services.spectrogram import ReviewSpectrogram
 from hawkears.gui.ui import main_window
 from hawkears.gui.ui.main_window import (
+    AnalysisRunsDialog,
     AnalysisPage,
     RenameAnalysisRunDialog,
     ResultsPage,
@@ -487,12 +488,12 @@ def test_results_defaults_to_latest_run_and_preserves_explicit_all_selection():
 
     page.configure_runs(runs)
     assert page.current_run_id() == 2
-    assert page.rename_run_button.isEnabled()
+    assert page.manage_runs_button.isEnabled()
     assert page.run.itemData(page.run.count() - 1) is None
     assert page.run.itemText(page.run.count() - 1) == "All detections"
 
     page.run.setCurrentIndex(page.run.findData(None))
-    assert not page.rename_run_button.isEnabled()
+    assert page.manage_runs_button.isEnabled()
     page.configure_runs(runs)
     assert page.current_run_id() is None
 
@@ -503,18 +504,18 @@ def test_results_defaults_to_latest_run_and_preserves_explicit_all_selection():
     app.processEvents()
 
 
-def test_results_requests_rename_for_selected_run():
+def test_results_requests_analysis_run_management():
     app = QApplication.instance() or QApplication([])
     page = ResultsPage()
     page.configure_runs(
         [AnalysisRunSummary(1, None, "completed", "2026-09-02T12:00:00", 3)]
     )
     requested = []
-    page.rename_run_requested.connect(requested.append)
+    page.manage_runs_requested.connect(lambda: requested.append(True))
 
-    page.rename_run_button.click()
+    page.manage_runs_button.click()
 
-    assert requested == [1]
+    assert requested == [True]
     page.close()
     app.processEvents()
 
@@ -527,6 +528,28 @@ def test_rename_analysis_run_dialog_has_room_for_its_title():
     assert dialog.minimumWidth() == 400
     assert dialog.run_name() == "Basic inference"
 
+    dialog.close()
+    app.processEvents()
+
+
+def test_analysis_runs_dialog_offers_rename_and_delete_actions():
+    app = QApplication.instance() or QApplication([])
+    runs = [AnalysisRunSummary(2, "Night run", "completed", "2026-09-02", 3)]
+    dialog = AnalysisRunsDialog(runs)
+    renamed = []
+    deleted = []
+    dialog.rename_requested.connect(renamed.append)
+    dialog.delete_requested.connect(deleted.append)
+
+    dialog.rename_button.click()
+    dialog.delete_button.click()
+
+    assert dialog.windowTitle() == "Manage analysis runs"
+    assert renamed == [2]
+    assert deleted == [2]
+    dialog.configure_runs([])
+    assert not dialog.rename_button.isEnabled()
+    assert not dialog.delete_button.isEnabled()
     dialog.close()
     app.processEvents()
 
@@ -854,16 +877,16 @@ def test_results_page_preserves_species_sort_when_review_is_saved():
     page.set_detections(detections)
     page.table.sortItems(0, Qt.SortOrder.AscendingOrder)
 
-    page.update_detection(
-        replace(detections[0], review_verdict=ReviewVerdict.CORRECT)
-    )
+    page.update_detection(replace(detections[0], review_verdict=ReviewVerdict.CORRECT))
 
     header = page.table.horizontalHeader()
     assert header.sortIndicatorSection() == 0
     assert header.sortIndicatorOrder() == Qt.SortOrder.AscendingOrder
-    assert [
-        page.table.item(row, 0).text() for row in range(page.table.rowCount())
-    ] == ["American Robin", "Blue Jay", "Common Raven"]
+    assert [page.table.item(row, 0).text() for row in range(page.table.rowCount())] == [
+        "American Robin",
+        "Blue Jay",
+        "Common Raven",
+    ]
     page.close()
     app.processEvents()
 

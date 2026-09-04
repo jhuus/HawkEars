@@ -23,7 +23,7 @@ def test_create_and_open_project(tmp_path: Path):
 
     assert database.path.is_file()
     assert database.project.get().name == "Wetland Survey"
-    assert schema_version(database.path) == 21
+    assert schema_version(database.path) == 22
     assert ProjectDatabase.is_project(database.path)
 
     reopened = ProjectDatabase.open(database.path)
@@ -34,9 +34,36 @@ def test_create_and_open_project(tmp_path: Path):
         analysis_run_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(analysis_run)")
         }
+        detection_indexes = {
+            row["name"] for row in connection.execute("PRAGMA index_list(detection)")
+        }
     finally:
         connection.close()
     assert {"process_id", "process_started_at"} <= analysis_run_columns
+    assert "detection_current_revision_idx" in detection_indexes
+
+
+def test_existing_project_adds_current_revision_index_on_upgrade(tmp_path: Path):
+    database = create_project(tmp_path)
+    connection = connect(database.path)
+    try:
+        connection.execute("DROP INDEX detection_current_revision_idx")
+        connection.execute("DELETE FROM schema_migration WHERE version = 22")
+        connection.commit()
+    finally:
+        connection.close()
+
+    ProjectDatabase.open(database.path)
+
+    assert schema_version(database.path) == 22
+    connection = connect(database.path, readonly=True)
+    try:
+        indexes = {
+            row["name"] for row in connection.execute("PRAGMA index_list(detection)")
+        }
+    finally:
+        connection.close()
+    assert "detection_current_revision_idx" in indexes
 
 
 def test_rejects_non_project_database(tmp_path: Path):
@@ -150,6 +177,34 @@ def test_analysis_run_can_be_renamed_and_restored_to_default(tmp_path: Path):
 
     with pytest.raises(ValueError, match="does not exist"):
         database.analysis.rename_run(run_id + 1, "Missing")
+
+
+def test_analysis_run_can_be_deleted_but_not_while_running(tmp_path: Path):
+    database = create_project(tmp_path)
+    recording = database.recordings.add(tmp_path / "night.wav")
+    run_id = database.analysis.create_run(
+        "2.3.0", {}, species_ids=[], recording_ids=[recording.id]
+    )
+
+    database.analysis.delete_run(run_id)
+    assert database.analysis.list_runs() == []
+    connection = connect(database.path, readonly=True)
+    try:
+        assert (
+            connection.execute("SELECT count(*) FROM analysis_item").fetchone()[0] == 0
+        )
+    finally:
+        connection.close()
+
+    with pytest.raises(LookupError, match="does not exist"):
+        database.analysis.delete_run(run_id)
+
+    running_id = database.analysis.create_run(
+        "2.3.0", {}, species_ids=[], recording_ids=[]
+    )
+    database.analysis.set_run_status(running_id, "running")
+    with pytest.raises(ValueError, match="running analysis run"):
+        database.analysis.delete_run(running_id)
 
 
 def test_project_species_can_be_replaced_from_supported_catalog(tmp_path: Path):
@@ -630,9 +685,7 @@ def test_label_export_applies_current_reviews_and_preserves_originals(tmp_path: 
     database.detections.add_additional_species(rejected.id, additional.id)
     database.detections.set_review(uncertain.id, ReviewVerdict.UNCERTAIN)
 
-    all_detections = database.detections.detection_export(
-        run_id=run_id, outcome="all"
-    )
+    all_detections = database.detections.detection_export(run_id=run_id, outcome="all")
     all_columns = {name: index for index, name in enumerate(all_detections.columns)}
     assert {row[0] for row in all_detections.rows} == {
         accepted.id,
@@ -641,9 +694,7 @@ def test_label_export_applies_current_reviews_and_preserves_originals(tmp_path: 
         uncertain.id,
         unreviewed.id,
     }
-    unreviewed_row = next(
-        row for row in all_detections.rows if row[0] == unreviewed.id
-    )
+    unreviewed_row = next(row for row in all_detections.rows if row[0] == unreviewed.id)
     assert unreviewed_row[all_columns["review_outcome"]] == "unreviewed"
     assert unreviewed_row[all_columns["review_verdict"]] is None
     reviewed_only = database.detections.detection_export(

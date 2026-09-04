@@ -75,6 +75,12 @@ For a small analysis you may review all detections directly. For a large analysi
 
 ![](images/GUI-ResultsPage.png)
 
+## Managing Analysis Runs
+
+Clicking the Manage button opens a dialog that lets you rename or delete an analysis run.
+
+![](images/GUI-ManageAnalysisRuns.png)
+
 ## Review Queues
 
 A review queue samples detections for one species from one analysis run. Queue membership and its original sampling order are saved in the project, so a review can be stopped and resumed later.
