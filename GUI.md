@@ -44,9 +44,10 @@ The Analyze page provides the main inference settings:
 * **Minimum score** excludes detections below the specified score.
 * **Ensemble models** controls how many neural networks are used. More models generally improve accuracy but take longer.
 * **Worker threads** controls how many recordings are processed at the same time. Increasing this value can improve throughput, but also increases memory use.
-* **Label format** selects variable-length labels or fixed-length segments.
-* **Maximum variable label length** to limit the length of variable-length labels.
+* **Label format** selects variable-length or fixed-length labels.
 * **Fixed segment length** when fixed-length labels are selected.
+* **Minimum variable label length** to filter out very short labels when variable-length labels are used. Labels may be as short as .25 seconds, and in some cases labels that short have an above-average false positive rate.
+* **Maximum variable label length** to limit the length of variable-length labels. Longer labels are split, not filtered out.
 
 Location and date information enables geographic occurrence filtering and location-specific heuristics. You can provide one location for all recordings using coordinates or an eBird region, or use a CSV file with per-recording values. The CSV file must include `filename`, `latitude`, `longitude` and `recording_date` columns.
 
@@ -158,7 +159,7 @@ The Reports page summarizes analysis coverage, review queues and review progress
 
 **Export detections** creates a detailed CSV containing all detections or selected review states, optionally filtered by species or review queue.
 
-**Export audio labels** creates one Audacity label file or Raven selection table per recording. You can export current reviewed results or the original analysis results, choose species codes, common names or scientific names for labels, and control which review states are included. Existing label files are overwritten by default. Clear **Overwrite existing labels** to stop instead when a planned output file already exists.
+**Export audio labels** creates one Audacity label file or Raven selection table per recording, or a CSV for all recordings. You can export current reviewed results or the original analysis results, choose species codes, common names or scientific names for labels, and control which review states are included. Existing label files are overwritten by default. Clear **Overwrite existing labels** to stop instead when a planned output file already exists.
 
 <p align="left">
   <img src="images/GUI-ReportsPage.png" width="1450">

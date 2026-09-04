@@ -2686,6 +2686,7 @@ class ReportsPage(QWidget):
         filters = QHBoxLayout()
         filters.addWidget(QLabel(self.tr("Analysis run")))
         self.run = QComboBox()
+        self._run_selection_initialized = False
         self.run.currentIndexChanged.connect(self._analysis_run_changed)
         filters.addWidget(self.run, 1)
         filters.addStretch()
@@ -2875,7 +2876,6 @@ class ReportsPage(QWidget):
         current = self.run.currentData()
         self.run.blockSignals(True)
         self.run.clear()
-        self.run.addItem(self.tr("All detections"), None)
         for run in runs:
             label = run.name or self.tr("Run %1").replace("%1", str(run.id))
             self.run.addItem(
@@ -2884,7 +2884,17 @@ class ReportsPage(QWidget):
                 .replace("%2", run.created_at[:10]),
                 run.id,
             )
-        selected = self.run.findData(current)
+        self.run.addItem(self.tr("All detections"), None)
+        if not runs:
+            selected = 0
+            self._run_selection_initialized = False
+        elif not self._run_selection_initialized:
+            selected = 0
+            self._run_selection_initialized = True
+        else:
+            selected = self.run.findData(current)
+            if selected < 0:
+                selected = 0
         self.run.setCurrentIndex(max(0, selected))
         self.run.blockSignals(False)
 

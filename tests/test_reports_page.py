@@ -5,7 +5,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QHeaderView
 
-from hawkears.gui.database.records import ValidatedReport
+from hawkears.gui.database.records import AnalysisRunSummary, ValidatedReport
 from hawkears.gui.ui.main_window import ReportsPage
 from hawkears.gui.ui.review_export_dialog import ReviewExportDialog
 
@@ -41,6 +41,32 @@ def test_reports_page_hides_unsupported_additional_species_counts():
         header = page.table.horizontalHeader()
         assert header.sortIndicatorSection() == 0
         assert header.sortIndicatorOrder() == Qt.SortOrder.AscendingOrder
+    finally:
+        page.close()
+        app.processEvents()
+
+
+def test_reports_defaults_to_latest_run_and_preserves_explicit_all_selection():
+    app = QApplication.instance() or QApplication([])
+    page = ReportsPage()
+    runs = [
+        AnalysisRunSummary(2, "Latest run", "complete", "2026-09-02T12:00:00", 20),
+        AnalysisRunSummary(1, "Earlier run", "complete", "2026-09-01T12:00:00", 10),
+    ]
+
+    try:
+        page.configure_runs(runs)
+        assert page.current_run_id() == 2
+        assert page.run.itemData(page.run.count() - 1) is None
+        assert page.run.itemText(page.run.count() - 1) == "All detections"
+
+        page.run.setCurrentIndex(page.run.findData(None))
+        page.configure_runs(runs)
+        assert page.current_run_id() is None
+
+        page.configure_runs([])
+        page.configure_runs(runs)
+        assert page.current_run_id() == 2
     finally:
         page.close()
         app.processEvents()
