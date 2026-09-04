@@ -3734,7 +3734,7 @@ class MainWindow(QMainWindow):
             logger.warning("Recovered interrupted analysis runs: %s", recovered_runs)
         self._remember_project(database.path)
         self._refresh_welcome_recent_projects()
-        self.setWindowTitle(self.tr("HawkEars — %1").replace("%1", name))
+        self.setWindowTitle(name)
         self.project_chip.setText(self.tr("CURRENT PROJECT\n%1").replace("%1", name))
         self._update_navigation()
         self._load_recording_scope()

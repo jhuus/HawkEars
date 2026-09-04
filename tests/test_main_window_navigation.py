@@ -9,6 +9,27 @@ from hawkears.gui.database import ProjectDatabase
 from hawkears.gui.ui.main_window import MainWindow
 
 
+def test_window_title_uses_project_name_without_repeating_application_name(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(
+        class_catalog=[], application_paths=ApplicationPaths(tmp_path / "app-data")
+    )
+    database = ProjectDatabase.create(tmp_path / "survey.hawkears", "Wetland Survey")
+
+    try:
+        assert window.windowTitle() == "HawkEars"
+
+        window._activate_project("Wetland Survey", database=database)
+        assert window.windowTitle() == "Wetland Survey"
+
+        window._close_project()
+        assert window.windowTitle() == "HawkEars"
+    finally:
+        window.review_page.spectrogram.shutdown()
+        window.close()
+        app.processEvents()
+
+
 def test_analyze_navigation_requires_recording_directory_and_species(tmp_path):
     app = QApplication.instance() or QApplication([])
     window = MainWindow(
