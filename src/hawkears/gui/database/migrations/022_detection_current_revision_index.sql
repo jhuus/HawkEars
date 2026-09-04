@@ -1,0 +1,2 @@
+CREATE INDEX detection_current_revision_idx
+ON detection(current_revision_id);
