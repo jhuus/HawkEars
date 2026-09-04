@@ -1,7 +1,6 @@
 """Background import of HawkEars CLI output into a GUI project."""
 
 from pathlib import Path
-import re
 from typing import Mapping, Sequence
 
 from PySide6.QtCore import QObject, Signal, Slot
@@ -56,7 +55,9 @@ class HawkEarsImportRunner(QObject):
             location = self.settings.get("location", {})
             location = location if isinstance(location, dict) else {}
             metadata = AnalysisRunner._recording_metadata(location, recordings)
-            metadata.update(self._filename_date_metadata(location, recordings))
+            metadata.update(
+                AnalysisRunner._filename_date_metadata(location, recordings)
+            )
             if location.get("mode") == "filelist":
                 matched = [
                     (path, recording)
@@ -162,19 +163,3 @@ class HawkEarsImportRunner(QObject):
                 except Exception:
                     pass
             self.failed.emit(str(error))
-
-    @staticmethod
-    def _filename_date_metadata(
-        location: Mapping[str, object], recordings: Sequence
-    ) -> dict[int, dict[str, object]]:
-        if location.get("date_mode") != "filename":
-            return {}
-        metadata: dict[int, dict[str, object]] = {}
-        for recording in recordings:
-            match = re.search(r"(?<!\d)((?:19|20)\d{6})(?!\d)", recording.display_name)
-            if match:
-                value = match.group(1)
-                metadata[recording.id] = {
-                    "recorded_at": f"{value[:4]}-{value[4:6]}-{value[6:8]}"
-                }
-        return metadata

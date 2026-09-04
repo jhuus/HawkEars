@@ -108,6 +108,59 @@ def test_analysis_runner_maps_date_options():
     )
 
 
+def test_analysis_runner_persists_dates_extracted_from_filenames(
+    tmp_path: Path, monkeypatch
+):
+    project_path = tmp_path / "survey.hawkears"
+    database = ProjectDatabase.create(project_path, "Survey")
+    species = database.species.add("Common Nighthawk", class_name="Common Nighthawk")
+    dated = tmp_path / "station_20150712_190000.wav"
+    undated = tmp_path / "station_unknown.wav"
+    dated.touch()
+    undated.touch()
+    monkeypatch.setattr(
+        analysis_runner,
+        "find_recording_paths",
+        lambda input_path, recurse: [str(dated), str(undated)],
+    )
+
+    def fake_analyze(**kwargs):
+        for path in (dated, undated):
+            kwargs["recording_callback"](AnalysisRecordingResult(path, ()))
+
+    monkeypatch.setattr(analysis_runner, "analyze", fake_analyze)
+    runner = AnalysisRunner(
+        project_path,
+        tmp_path,
+        False,
+        [species],
+        {
+            "location": {
+                "mode": "region",
+                "region_code": "CA-BC-CO",
+                "date_mode": "filename",
+            }
+        },
+    )
+
+    runner.run()
+
+    connection = connect(project_path, readonly=True)
+    try:
+        rows = connection.execute("""
+            SELECT recording.display_name, analysis_item.recorded_at
+            FROM analysis_item
+            JOIN recording ON recording.id = analysis_item.recording_id
+            ORDER BY recording.display_name
+            """).fetchall()
+    finally:
+        connection.close()
+    assert [tuple(row) for row in rows] == [
+        ("station_20150712_190000.wav", "2015-07-12"),
+        ("station_unknown.wav", None),
+    ]
+
+
 def test_analysis_runner_cancels_without_leaving_running_items(
     tmp_path: Path, monkeypatch
 ):

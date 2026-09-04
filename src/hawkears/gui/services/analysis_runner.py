@@ -4,6 +4,7 @@ import csv
 import logging
 import math
 from pathlib import Path
+import re
 import threading
 import traceback
 from typing import Mapping, Sequence
@@ -105,6 +106,10 @@ class AnalysisRunner(QObject):
                 if self.resume_run_id is None
                 else {}
             )
+            if self.resume_run_id is None:
+                recording_metadata.update(
+                    self._filename_date_metadata(location, recordings)
+                )
             if self.resume_run_id is None and location.get("mode") == "filelist":
                 matched = [
                     (path, recording)
@@ -330,6 +335,23 @@ class AnalysisRunner(QObject):
                 if location_name:
                     values["location_name"] = location_name
                 metadata[recording.id] = values
+        return metadata
+
+    @staticmethod
+    def _filename_date_metadata(
+        location: Mapping[str, object], recordings: Sequence[Recording]
+    ) -> dict[int, dict[str, object]]:
+        """Extract immutable per-recording dates when filenames are the source."""
+        if location.get("date_mode") != "filename":
+            return {}
+        metadata: dict[int, dict[str, object]] = {}
+        for recording in recordings:
+            match = re.search(r"(?<!\d)((?:19|20)\d{6})(?!\d)", recording.display_name)
+            if match:
+                value = match.group(1)
+                metadata[recording.id] = {
+                    "recorded_at": f"{value[:4]}-{value[4:6]}-{value[6:8]}"
+                }
         return metadata
 
     @staticmethod
