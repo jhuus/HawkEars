@@ -358,10 +358,11 @@ def test_correct_species_is_enabled_only_for_incorrect_verdict():
         page.correct_button.click()
         assert not page.correction.isEnabled()
         assert not page.correction_label.isEnabled()
-        assert page.correction.currentText() == "Alder Flycatcher"
+        assert page.correction.currentIndex() == -1
 
         page.uncertain_button.click()
         assert not page.correction.isEnabled()
+        assert page.correction.currentIndex() == -1
 
         corrected = replace(
             detection,
@@ -663,7 +664,7 @@ def test_save_and_next_emits_the_current_review():
     assert len(saved) == 1
     assert saved[0][0] == 42
     assert saved[0][1] == ReviewVerdict.CORRECT
-    assert saved[0][2] == "American Robin"
+    assert saved[0][2] == ""
     assert saved[0][4] is True
 
     page.spectrogram.shutdown()

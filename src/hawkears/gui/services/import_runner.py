@@ -54,7 +54,9 @@ class HawkEarsImportRunner(QObject):
             recordings = [database.recordings.get_or_add(path) for path in paths]
             location = self.settings.get("location", {})
             location = location if isinstance(location, dict) else {}
-            metadata = AnalysisRunner._recording_metadata(location, recordings)
+            metadata = AnalysisRunner._recording_metadata(
+                location, recordings, paths, self.recording_directory
+            )
             metadata.update(
                 AnalysisRunner._filename_date_metadata(location, recordings)
             )
@@ -72,7 +74,10 @@ class HawkEarsImportRunner(QObject):
                 recordings = [item[1] for item in matched]
 
             parsed = parse_hawkears_output(
-                self.output_directory, paths, self.class_catalog
+                self.output_directory,
+                paths,
+                self.class_catalog,
+                recording_root=self.recording_directory,
             )
             run_species = database.species.list_project_species()
             selected_species = {

@@ -5,12 +5,173 @@ import threading
 
 import pandas as pd
 import numpy as np
+import pytest
+from britekit.core.exceptions import InferenceError
 
 from hawkears.core.analysis_result import (
     AnalysisProgress,
     AnalysisRecordingResult,
 )
 from hawkears.core.analyzer import Analyzer
+
+
+def test_audio_load_failure_does_not_report_recording_as_completed(
+    tmp_path: Path, monkeypatch
+):
+    recording = tmp_path / "corrupt.wav"
+    recording.write_bytes(b"not audio")
+    audio = SimpleNamespace(
+        load_error="Could not decode audio",
+        seconds=lambda: 0.0,
+    )
+    predictor = SimpleNamespace(
+        audio=audio,
+        get_overlapping_scores=lambda path, start_times: None,
+    )
+    monkeypatch.setattr(
+        "hawkears.core.analyzer.Predictor", lambda *args, **kwargs: predictor
+    )
+    analyzer = Analyzer.__new__(Analyzer)
+    analyzer.cfg = SimpleNamespace(
+        misc=SimpleNamespace(ckpt_folder=tmp_path),
+        audio=SimpleNamespace(spec_duration=3.0),
+        infer=SimpleNamespace(max_models=1),
+    )
+    analyzer.quiet = True
+    analyzer.recording_callback = lambda result: pytest.fail(
+        "A failed recording must not be reported as completed"
+    )
+    analyzer._load_heuristics_manager = lambda audio: None
+    analyzer._progress_lock = threading.Lock()
+    analyzer._completed_recordings = 0
+    analyzer._total_recordings = 1
+    progress: list[AnalysisProgress] = []
+
+    with pytest.raises(InferenceError, match="Could not decode audio"):
+        analyzer._process_recordings(
+            [str(recording)],
+            str(tmp_path),
+            0,
+            1,
+            progress_callback=progress.append,
+        )
+
+    assert progress == []
+
+
+def test_valid_recording_without_predictions_reports_empty_completion(
+    tmp_path: Path, monkeypatch
+):
+    recording = tmp_path / "short.wav"
+    recording.touch()
+    predictor = SimpleNamespace(
+        audio=SimpleNamespace(load_error=None, seconds=lambda: 0.1),
+        get_overlapping_scores=lambda path, start_times: None,
+        save_manifest=lambda output_path: None,
+    )
+    monkeypatch.setattr(
+        "hawkears.core.analyzer.Predictor", lambda *args, **kwargs: predictor
+    )
+    analyzer = Analyzer.__new__(Analyzer)
+    analyzer.cfg = SimpleNamespace(
+        misc=SimpleNamespace(ckpt_folder=tmp_path),
+        audio=SimpleNamespace(spec_duration=3.0),
+        infer=SimpleNamespace(max_models=1),
+    )
+    analyzer.quiet = True
+    completed: list[AnalysisRecordingResult] = []
+    analyzer.recording_callback = completed.append
+    analyzer._load_heuristics_manager = lambda audio: None
+    analyzer._progress_lock = threading.Lock()
+    analyzer._completed_recordings = 0
+    analyzer._total_recordings = 1
+    progress: list[AnalysisProgress] = []
+
+    analyzer._process_recordings(
+        [str(recording)],
+        str(tmp_path),
+        0,
+        1,
+        progress_callback=progress.append,
+    )
+
+    assert completed == [AnalysisRecordingResult(recording, ())]
+    assert progress == [AnalysisProgress(1, 1, recording)]
+
+
+def test_analyzer_resolves_relative_filelist_paths_for_cli_and_api(
+    tmp_path: Path, monkeypatch
+):
+    root = tmp_path / "recordings"
+    recordings = [
+        root / "site-a" / "recording.wav",
+        root / "site-b" / "recording.wav",
+    ]
+    for recording in recordings:
+        recording.parent.mkdir(parents=True, exist_ok=True)
+        recording.touch()
+    filelist = tmp_path / "filelist.csv"
+    filelist.write_text(
+        "filename,region,recording_date\n"
+        "site-a/recording.wav,CA-ON-OT,2026-05-18\n"
+        "site-b/recording.wav,CA-QC-MR,2026-05-19\n",
+        encoding="utf-8",
+    )
+
+    class Provider:
+        class_names: set[str] = set()
+
+        def __init__(self, path):
+            pass
+
+    monkeypatch.setattr(
+        "hawkears.core.occurrence_manager.OccurrencePickleProvider", Provider
+    )
+    analyzer = Analyzer.__new__(Analyzer)
+    analyzer.cfg = SimpleNamespace(
+        hawkears=SimpleNamespace(
+            filelist=str(filelist),
+            occurrence_pickle="unused.pkl",
+            region=None,
+            latitude=None,
+            longitude=None,
+            date=None,
+        ),
+        infer=SimpleNamespace(num_threads=1),
+    )
+    analyzer.class_mgr = SimpleNamespace()
+    captured_paths = []
+
+    def process(
+        self,
+        recording_paths,
+        output_path,
+        start_seconds,
+        thread_num,
+        top,
+        progress,
+        task_id,
+        file_sizes,
+        progress_callback,
+        cancellation_callback,
+    ):
+        captured_paths.extend(recording_paths)
+
+    analyzer._process_recordings = MethodType(process, analyzer)
+
+    analyzer.run(
+        str(root),
+        str(tmp_path / "output"),
+        [],
+        quiet=True,
+        recording_paths_override=recordings,
+    )
+
+    assert captured_paths == [str(path) for path in recordings]
+    assert analyzer.occur_mgr.file_info == {
+        str(recordings[0].resolve()): ("CA-ON-OT", 18),
+        str(recordings[1].resolve()): ("CA-QC-MR", 18),
+    }
 
 
 def test_excluded_classes_stay_below_a_zero_score_threshold():

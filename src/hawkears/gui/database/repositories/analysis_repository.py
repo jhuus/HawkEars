@@ -310,6 +310,34 @@ class AnalysisRepository:
         finally:
             connection.close()
 
+    def recording_metadata(self, run_id: int) -> dict[int, dict[str, object]]:
+        """Return immutable per-recording location and date snapshots for a run."""
+        connection = connect(self.database_path, readonly=True)
+        try:
+            return {
+                row["recording_id"]: {
+                    key: row[key]
+                    for key in (
+                        "recorded_at",
+                        "latitude",
+                        "longitude",
+                        "region_code",
+                        "location_name",
+                    )
+                    if row[key] is not None
+                }
+                for row in connection.execute(
+                    """
+                    SELECT recording_id, recorded_at, latitude, longitude,
+                           region_code, location_name
+                    FROM analysis_item WHERE analysis_run_id = ?
+                    """,
+                    (run_id,),
+                )
+            }
+        finally:
+            connection.close()
+
     def settings(self, run_id: int) -> dict[str, object]:
         """Return the immutable settings snapshot for an analysis run."""
         connection = connect(self.database_path, readonly=True)

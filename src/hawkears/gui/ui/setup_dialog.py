@@ -203,6 +203,13 @@ class SetupDialog(QDialog):
             return self.tr("The selected location is not writable.")
         return None
 
+    def reject(self) -> None:
+        """Request cancellation instead of dismissing an active setup."""
+        if self._runner is not None:
+            self._cancel()
+            return
+        super().reject()
+
     def closeEvent(self, event: QCloseEvent) -> None:
         if self._runner is None:
             event.accept()

@@ -3,6 +3,7 @@
 import csv
 from dataclasses import dataclass
 import math
+import os
 from pathlib import Path
 from typing import Sequence
 
@@ -17,7 +18,7 @@ class ParsedDetection:
     species: SpeciesDefinition
     start_seconds: float
     end_seconds: float
-    score: float
+    score: float | None
     source_file: Path
     source_row: int
     raw_recording: str
@@ -38,12 +39,14 @@ def parse_hawkears_output(
     output_directory: Path,
     recording_paths: Sequence[Path],
     class_catalog: Sequence[SpeciesDefinition],
+    *,
+    recording_root: Path | None = None,
 ) -> ParsedImport:
     """Parse CSV output first, falling back to HawkEars Audacity labels."""
     root = output_directory.expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Import directory does not exist: {root}")
-    recording_lookup = _recording_lookup(recording_paths)
+    recording_lookup = _recording_lookup(recording_paths, recording_root)
     species_lookup = _species_lookup(class_catalog)
 
     csv_files = [path for path in root.rglob("*.csv") if _is_hawkears_csv(path)]
@@ -56,13 +59,25 @@ def parse_hawkears_output(
         )
         return ParsedImport("csv", tuple(sorted(csv_files)), tuple(detections))
 
-    label_files = sorted(root.rglob("*_scores.txt"))
+    label_files = sorted(
+        path
+        for path in root.rglob("*_scores.txt")
+        if not _is_in_nested_rarities_directory(root, path)
+    )
     if not label_files:
         raise ValueError(
             "No HawkEars CSV output or HawkEars Audacity label files were found."
         )
-    detections = _parse_audacity_files(label_files, recording_lookup, species_lookup)
+    detections = _parse_audacity_files(
+        label_files, recording_lookup, species_lookup, root
+    )
     return ParsedImport("audacity", tuple(label_files), tuple(detections))
+
+
+def _is_in_nested_rarities_directory(root: Path, path: Path) -> bool:
+    """Ignore generated rarity labels unless their directory was selected."""
+    relative_parent = path.relative_to(root).parent
+    return any(part.casefold() == "rarities" for part in relative_parent.parts)
 
 
 def _is_hawkears_csv(path: Path) -> bool:
@@ -77,16 +92,36 @@ def _is_hawkears_csv(path: Path) -> bool:
     return CSV_COLUMNS.issubset({field.strip() for field in header})
 
 
-def _recording_lookup(recording_paths: Sequence[Path]) -> dict[str, Path]:
+def _recording_lookup(
+    recording_paths: Sequence[Path], recording_root: Path | None = None
+) -> dict[str, Path]:
     candidates: dict[str, list[Path]] = {}
     for path in recording_paths:
         resolved = path.resolve()
         for key in {resolved.name.casefold(), resolved.stem.casefold()}:
             candidates.setdefault(key, []).append(resolved)
     ambiguous = {key for key, values in candidates.items() if len(set(values)) > 1}
-    return {
+    lookup = {
         key: values[0] for key, values in candidates.items() if key not in ambiguous
     }
+    if recording_paths:
+        root = (
+            recording_root.expanduser().resolve()
+            if recording_root is not None
+            else Path(
+                os.path.commonpath(
+                    [str(path.resolve().parent) for path in recording_paths]
+                )
+            )
+        )
+        for path in recording_paths:
+            resolved = path.resolve()
+            lookup[os.path.normcase(resolved.as_posix())] = resolved
+            if resolved.is_relative_to(root):
+                lookup[os.path.normcase(resolved.relative_to(root).as_posix())] = (
+                    resolved
+                )
+    return lookup
 
 
 def _species_lookup(
@@ -136,20 +171,27 @@ def _parse_audacity_files(
     paths: Sequence[Path],
     recordings: dict[str, Path],
     species: dict[str, SpeciesDefinition],
+    output_root: Path,
 ) -> list[ParsedDetection]:
     detections = []
     for path in paths:
-        raw_recording = path.name[: -len("_scores.txt")]
+        raw_recording = path.relative_to(output_root).as_posix()[: -len("_scores.txt")]
+        # Older exports in ordinary subdirectories contain only a recording stem.
+        if os.path.normcase(raw_recording) not in recordings:
+            raw_recording = path.name[: -len("_scores.txt")]
         with path.open(encoding="utf-8-sig") as source:
             for row_number, line in enumerate(source, start=1):
                 if not line.strip():
                     continue
                 fields = line.rstrip("\r\n").split("\t")
-                if len(fields) != 3 or ";" not in fields[2]:
+                if len(fields) != 3:
                     raise ValueError(
                         f"Invalid HawkEars Audacity row in {path}, line {row_number}."
                     )
-                raw_species, raw_score = fields[2].rsplit(";", 1)
+                if ";" in fields[2]:
+                    raw_species, raw_score = fields[2].rsplit(";", 1)
+                else:
+                    raw_species, raw_score = fields[2], ""
                 detections.append(
                     _parsed_detection(
                         path=path,
@@ -178,10 +220,12 @@ def _parsed_detection(
     recordings: dict[str, Path],
     species: dict[str, SpeciesDefinition],
 ) -> ParsedDetection:
-    recording_key = Path(raw_recording).name.casefold()
-    recording = recordings.get(recording_key) or recordings.get(
-        Path(recording_key).stem.casefold()
-    )
+    recording_key = os.path.normcase(raw_recording.replace("\\", "/"))
+    recording = recordings.get(recording_key)
+    if recording is None and "/" not in recording_key:
+        recording = recordings.get(recording_key.casefold()) or recordings.get(
+            Path(recording_key).stem.casefold()
+        )
     if recording is None:
         raise ValueError(
             f"Recording '{raw_recording}' in {path}, line {row_number}, "
@@ -196,16 +240,22 @@ def _parsed_detection(
     try:
         start = float(raw_start)
         end = float(raw_end)
-        score = float(raw_score)
     except ValueError as error:
         raise ValueError(
             f"Invalid numeric value in {path}, line {row_number}."
         ) from error
-    if not all(math.isfinite(value) for value in (start, end, score)):
+    try:
+        score = float(raw_score) if raw_score else None
+    except ValueError as error:
+        raise ValueError(
+            f"Invalid numeric value in {path}, line {row_number}."
+        ) from error
+    numeric_values = (start, end) if score is None else (start, end, score)
+    if not all(math.isfinite(value) for value in numeric_values):
         raise ValueError(f"Non-finite value in {path}, line {row_number}.")
     if start < 0 or end <= start:
         raise ValueError(f"Invalid time boundaries in {path}, line {row_number}.")
-    if not 0 <= score <= 1:
+    if score is not None and not 0 <= score <= 1:
         raise ValueError(f"Score outside 0–1 in {path}, line {row_number}.")
     return ParsedDetection(
         recording_path=recording,

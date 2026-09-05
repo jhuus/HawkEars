@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import logging
-from pathlib import Path
 from types import SimpleNamespace as SN
 from typing import Optional
 
@@ -284,7 +283,6 @@ class SoundAlikeHeuristics:
         if self.occur_mgr is None:
             return  # location/date processing is disabled
 
-        filename = Path(recording_path).name
         for code, defns in self.with_location.items():
             enabled_defns = [d for d in defns if d.enabled]
             if not enabled_defns:
@@ -294,7 +292,7 @@ class SoundAlikeHeuristics:
             if not info.include:
                 continue  # omitted from output anyway
 
-            value = self.occur_mgr.get_value(filename, info.name)
+            value = self.occur_mgr.get_value(recording_path, info.name)
             if value >= self.max_rare:
                 continue  # code species is not rare here, skip
 
@@ -302,7 +300,7 @@ class SoundAlikeHeuristics:
             candidates = []
             for defn in enabled_defns:
                 other_info = self.class_mgr.class_info_by_code(defn.soundalike)
-                other_value = self.occur_mgr.get_value(filename, other_info.name)
+                other_value = self.occur_mgr.get_value(recording_path, other_info.name)
                 if other_value > self.min_common:
                     candidates.append((other_info, other_value))
 

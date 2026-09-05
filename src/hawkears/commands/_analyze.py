@@ -11,7 +11,7 @@ from pathlib import Path
 import signal
 import threading
 import time
-from typing import Callable, Collection, Optional, Sequence
+from typing import Callable, Collection, Mapping, Optional, Sequence
 
 import click
 
@@ -82,6 +82,7 @@ def analyze(
     recording_callback: Optional[Callable[[AnalysisRecordingResult], None]] = None,
     cancellation_callback: Optional[Callable[[], bool]] = None,
     recording_paths: Optional[Sequence[Path]] = None,
+    occurrence_metadata: Optional[Mapping[str, Mapping[str, object]]] = None,
     include_names: Optional[Collection[str]] = None,
     raise_errors: bool = False,
     data_root: Path | str | None = None,
@@ -103,8 +104,10 @@ def analyze(
     - region (str, optional): eBird region code, e.g. 'CA-AB' for Alberta. Use as an alternative to latitude/longitude.
     - lat (float, optional): Latitude.
     - lon (float, optional): Longitude.
-    - filelist (str, optional): Path to CSV file containing input file names, latitudes and longitudes
-      (or region codes) and recording dates.
+    - filelist (str, optional): Path to CSV file containing input file names or paths,
+      latitudes and longitudes (or region codes), and recording dates. Paths may be
+      absolute or relative to input_path. Basenames must be unique within the input.
+      Use './filename' to select a file at the input root when its basename is ambiguous.
     - include (str, optional): Path to text file listing species to include. If specified,
       exclude all other species. Defaults to value in config file.
     - exclude (str, optional): Path to text file listing species to exclude.
@@ -133,6 +136,8 @@ def analyze(
       to stop the analysis after recordings already in progress finish.
     - recording_paths: Optional explicit recordings to process instead of discovering
       every supported recording beneath input_path.
+    - occurrence_metadata: Optional immutable location and date values keyed by
+      recording path. These take precedence over filelist when provided.
     - include_names: Optional authoritative collection of model class names to include,
       avoiding an include-list file and the configured default exclusion list.
     - raise_errors: Re-raise inference and validation errors for application callers.
@@ -308,6 +313,7 @@ def analyze(
             recording_callback=recording_callback,
             cancellation_callback=cancellation_callback,
             recording_paths_override=recording_paths,
+            occurrence_metadata=occurrence_metadata,
         )
 
         if not quiet:
@@ -388,7 +394,8 @@ def analyze(
 @click.option(
     "--filelist",
     type=click.Path(file_okay=True, dir_okay=False, exists=True),
-    help="Path to CSV file containing input file names, latitudes and longitudes (or region codes) and recording dates.",
+    help="Path to CSV file containing input file names or paths, locations, and "
+    "recording dates. Paths may be absolute or relative to the input directory.",
 )
 @click.option(
     "--include",

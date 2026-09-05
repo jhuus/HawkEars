@@ -1,9 +1,52 @@
 from pathlib import Path
+import pytest
 
 from hawkears.gui.database import ProjectDatabase
 from hawkears.gui.database.connection import connect
 from hawkears.gui.database.records import SpeciesDefinition
 from hawkears.gui.services.import_runner import HawkEarsImportRunner
+
+
+@pytest.mark.parametrize("format_name", ["csv", "audacity"])
+def test_import_runner_persists_missing_scores(tmp_path: Path, format_name: str):
+    db = ProjectDatabase.create(tmp_path / "project.hawkears", "Survey")
+    recordings = tmp_path / "audio"
+    recordings.mkdir()
+    (recordings / "bird.wav").touch()
+    definition = SpeciesDefinition(
+        "hawkears:MAWR", "Marsh Wren", "Marsh Wren", None, "MAWR", None, 0
+    )
+    db.species.set_project_species_from_catalog([definition])
+    output = tmp_path / "output"
+    output.mkdir()
+    if format_name == "csv":
+        (output / "scores.csv").write_text(
+            "recording,name,start_time,end_time,score\nbird,MAWR,0,3,\nbird,MAWR,4,7,0.8\n"
+        )
+    else:
+        (output / "bird_scores.txt").write_text("0\t3\tMAWR\n4\t7\tMAWR;0.8\n")
+    runner = HawkEarsImportRunner(
+        db.path, recordings, False, [definition], {"location": {"mode": "none"}}, output
+    )
+    failures: list[str] = []
+    runner.failed.connect(failures.append)
+    runner.run()
+    assert failures == []
+    run = db.analysis.list_runs()[0]
+    assert run.status == "completed"
+    results = sorted(db.detections.list_results(run.id), key=lambda row: row.start_ms)
+    assert [row.score for row in results] == [None, 0.8]
+    connection = connect(db.path, readonly=True)
+    try:
+        assert [
+            row[0]
+            for row in connection.execute(
+                "SELECT raw_score FROM imported_analysis_detection ORDER BY source_row"
+            )
+        ] == ["", "0.8"]
+        assert list(connection.execute("PRAGMA foreign_key_check")) == []
+    finally:
+        connection.close()
 
 
 def test_import_runner_creates_completed_analysis_run(tmp_path: Path):
@@ -46,7 +89,7 @@ def test_import_runner_creates_completed_analysis_run(tmp_path: Path):
         encoding="utf-8",
     )
     completed = []
-    failed = []
+    failed: list[str] = []
     runner = HawkEarsImportRunner(
         database.path,
         recordings,

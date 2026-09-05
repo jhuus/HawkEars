@@ -1634,10 +1634,21 @@ class ResultsPage(QWidget):
             return None
         return visible_ids[current_index + 1]
 
-    def first_visible_detection_id(self) -> int | None:
+    def is_detection_visible(self, detection_id: int) -> bool:
+        return any(
+            not self.table.isRowHidden(row)
+            and int(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole))
+            == detection_id
+            for row in range(self.table.rowCount())
+        )
+
+    def first_visible_detection_id(self, *, excluding: int | None = None) -> int | None:
         for row in range(self.table.rowCount()):
-            if not self.table.isRowHidden(row):
-                return int(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole))
+            if self.table.isRowHidden(row):
+                continue
+            detection_id = int(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole))
+            if detection_id != excluding:
+                return detection_id
         return None
 
 
@@ -1711,6 +1722,19 @@ class SpectrogramView(QWidget):
         self._request_id = 0
         self._waiting_cursor = False
         self._cursor_overridden = False
+
+    def clear(self) -> None:
+        """Clear the view and discard results from any outstanding request."""
+        self._request_id += 1
+        self._pixmap = None
+        self._data = None
+        self._detection_start = 0.0
+        self._detection_end = 0.0
+        self._frequency_bounds = None
+        self._playback_position = None
+        self._message = self.tr("Select a detection to view its spectrogram.")
+        self._set_waiting_cursor(False)
+        self.clear_selection()
 
     def load(
         self,
@@ -2305,6 +2329,44 @@ class ReviewPage(QWidget):
         """Enable navigation to the previously opened detection."""
         self.previous_button.setEnabled(enabled)
 
+    def clear_detection(self) -> None:
+        """Discard the current review before leaving its project or results."""
+        self._detection_id = None
+        self._displayed_species_name = None
+        self._original_species_name = None
+        self.cleanup_playback_file()
+        self._playback_samples = None
+        self._playback_sample_rate = 0
+        self._playback_channels = 1
+        self._playback_source_start_ms = 0
+        self._context_start_ms = 0
+        self._detection_start_ms = 0
+        self._detection_end_ms = 0
+        self.spectrogram.clear()
+        self.detection_title.setText(self.tr("No detection selected"))
+        self.detection_meta.setText(
+            self.tr("Choose a detection on the Results tab to begin review.")
+        )
+        self.verdict_group.setExclusive(False)
+        for button in self.verdict_group.buttons():
+            button.setChecked(False)
+            button.setEnabled(False)
+        self.verdict_group.setExclusive(True)
+        self._update_correction_control()
+        self.notes.clear()
+        self.notes.setEnabled(False)
+        for control in (
+            self.save_button,
+            self.save_stop_button,
+            self.previous_button,
+            self.play_context_button,
+            self.play_detection_button,
+            self.playback_gain,
+            self.high_pass,
+            self.low_pass,
+        ):
+            control.setEnabled(False)
+
     def show_detection(
         self,
         detection: DetectionResult,
@@ -2321,7 +2383,8 @@ class ReviewPage(QWidget):
             detection.end_ms,
         )
         score = "—" if detection.score is None else f"{detection.score:.3f}"
-        self.detection_title.setText(f"{detection.species_name} · {score}")
+        predicted_species = original_species_name or detection.species_name
+        self.detection_title.setText(f"{predicted_species} · {score}")
         self._detection_id = detection.detection_id
         self._displayed_species_name = detection.species_name
         self._original_species_name = original_species_name or detection.species_name
@@ -2331,12 +2394,14 @@ class ReviewPage(QWidget):
         self._correction_species_names.sort()
         self.verdict_group.setExclusive(False)
         for button in self.verdict_group.buttons():
+            button.setEnabled(True)
             button.setChecked(
                 detection.review_verdict is not None
                 and button.property("verdictValue") == detection.review_verdict.value
             )
         self.verdict_group.setExclusive(True)
         self._update_correction_control()
+        self.notes.setEnabled(True)
         self.notes.setPlainText(detection.review_notes)
         reviewed = detection.review_verdict is not None
         self.save_button.setEnabled(reviewed)
@@ -2680,9 +2745,9 @@ class ReviewPage(QWidget):
         )
         self.correction.setEnabled(incorrect)
         self.correction_label.setEnabled(incorrect)
-        selected_species = self._displayed_species_name
-        if incorrect and selected_species == self._original_species_name:
-            selected_species = None
+        selected_species = None
+        if incorrect and self._displayed_species_name != self._original_species_name:
+            selected_species = self._displayed_species_name
         options = [
             name
             for name in self._correction_species_names
@@ -2703,10 +2768,16 @@ class ReviewPage(QWidget):
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         QApplication.processEvents()
         try:
+            verdict = ReviewVerdict(str(checked.property("verdictValue")))
+            corrected_species_name = (
+                self.correction.currentText().strip()
+                if verdict is ReviewVerdict.INCORRECT
+                else ""
+            )
             self.save_requested.emit(
                 self._detection_id,
-                ReviewVerdict(str(checked.property("verdictValue"))),
-                self.correction.currentText().strip(),
+                verdict,
+                corrected_species_name,
                 self.notes.toPlainText().strip(),
                 advance,
             )
@@ -3796,6 +3867,7 @@ class MainWindow(QMainWindow):
         return directory if directory.is_dir() else self._application_paths.data_root
 
     def _activate_project(self, name: str, *, database: ProjectDatabase) -> None:
+        self._clear_review()
         self._project_open = True
         self.close_project_action.setEnabled(True)
         self._database = database
@@ -4106,6 +4178,7 @@ class MainWindow(QMainWindow):
             return
         if not self._project_open:
             return
+        self._clear_review()
         self._project_open = False
         self.close_project_action.setEnabled(False)
         self._database = None
@@ -4159,6 +4232,7 @@ class MainWindow(QMainWindow):
     def _review_results_selection(self) -> None:
         detection_id = self.results_page.selected_or_first_visible_detection_id()
         if detection_id is None:
+            self._clear_review()
             self._show_page(4)
             return
         self._start_review(detection_id)
@@ -4732,6 +4806,10 @@ class MainWindow(QMainWindow):
         self._export_runner = None
         self.reports_page.set_label_export_busy(False)
 
+    def _clear_review(self) -> None:
+        self._review_history.clear()
+        self.review_page.clear_detection()
+
     def _start_review(self, detection_id: int) -> None:
         """Start a new review navigation history from a Results selection."""
         self._review_history.clear()
@@ -4833,6 +4911,9 @@ class MainWindow(QMainWindow):
         )
         if self._database is None:
             return
+        correction_requested = verdict is ReviewVerdict.INCORRECT and bool(
+            corrected_species_name
+        )
         definition = (
             next(
                 (
@@ -4842,10 +4923,10 @@ class MainWindow(QMainWindow):
                 ),
                 None,
             )
-            if corrected_species_name
+            if correction_requested
             else None
         )
-        if corrected_species_name and definition is None:
+        if correction_requested and definition is None:
             QMessageBox.warning(
                 self,
                 self.tr("Select a species"),
@@ -4870,21 +4951,27 @@ class MainWindow(QMainWindow):
             return
         selected_queue_id = self.results_page.current_queue_id()
         next_detection_id = None
-        if advance and selected_queue_id is None:
+        if advance:
             next_detection_id = self.results_page.next_visible_detection_id(
                 detection_id
             )
         try:
+            target_species_id = original_species.id
+            revision_notes = (
+                "Species restored to original identification during review."
+            )
             if definition is not None:
                 corrected_species = self._database.species.ensure_catalog_species(
                     definition
                 )
-                if detection.current.species_id != corrected_species.id:
-                    self._database.detections.revise(
-                        detection_id,
-                        species_id=corrected_species.id,
-                        notes="Species corrected during review.",
-                    )
+                target_species_id = corrected_species.id
+                revision_notes = "Species corrected during review."
+            if detection.current.species_id != target_species_id:
+                self._database.detections.revise(
+                    detection_id,
+                    species_id=target_species_id,
+                    notes=revision_notes,
+                )
             self._database.detections.set_review(detection_id, verdict, notes=notes)
             self._database.review_queues.recalculate_for_detection(detection_id)
         except (LookupError, ValueError, sqlite3.DatabaseError) as error:
@@ -4904,8 +4991,14 @@ class MainWindow(QMainWindow):
                 selected_run_id=self.results_page.current_run_id(),
                 selected_queue_id=selected_queue_id,
             )
-            if advance:
-                next_detection_id = self.results_page.first_visible_detection_id()
+            if (
+                advance
+                and next_detection_id is not None
+                and not self.results_page.is_detection_visible(next_detection_id)
+            ):
+                next_detection_id = self.results_page.first_visible_detection_id(
+                    excluding=detection_id
+                )
         if advance and next_detection_id is not None:
             self._open_review(next_detection_id)
         else:

@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from britekit.core.exceptions import InferenceError
+
 from hawkears.core.analysis_result import (
     AnalysisProgress,
     AnalysisRecordingResult,
@@ -108,24 +110,139 @@ def test_analysis_runner_maps_date_options():
     )
 
 
+def test_analysis_runner_preserves_duplicate_basenames_with_relative_filelist_paths(
+    tmp_path: Path, monkeypatch
+):
+    project_path = tmp_path / "survey.hawkears"
+    database = ProjectDatabase.create(project_path, "Survey")
+    species = database.species.add("Marsh Wren", class_name="Marsh Wren")
+    recording_root = tmp_path / "recordings"
+    recordings = [
+        recording_root / "site-a" / "recording.wav",
+        recording_root / "site-b" / "recording.wav",
+    ]
+    for recording in recordings:
+        recording.parent.mkdir(parents=True, exist_ok=True)
+        recording.touch()
+    filelist = tmp_path / "filelist.csv"
+    filelist.write_text(
+        "filename,region,recording_date\n"
+        "site-a/recording.wav,CA-ON-OT,2026-05-18\n"
+        "site-b/recording.wav,CA-QC-MR,2026-05-19\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        analysis_runner,
+        "find_recording_paths",
+        lambda input_path, recurse: [str(path) for path in recordings],
+    )
+    analyze_arguments = {}
+
+    def fake_analyze(**kwargs):
+        analyze_arguments.update(kwargs)
+        for index, recording in enumerate(recordings, start=1):
+            kwargs["recording_callback"](AnalysisRecordingResult(recording, ()))
+            kwargs["progress_callback"](
+                AnalysisProgress(index, len(recordings), recording)
+            )
+
+    monkeypatch.setattr(analysis_runner, "analyze", fake_analyze)
+    runner = AnalysisRunner(
+        project_path,
+        recording_root,
+        True,
+        [species],
+        {"location": {"mode": "filelist", "path": str(filelist)}},
+    )
+    completed = []
+    runner.completed.connect(lambda run_id, count: completed.append((run_id, count)))
+
+    runner.run()
+
+    assert completed == [(1, 0)]
+    assert analyze_arguments["recording_paths"] == [
+        path.resolve() for path in recordings
+    ]
+    assert analyze_arguments["occurrence_metadata"] == {
+        str(recordings[0].resolve()): {
+            "recorded_at": "2026-05-18",
+            "region_code": "CA-ON-OT",
+        },
+        str(recordings[1].resolve()): {
+            "recorded_at": "2026-05-19",
+            "region_code": "CA-QC-MR",
+        },
+    }
+    stored_metadata = database.analysis.recording_metadata(1)
+    assert {values["region_code"] for values in stored_metadata.values()} == {
+        "CA-ON-OT",
+        "CA-QC-MR",
+    }
+
+
+def test_analysis_runner_rejects_ambiguous_filelist_basename(tmp_path, monkeypatch):
+    project_path = tmp_path / "survey.hawkears"
+    database = ProjectDatabase.create(project_path, "Survey")
+    species = database.species.add("Marsh Wren", class_name="Marsh Wren")
+    recording_root = tmp_path / "recordings"
+    recordings = [
+        recording_root / "site-a" / "recording.wav",
+        recording_root / "site-b" / "recording.wav",
+    ]
+    for recording in recordings:
+        recording.parent.mkdir(parents=True, exist_ok=True)
+        recording.touch()
+    filelist = tmp_path / "filelist.csv"
+    filelist.write_text(
+        "filename,region,recording_date\n" "recording.wav,CA-ON-OT,2026-05-18\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        analysis_runner,
+        "find_recording_paths",
+        lambda input_path, recurse: [str(path) for path in recordings],
+    )
+    runner = AnalysisRunner(
+        project_path,
+        recording_root,
+        True,
+        [species],
+        {"location": {"mode": "filelist", "path": str(filelist)}},
+    )
+    failures = []
+    runner.failed.connect(lambda message, details: failures.append(message))
+
+    runner.run()
+
+    assert len(failures) == 1
+    assert "Ambiguous filename 'recording.wav'" in failures[0]
+    assert "relative to the recording directory" in failures[0]
+    assert database.analysis.list_runs() == []
+
+
 def test_analysis_runner_persists_dates_extracted_from_filenames(
     tmp_path: Path, monkeypatch
 ):
     project_path = tmp_path / "survey.hawkears"
     database = ProjectDatabase.create(project_path, "Survey")
     species = database.species.add("Common Nighthawk", class_name="Common Nighthawk")
-    dated = tmp_path / "station_20150712_190000.wav"
+    dated = [
+        tmp_path / "station_20150712_190000.wav",
+        tmp_path / "station_2015-07-13_190000.wav",
+        tmp_path / "station_2015_07_14_190000.wav",
+    ]
     undated = tmp_path / "station_unknown.wav"
-    dated.touch()
+    for path in dated:
+        path.touch()
     undated.touch()
     monkeypatch.setattr(
         analysis_runner,
         "find_recording_paths",
-        lambda input_path, recurse: [str(dated), str(undated)],
+        lambda input_path, recurse: [*(str(path) for path in dated), str(undated)],
     )
 
     def fake_analyze(**kwargs):
-        for path in (dated, undated):
+        for path in (*dated, undated):
             kwargs["recording_callback"](AnalysisRecordingResult(path, ()))
 
     monkeypatch.setattr(analysis_runner, "analyze", fake_analyze)
@@ -156,7 +273,9 @@ def test_analysis_runner_persists_dates_extracted_from_filenames(
     finally:
         connection.close()
     assert [tuple(row) for row in rows] == [
+        ("station_2015-07-13_190000.wav", "2015-07-13"),
         ("station_20150712_190000.wav", "2015-07-12"),
+        ("station_2015_07_14_190000.wav", "2015-07-14"),
         ("station_unknown.wav", None),
     ]
 
@@ -234,6 +353,49 @@ def test_analysis_runner_reports_phase_run_and_traceback_on_failure(
     assert "model output could not be decoded" in message
     assert "Traceback (most recent call last)" in details
     assert "RuntimeError: model output could not be decoded" in details
+
+
+def test_audio_load_failure_keeps_recording_resumable(tmp_path: Path, monkeypatch):
+    project_path = tmp_path / "survey.hawkears"
+    database = ProjectDatabase.create(project_path, "Survey")
+    species = database.species.add("Marsh Wren", class_name="Marsh Wren")
+    recording = tmp_path / "corrupt.wav"
+    recording.write_bytes(b"not audio")
+    monkeypatch.setattr(
+        analysis_runner,
+        "find_recording_paths",
+        lambda input_path, recurse: [str(recording)],
+    )
+
+    def fail_to_load_recording(**kwargs):
+        raise InferenceError(
+            f'Could not load recording "{recording}": Could not decode audio'
+        )
+
+    monkeypatch.setattr(analysis_runner, "analyze", fail_to_load_recording)
+    runner = AnalysisRunner(project_path, tmp_path, False, [species], {})
+    failures = []
+    runner.failed.connect(lambda message, details: failures.append(message))
+
+    runner.run()
+
+    assert len(failures) == 1
+    assert "Could not decode audio" in failures[0]
+    resumable = database.analysis.latest_resumable_run()
+    assert resumable is not None
+    assert resumable.completed_recordings == 0
+    assert resumable.total_recordings == 1
+    connection = connect(project_path, readonly=True)
+    try:
+        item = connection.execute(
+            "SELECT status, error_message FROM analysis_item"
+        ).fetchone()
+    finally:
+        connection.close()
+    assert tuple(item) == (
+        "failed",
+        f'Could not load recording "{recording}": Could not decode audio',
+    )
 
 
 def test_failed_run_checkpoints_completed_recordings_and_resumes_remaining(
@@ -332,6 +494,67 @@ def test_failed_run_checkpoints_completed_recordings_and_resumes_remaining(
         assert connection.execute("SELECT count(*) FROM detection").fetchone()[0] == 2
     finally:
         connection.close()
+
+
+def test_resume_uses_saved_filelist_metadata_after_source_changes(
+    tmp_path: Path, monkeypatch
+):
+    project_path = tmp_path / "survey.hawkears"
+    database = ProjectDatabase.create(project_path, "Survey")
+    species = database.species.add("Marsh Wren", class_name="Marsh Wren")
+    recording = tmp_path / "recording.wav"
+    recording.touch()
+    stored_recording = database.recordings.add(recording)
+    filelist = tmp_path / "filelist.csv"
+    filelist.write_text(
+        "filename,region,recording_date\n" "recording.wav,CA-ON-OT,2026-05-18\n",
+        encoding="utf-8",
+    )
+    settings = {"location": {"mode": "filelist", "path": str(filelist)}}
+    metadata = AnalysisRunner._recording_metadata(
+        settings["location"], [stored_recording], [recording], tmp_path
+    )
+    run_id = database.analysis.create_run(
+        "test",
+        settings,
+        species_ids=[species.id],
+        recording_ids=[stored_recording.id],
+        recording_metadata=metadata,
+    )
+    database.analysis.set_run_status(run_id, "cancelled")
+    database.analysis.mark_unfinished_items(run_id, "cancelled")
+
+    filelist.write_text(
+        "filename,region,recording_date\n" "recording.wav,CA-BC-GV,2026-12-18\n",
+        encoding="utf-8",
+    )
+    analyze_arguments = {}
+
+    def finish_resumed_recording(**kwargs):
+        analyze_arguments.update(kwargs)
+        kwargs["recording_callback"](AnalysisRecordingResult(recording, ()))
+        kwargs["progress_callback"](AnalysisProgress(1, 1, recording))
+
+    monkeypatch.setattr(analysis_runner, "analyze", finish_resumed_recording)
+    resumed = AnalysisRunner(
+        project_path,
+        tmp_path,
+        False,
+        [species],
+        {"num_threads": 1},
+        resume_run_id=run_id,
+    )
+
+    resumed.run()
+
+    assert analyze_arguments["filelist"] == str(filelist)
+    assert analyze_arguments["occurrence_metadata"] == {
+        str(recording.resolve()): {
+            "recorded_at": "2026-05-18",
+            "region_code": "CA-ON-OT",
+        }
+    }
+    assert database.analysis.list_runs()[0].status == "completed"
 
 
 def test_recovers_run_left_running_by_terminated_process(tmp_path: Path):

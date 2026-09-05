@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
 from typing import Iterator
+from urllib.parse import quote
 
 
 def connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
@@ -14,8 +15,9 @@ def connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
     """
     resolved = path.expanduser().resolve()
     if readonly:
+        encoded_path = quote(resolved.as_posix(), safe="/:")
         connection = sqlite3.connect(
-            f"file:{resolved.as_posix()}?mode=ro",
+            f"file:{encoded_path}?mode=ro",
             uri=True,
             timeout=30,
         )

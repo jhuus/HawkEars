@@ -56,6 +56,71 @@ def test_filelist():
     assert occ_value > 0 and occ_value < 0.2
 
 
+def test_recording_metadata_takes_precedence_over_filelist(tmp_path, monkeypatch):
+    class SnapshotProvider:
+        class_names = {"Test species"}
+        format_version = 2
+        area_offsets = np.array([0, 1])
+
+        def __init__(self, path):
+            self.county = SimpleNamespace(index=0, code="CA-ON-OT")
+            self.calls = []
+
+        def find_county(self, latitude, longitude):
+            return self.county
+
+        def find_counties(self, region_code):
+            return [self.county]
+
+        def occurrence_value(self, class_name, region_code, week_num):
+            self.calls.append((class_name, region_code, week_num))
+            return True, True, 0.75
+
+    monkeypatch.setattr(
+        "hawkears.core.occurrence_manager.OccurrencePickleProvider",
+        SnapshotProvider,
+    )
+    missing_filelist = tmp_path / "deleted-filelist.csv"
+    first = tmp_path / "site-a" / "recording.wav"
+    second = tmp_path / "site-b" / "recording.wav"
+    cfg = SimpleNamespace(
+        hawkears=SimpleNamespace(
+            occurrence_pickle="unused.pkl",
+            region=None,
+            date=None,
+            filelist=str(missing_filelist),
+        )
+    )
+    class_manager = SimpleNamespace(
+        class_info_by_name=lambda name: object() if name == "Test species" else None
+    )
+    manager = OccurrenceManager(
+        cfg,
+        class_manager,
+        [str(first), str(second)],
+        recording_metadata={
+            str(first): {
+                "region_code": "CA-ON-OT",
+                "recorded_at": "2026-05-18",
+            },
+            str(second): {
+                "latitude": 45.4,
+                "longitude": -75.7,
+                "recorded_at": "2026-06-08T04:30:00",
+            },
+        },
+    )
+
+    assert manager.has_recording(first)
+    assert manager.has_recording(second)
+    assert manager.get_value(first, "Test species") == 0.75
+    assert manager.get_value(second, "Test species") == 0.75
+    assert manager.provider.calls == [
+        ("Test species", "CA-ON-OT", 18),
+        ("Test species", "CA-ON-OT", 21),
+    ]
+
+
 def test_compact_packaged_occurrence_data(tmp_path):
     """HawkEars can use the compact occurrence artifact without API changes."""
     archive = Path("install/canada/data/occurrence.zip")

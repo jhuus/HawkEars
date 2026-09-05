@@ -7,7 +7,7 @@ import sqlite3
 from hawkears.gui.database.connection import connect
 from hawkears.gui.database.errors import InvalidProjectError, MigrationError
 
-LATEST_SCHEMA_VERSION = 22
+LATEST_SCHEMA_VERSION = 23
 
 
 def migrate(path: Path) -> None:
@@ -49,20 +49,35 @@ def migrate(path: Path) -> None:
                 raise MigrationError(f"Missing database migration {version}.")
             sql = resource.read_text(encoding="utf-8")
             name = resource.name.replace("'", "''")
+            # Rebuilding detection must not cascade into its revision/review tables.
+            rebuilding_detection = version == 23
+            if rebuilding_detection:
+                connection.execute("PRAGMA foreign_keys = OFF")
             try:
                 connection.executescript(
                     "BEGIN IMMEDIATE;\n"
                     f"{sql}\n"
                     "INSERT INTO schema_migration(version, name) "
                     f"VALUES ({version}, '{name}');\n"
-                    "COMMIT;"
                 )
+                if (
+                    rebuilding_detection
+                    and connection.execute("PRAGMA foreign_key_check").fetchone()
+                    is not None
+                ):
+                    raise sqlite3.IntegrityError(
+                        "Invalid relationships after table rebuild"
+                    )
+                connection.commit()
             except sqlite3.Error as error:
                 if connection.in_transaction:
                     connection.rollback()
                 raise MigrationError(
                     f"Could not apply database migration {resource.name}: {error}"
                 ) from error
+            finally:
+                if rebuilding_detection:
+                    connection.execute("PRAGMA foreign_keys = ON")
     finally:
         connection.close()
 

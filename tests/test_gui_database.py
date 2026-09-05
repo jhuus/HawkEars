@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import sqlite3
 
@@ -23,7 +24,7 @@ def test_create_and_open_project(tmp_path: Path):
 
     assert database.path.is_file()
     assert database.project.get().name == "Wetland Survey"
-    assert schema_version(database.path) == 22
+    assert schema_version(database.path) == 23
     assert ProjectDatabase.is_project(database.path)
 
     reopened = ProjectDatabase.open(database.path)
@@ -43,6 +44,38 @@ def test_create_and_open_project(tmp_path: Path):
     assert "detection_current_revision_idx" in detection_indexes
 
 
+@pytest.mark.parametrize(
+    "filename",
+    (
+        "survey #1.hawkears",
+        "survey %23.hawkears",
+        pytest.param(
+            "survey ?1.hawkears",
+            marks=pytest.mark.skipif(
+                os.name == "nt",
+                reason="Question marks are not valid in Windows filenames.",
+            ),
+        ),
+    ),
+)
+def test_readonly_connection_encodes_special_characters_in_path(
+    tmp_path: Path, filename: str
+):
+    database = ProjectDatabase.create(tmp_path / filename, "Special path")
+
+    connection = connect(database.path, readonly=True)
+    try:
+        assert connection.execute("SELECT name FROM project").fetchone()["name"] == (
+            "Special path"
+        )
+        with pytest.raises(sqlite3.OperationalError):
+            connection.execute("UPDATE project SET name = 'Changed'")
+    finally:
+        connection.close()
+
+    assert database.project.get().name == "Special path"
+
+
 def test_existing_project_adds_current_revision_index_on_upgrade(tmp_path: Path):
     database = create_project(tmp_path)
     connection = connect(database.path)
@@ -55,7 +88,7 @@ def test_existing_project_adds_current_revision_index_on_upgrade(tmp_path: Path)
 
     ProjectDatabase.open(database.path)
 
-    assert schema_version(database.path) == 22
+    assert schema_version(database.path) == 23
     connection = connect(database.path, readonly=True)
     try:
         indexes = {
@@ -64,6 +97,106 @@ def test_existing_project_adds_current_revision_index_on_upgrade(tmp_path: Path)
     finally:
         connection.close()
     assert "detection_current_revision_idx" in indexes
+
+
+def test_nullable_score_migration_preserves_detection_relationships(
+    tmp_path, monkeypatch
+):
+    from hawkears.gui.database import schema
+
+    with monkeypatch.context() as old_schema:
+        old_schema.setattr(schema, "LATEST_SCHEMA_VERSION", 22)
+        database = create_project(tmp_path)
+    species = database.species.add("Marsh Wren")
+    recording = database.recordings.add(tmp_path / "bird.wav")
+    run = database.analysis.create_run(
+        "test", {}, species_ids=[species.id], recording_ids=[recording.id]
+    )
+    item = database.analysis.item_ids(run)[recording.id]
+    detection = database.detections.create_inferred(
+        recording.id, item, species.id, 0, 3000, 0.9
+    )
+    database.detections.revise(detection.id, start_ms=100, notes="Adjusted")
+    database.detections.set_review(
+        detection.id, ReviewVerdict.CORRECT, notes="Confirmed"
+    )
+    queue = database.review_queues.create(
+        "Review",
+        run,
+        species.id,
+        min_score=0,
+        max_per_recording=10,
+        min_spacing_ms=0,
+        ordering="score",
+    )
+    batch = database.imports.create_batch("hawkears-cli")
+    database.detections.create_cli_imported_many(
+        batch,
+        [
+            (
+                recording.id,
+                item,
+                species.id,
+                4000,
+                7000,
+                0.8,
+                "scores.csv",
+                2,
+                "bird",
+                "MAWR",
+                "4",
+                "7",
+                "0.8",
+            )
+        ],
+    )
+    before = database.detections.get(detection.id)
+    history = database.detections.revisions(detection.id)
+    result = database.detections.get_result(detection.id)
+    ProjectDatabase.open(database.path)
+    assert schema_version(database.path) == 23
+    assert database.detections.get(detection.id) == before
+    assert database.detections.revisions(detection.id) == history
+    assert database.detections.get_result(detection.id) == result
+    assert database.review_queues.detection_ids(queue) == [detection.id]
+    connection = connect(database.path)
+    try:
+        assert list(connection.execute("PRAGMA foreign_key_check")) == []
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM imported_analysis_detection"
+            ).fetchone()[0]
+            == 1
+        )
+        assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        with pytest.raises(sqlite3.IntegrityError, match="analysis item belongs"):
+            connection.execute(
+                "INSERT INTO detection(recording_id, analysis_item_id, source) VALUES (?, 9999, 'inference')",
+                (recording.id,),
+            )
+    finally:
+        connection.close()
+    database.detections.create_cli_imported_many(
+        batch,
+        [
+            (
+                recording.id,
+                item,
+                species.id,
+                8000,
+                10000,
+                None,
+                "scores.csv",
+                3,
+                "bird",
+                "MAWR",
+                "8",
+                "10",
+                "",
+            )
+        ],
+    )
+    assert any(row.score is None for row in database.detections.list_results(run))
 
 
 def test_rejects_non_project_database(tmp_path: Path):
@@ -75,6 +208,51 @@ def test_rejects_non_project_database(tmp_path: Path):
     assert not ProjectDatabase.is_project(path)
     with pytest.raises(InvalidProjectError):
         ProjectDatabase.open(path)
+
+
+def test_detection_rebuild_rolls_back_when_relationship_check_fails(
+    tmp_path, monkeypatch
+):
+    from hawkears.gui.database import schema
+    from hawkears.gui.database.errors import MigrationError
+
+    with monkeypatch.context() as old_schema:
+        old_schema.setattr(schema, "LATEST_SCHEMA_VERSION", 22)
+        database = create_project(tmp_path)
+    connection = connect(database.path)
+    try:
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.execute(
+            "INSERT INTO review(detection_id, verdict) VALUES (9999, 'correct')"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    with pytest.raises(MigrationError, match="Invalid relationships"):
+        schema.migrate(database.path)
+    connection = connect(database.path, readonly=True)
+    try:
+        assert (
+            connection.execute("SELECT max(version) FROM schema_migration").fetchone()[
+                0
+            ]
+            == 22
+        )
+        definition = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE name = 'detection'"
+        ).fetchone()[0]
+        assert "score IS NOT NULL" in definition
+        assert (
+            connection.execute("SELECT detection_id FROM review").fetchone()[0] == 9999
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM sqlite_master WHERE name = 'detection_new'"
+            ).fetchone()[0]
+            == 0
+        )
+    finally:
+        connection.close()
 
 
 def test_species_recordings_and_project_scope(tmp_path: Path):

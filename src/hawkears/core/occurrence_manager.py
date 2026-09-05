@@ -3,8 +3,7 @@
 import logging
 import math
 from pathlib import Path
-import re
-from typing import List, Optional
+from typing import List, Mapping, Optional
 
 import pandas as pd
 
@@ -12,10 +11,8 @@ from britekit import OccurrencePickleProvider
 
 from hawkears.core.class_manager import ClassManager
 from hawkears.core.config import HawkEarsBaseConfig
-
-# Pattern matches YYYYMMDD, YYYY-MM-DD, or YYYY_MM_DD
-# The \2 backreference ensures consistent separator (or none)
-_DATE_PATTERN = re.compile(r"((?:19|20)\d{2})([-_]?)(\d{2})\2(\d{2})")
+from hawkears.core.filelist import resolve_filelist_metadata
+from hawkears.core.recording_date import extract_recording_date
 
 
 class OccurrenceManager:
@@ -25,6 +22,8 @@ class OccurrenceManager:
         class_mgr: ClassManager,
         recording_paths: Optional[List[str]] = None,
         date: Optional[str] = None,
+        recording_metadata: Optional[Mapping[str, Mapping[str, object]]] = None,
+        recording_root: Optional[Path] = None,
     ):
         self.cfg = cfg
         self.region = cfg.hawkears.region
@@ -35,6 +34,7 @@ class OccurrenceManager:
         self.class_name_set = self.provider.class_names
         self._region_has_data_cache: dict[str, bool] = {}
         self.logged_location_error = False
+        self.file_info: Optional[dict[str, tuple[Optional[str], Optional[int]]]]
 
         if date is None:
             date = self.cfg.hawkears.date
@@ -45,13 +45,62 @@ class OccurrenceManager:
         else:
             self.week_num = None
 
-        if self.cfg.hawkears.filelist is None:
+        if recording_metadata is not None:
+            self._process_recording_metadata(recording_metadata)
+        elif self.cfg.hawkears.filelist is None:
             if recording_paths is None:
                 self.file_info = None
             else:
                 self._process_recordings()
+        elif recording_paths is not None and recording_root is not None:
+            resolved = resolve_filelist_metadata(
+                Path(self.cfg.hawkears.filelist),
+                (Path(path) for path in recording_paths),
+                recording_root,
+            )
+            self._process_recording_metadata(
+                {str(path): metadata for path, metadata in resolved.items()}
+            )
         else:
             self._process_file_list()
+
+    @staticmethod
+    def _recording_key(recording_path: str | Path) -> str:
+        return str(Path(recording_path).expanduser().resolve())
+
+    def _process_recording_metadata(
+        self, recording_metadata: Mapping[str, Mapping[str, object]]
+    ) -> None:
+        """Use immutable per-recording location and date snapshots."""
+        self.file_info = {}
+        for recording_path, metadata in recording_metadata.items():
+            recorded_at = metadata.get("recorded_at")
+            week_num = (
+                self._get_week_num_from_date_str(str(recorded_at)[:10])
+                if recorded_at
+                else self.week_num
+            )
+            region_value = metadata.get("region_code")
+            region = str(region_value).strip() if region_value else None
+            if region is None:
+                latitude = metadata.get("latitude")
+                longitude = metadata.get("longitude")
+                if latitude is not None and longitude is not None:
+                    county = self.provider.find_county(
+                        float(str(latitude)), float(str(longitude))
+                    )
+                    region = county.code if county is not None else None
+            if region is None:
+                week_num = None
+            self.file_info[self._recording_key(recording_path)] = (region, week_num)
+
+    def has_recording(self, recording_path: str | Path) -> bool:
+        """Return whether per-recording occurrence data includes this recording."""
+        if self.file_info is None:
+            return False
+        return self._recording_key(recording_path) in self.file_info or (
+            Path(recording_path).name in self.file_info
+        )
 
     @staticmethod
     def _get_week_num_from_date_str(date_str):
@@ -74,16 +123,8 @@ class OccurrenceManager:
             return None
 
     def _get_week_num_from_filename(self, filename):
-        match = _DATE_PATTERN.search(filename)
-        if match:
-            year = int(match.group(1))
-            month = int(match.group(3))
-            day = int(match.group(4))
-            if 1 <= month <= 12 and 1 <= day <= 31:
-                date_str = f"{year:04d}{month:02d}{day:02d}"
-                return self._get_week_num_from_date_str(date_str)
-
-        return None
+        date_str = extract_recording_date(filename)
+        return self._get_week_num_from_date_str(date_str)
 
     def _process_file_list(self):
         """
@@ -171,7 +212,7 @@ class OccurrenceManager:
 
             self.file_info[name] = (region, week_num)
 
-    def get_value(self, filename: str, class_name: str):
+    def get_value(self, recording_path: str | Path, class_name: str):
         assert (
             self.class_mgr.class_info_by_name(class_name) is not None
         ), f"Class {class_name} not found."
@@ -179,7 +220,13 @@ class OccurrenceManager:
         if class_name not in self.class_name_set:
             return 0.0
 
-        if self.file_info is None or filename not in self.file_info:
+        recording_key = self._recording_key(recording_path)
+        filename = Path(recording_path).name
+        if self.file_info is not None and recording_key in self.file_info:
+            region, week_num = self.file_info[recording_key]
+        elif self.file_info is not None and filename in self.file_info:
+            region, week_num = self.file_info[filename]
+        else:
             region = (
                 self.region if hasattr(self, "region") else self.cfg.hawkears.region
             )
@@ -192,9 +239,6 @@ class OccurrenceManager:
                         f"Error: unable to extract valid date from {filename}."
                     )
                     return 0.0
-        else:
-            region, week_num = self.file_info[filename]
-
         if region is None and week_num is None:
             # skip location/date filtering for this one,
             # e.g. a filelist entry with an invalid location

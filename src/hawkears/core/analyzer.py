@@ -7,13 +7,14 @@ import logging
 import os
 from pathlib import Path
 import threading
-from typing import Callable, Collection, Optional, Sequence
+from typing import Callable, Collection, Mapping, Optional, Sequence
 
 import polars as pl
 import pandas as pd
 
 from britekit import util
 from britekit import Predictor
+from britekit.core.exceptions import InferenceError
 
 from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.class_manager import ClassManager
@@ -28,6 +29,20 @@ from hawkears.core.raven import write_raven_selection_table
 from hawkears.heuristics.base import HeuristicsManager
 
 logger = logging.getLogger(__name__)
+
+
+def output_recording_names(paths: Sequence[str], input_root: Path) -> dict[str, str]:
+    """Keep legacy stems unless a run needs paths to distinguish recordings."""
+    stems = [Path(path).stem.casefold() for path in paths]
+    if len(stems) == len(set(stems)):
+        return {path: Path(path).stem for path in paths}
+    root = input_root.expanduser().resolve()
+    resolved = [Path(path).expanduser().resolve() for path in paths]
+    if any(not path.is_relative_to(root) for path in resolved):
+        root = Path(os.path.commonpath([str(root), *(str(p.parent) for p in resolved)]))
+    return {
+        path: full.relative_to(root).as_posix() for path, full in zip(paths, resolved)
+    }
 
 
 def find_recording_paths(input_path: str, recurse: bool = False) -> list[str]:
@@ -197,13 +212,19 @@ class Analyzer:
                 )
 
             if frame_map is None:
+                audio_error = getattr(predictor.audio, "load_error", None)
                 logger.warning(
                     "No predictions generated for %s (length=%.2f seconds, "
                     "audio_error=%s)",
                     recording_path,
                     predictor.audio.seconds(),
-                    getattr(predictor.audio, "load_error", None),
+                    audio_error,
                 )
+                if audio_error is not None:
+                    raise InferenceError(
+                        f'Could not load recording "{recording_path}": '
+                        f"{audio_error or 'unknown audio decoding error'}"
+                    )
                 if progress is not None:
                     progress.advance(task_id, file_sizes.get(recording_path, 0))
                 elif not self.quiet:
@@ -230,12 +251,14 @@ class Analyzer:
                 predictor.show_scores(None, frame_map[start_frame:])
 
             # update scores before output
-            recording_name = Path(recording_path).name
-            rarities_frame_map = self._update_frame_map(frame_map, recording_name)
+            rarities_frame_map = self._update_frame_map(frame_map, recording_path)
 
-            recording_stem = Path(recording_path).stem
+            recording_stem = getattr(self, "_output_names", {}).get(
+                recording_path, Path(recording_path).stem
+            )
             if self.do_audacity:
                 file_path = str(Path(output_path) / f"{recording_stem}_scores.txt")
+                Path(file_path).parent.mkdir(parents=True, exist_ok=True)
                 self._save_audacity_labels(predictor, frame_map, file_path)
 
                 if rarities_frame_map is not None:
@@ -243,6 +266,7 @@ class Analyzer:
                     os.makedirs(rarities_dir, exist_ok=True)
 
                     file_path = str(Path(rarities_dir) / f"{recording_stem}_scores.txt")
+                    Path(file_path).parent.mkdir(parents=True, exist_ok=True)
                     self._save_audacity_labels(
                         predictor, rarities_frame_map, file_path, False
                     )
@@ -294,6 +318,7 @@ class Analyzer:
                 file_path = str(
                     Path(output_path) / f"{recording_stem}.HawkEars.selection.table.txt"
                 )
+                Path(file_path).parent.mkdir(parents=True, exist_ok=True)
                 self._save_raven_table(dataframe, file_path, Path(recording_path))
 
             if progress is not None:
@@ -334,7 +359,7 @@ class Analyzer:
             for row in dataframe.to_dict("records")
         )
 
-    def _update_frame_map(self, frame_map, recording_name):
+    def _update_frame_map(self, frame_map, recording_path):
         """
         Apply updates to the frame map containing initial scores:
 
@@ -370,7 +395,7 @@ class Analyzer:
                 self.check_occurrence
                 and info.model_name in self.occur_mgr.class_name_set
             ):
-                occurrence = self.occur_mgr.get_value(recording_name, info.model_name)
+                occurrence = self.occur_mgr.get_value(recording_path, info.model_name)
                 if min_occurrence is not None and occurrence < min_occurrence:
                     if save_rarities:
                         rarities_frame_map[:, class_index] = frame_map[:, class_index]
@@ -588,6 +613,7 @@ class Analyzer:
         recording_callback: Optional[Callable[[AnalysisRecordingResult], None]] = None,
         cancellation_callback: Optional[Callable[[], bool]] = None,
         recording_paths_override: Optional[Sequence[Path]] = None,
+        occurrence_metadata: Optional[Mapping[str, Mapping[str, object]]] = None,
     ) -> AnalysisResult | None:
         """
         Run inference.
@@ -608,6 +634,13 @@ class Analyzer:
           stops scheduling further work after active recordings finish.
         - recording_paths_override: Explicit recordings to process instead of
           discovering them from input_path.
+        - occurrence_metadata: Immutable location and date values keyed by recording
+          path. When supplied, these values take precedence over a configured file list.
+
+        If recording stems collide, output files follow the input directory layout
+        and retain audio extensions (e.g. site/bird.wav_scores.txt). CSV recording
+        values then contain relative paths including extensions. Otherwise output
+        retains the historical flat stem-based names.
         """
 
         self.quiet = quiet
@@ -620,6 +653,9 @@ class Analyzer:
         )
 
         cfg = self.cfg.hawkears
+        input_root = Path(input_path)
+        if input_root.is_file():
+            input_root = input_root.parent
         self.check_occurrence = False
         self.occur_mgr: Optional[OccurrenceManager] = None
 
@@ -634,17 +670,31 @@ class Analyzer:
             elif val.startswith("rav"):
                 self.do_raven = True
 
-        if cfg.filelist is not None:
+        if occurrence_metadata is not None:
             self.check_occurrence = True
             self.occur_mgr = OccurrenceManager(
-                self.cfg, self.class_mgr, recording_paths
+                self.cfg,
+                self.class_mgr,
+                recording_paths,
+                recording_metadata=occurrence_metadata,
+            )
+            recording_paths = [
+                path for path in recording_paths if self.occur_mgr.has_recording(path)
+            ]
+        elif cfg.filelist is not None:
+            self.check_occurrence = True
+            self.occur_mgr = OccurrenceManager(
+                self.cfg,
+                self.class_mgr,
+                recording_paths,
+                recording_root=input_root,
             )
             assert self.occur_mgr.file_info is not None
 
             # filter recordings to the ones in the filelist
             temp_paths = []
             for recording_path in recording_paths:
-                if Path(recording_path).name in self.occur_mgr.file_info:
+                if self.occur_mgr.has_recording(recording_path):
                     temp_paths.append(recording_path)
 
             recording_paths = temp_paths
@@ -656,6 +706,7 @@ class Analyzer:
                 self.cfg, self.class_mgr, recording_paths, date
             )
 
+        self._output_names = output_recording_names(recording_paths, input_root)
         self.dataframes = []
         self.rarities_dataframes = []
         self.result_dataframes = []

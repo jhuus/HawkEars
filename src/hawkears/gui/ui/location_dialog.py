@@ -225,7 +225,8 @@ class LocationDialog(QDialog):
         explanation = QLabel(
             self.tr(
                 "Select a HawkEars file list with four columns: filename, latitude, "
-                "longitude, and recording_date."
+                "longitude, and recording_date. Use paths relative to the recording "
+                "directory when files in different subdirectories have the same name."
             )
         )
         explanation.setWordWrap(True)

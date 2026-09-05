@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog
 import pytest
 
@@ -65,3 +67,30 @@ def test_setup_dialog_accepts_an_existing_complete_directory(
     dialog._start()
 
     assert dialog.result() == QDialog.DialogCode.Accepted
+
+
+def test_escape_cancels_active_setup_without_dismissing_dialog(
+    tmp_path: Path, application, monkeypatch
+):
+    dialog = SetupDialog(tmp_path)
+    runner = SetupRunner(tmp_path)
+    cancellation_requests = []
+    rejections = []
+    monkeypatch.setattr(runner, "cancel", lambda: cancellation_requests.append(True))
+    dialog.rejected.connect(lambda: rejections.append(True))
+    dialog._runner = runner
+    dialog.show()
+    application.processEvents()
+
+    QTest.keyClick(dialog, Qt.Key.Key_Escape)
+
+    assert cancellation_requests == [True]
+    assert rejections == []
+    assert dialog.isVisible()
+    assert dialog.status.text() == "Cancelling setup…"
+
+    dialog._runner = None
+    QTest.keyClick(dialog, Qt.Key.Key_Escape)
+
+    assert rejections == [True]
+    assert not dialog.isVisible()
