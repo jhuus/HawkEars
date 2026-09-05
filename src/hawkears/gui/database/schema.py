@@ -7,7 +7,33 @@ import sqlite3
 from hawkears.gui.database.connection import connect
 from hawkears.gui.database.errors import InvalidProjectError, MigrationError
 
-LATEST_SCHEMA_VERSION = 23
+# Use exact resource names: Windows upgrades can leave obsolete SQL files behind.
+MIGRATION_NAMES = (
+    "001_initial.sql",
+    "002_recording_scope.sql",
+    "003_analysis_item_location.sql",
+    "004_review_queue.sql",
+    "005_stratified_review_queue.sql",
+    "006_review_queue_order.sql",
+    "007_location_date_review_queue.sql",
+    "008_analysis_import.sql",
+    "009_random_review_queue.sql",
+    "010_duration_ranked_review_queue.sql",
+    "011_percentile_review_queue.sql",
+    "012_diel_review_queue.sql",
+    "013_location_max_count_review_queue.sql",
+    "014_location_max_score_sum_review_queue.sql",
+    "015_location_max_score_review_queue.sql",
+    "016_location_first_date_review_queue.sql",
+    "017_location_date_high_score_review_queue.sql",
+    "018_location_date_first_detection_review_queue.sql",
+    "019_confirmation_aware_review.sql",
+    "020_confirmation_toggle.sql",
+    "021_resumable_analysis.sql",
+    "022_detection_current_revision_index.sql",
+    "023_nullable_inference_score.sql",
+)
+LATEST_SCHEMA_VERSION = len(MIGRATION_NAMES)
 
 
 def migrate(path: Path) -> None:
@@ -36,16 +62,8 @@ def migrate(path: Path) -> None:
         for version in range(1, LATEST_SCHEMA_VERSION + 1):
             if version in applied:
                 continue
-            prefix = f"{version:03d}_"
-            resource = next(
-                (
-                    item
-                    for item in migration_root.iterdir()
-                    if item.name.startswith(prefix) and item.name.endswith(".sql")
-                ),
-                None,
-            )
-            if resource is None:
+            resource = migration_root.joinpath(MIGRATION_NAMES[version - 1])
+            if not resource.is_file():
                 raise MigrationError(f"Missing database migration {version}.")
             sql = resource.read_text(encoding="utf-8")
             name = resource.name.replace("'", "''")

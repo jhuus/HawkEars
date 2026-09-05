@@ -38,6 +38,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 Name: "fileassoc"; Description: "Associate .hawkears project files with HawkEars"; GroupDescription: "File associations:"; Flags: checkedonce
 
+[InstallDelete]
+; Replace the migration resources so renamed files cannot survive an upgrade.
+Type: files; Name: "{app}\hawkears\gui\database\migrations\*.sql"
+
 [Files]
 Source: "build\HawkEars.dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 

@@ -99,6 +99,55 @@ def test_existing_project_adds_current_revision_index_on_upgrade(tmp_path: Path)
     assert "detection_current_revision_idx" in indexes
 
 
+@pytest.mark.parametrize("missing_current", (False, True))
+def test_upgrade_ignores_obsolete_migration_resource(
+    tmp_path, monkeypatch, missing_current
+):
+    from hawkears.gui.database import schema
+    from hawkears.gui.database.errors import MigrationError
+
+    with monkeypatch.context() as old_schema:
+        old_schema.setattr(schema, "LATEST_SCHEMA_VERSION", 21)
+        database = create_project(tmp_path)
+
+    resources = tmp_path / "migrations"
+    resources.mkdir()
+    # The old installer left this file alongside the current migration 022.
+    (resources / "022_analysis_run_process.sql").write_text(
+        "ALTER TABLE analysis_run ADD COLUMN process_id INTEGER;",
+        encoding="utf-8",
+    )
+    for resource in schema.files("hawkears.gui.database.migrations").iterdir():
+        if resource.name.endswith(".sql") and not (
+            missing_current and resource.name == schema.MIGRATION_NAMES[21]
+        ):
+            (resources / resource.name).write_text(
+                resource.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+    monkeypatch.setattr(schema, "files", lambda package: resources)
+
+    if missing_current:
+        with pytest.raises(MigrationError, match="Missing database migration 22"):
+            ProjectDatabase.open(database.path)
+        assert schema_version(database.path) == 21
+        return
+
+    ProjectDatabase.open(database.path)
+    ProjectDatabase.open(database.path)
+    assert database.project.get().name == "Wetland Survey"
+    assert schema_version(database.path) == schema.LATEST_SCHEMA_VERSION
+    connection = connect(database.path, readonly=True)
+    try:
+        assert connection.execute(
+            "SELECT name FROM schema_migration WHERE version = 22"
+        ).fetchone()["name"] == "022_detection_current_revision_index.sql"
+        assert "detection_current_revision_idx" in {
+            row["name"] for row in connection.execute("PRAGMA index_list(detection)")
+        }
+    finally:
+        connection.close()
+
+
 def test_nullable_score_migration_preserves_detection_relationships(
     tmp_path, monkeypatch
 ):
