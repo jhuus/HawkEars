@@ -54,7 +54,7 @@ HawkEars is distributed under the terms of the [MIT](https://spdx.org/licenses/M
 
 HawkEars can use a [CUDA-compatible NVIDIA GPU](https://developer.nvidia.com/cuda/gpus) with a CUDA-enabled PyTorch installation, or Apple Metal acceleration on Apple silicon Macs such as those with M3 or M4 chips. For CPU-based inference in a pip installation, you can install OpenVINO with `pip install openvino` to improve performance.
 
-To install the GUI on Windows, run this installer. Launch HawkEars using its shortcut; the first launch will ask where to store model data and download the required resources. See the [GUI guide](GUI.md) for the project workflow.
+To install the GUI on Windows, run [this installer](https://github.com/jhuus/HawkEars/releases/download/2.3.0/HawkEars-2.3.0-Windows-x64.exe). Launch HawkEars using its shortcut; the first launch will ask where to store model data and download the required resources. See the [GUI guide](GUI.md) for the project workflow.
 
 For a pip installation on Windows, macOS or Linux, use a virtual environment, such as a [Python venv](https://docs.python.org/3/library/venv.html). This installs the GUI, CLI and API. Once you have the environment set up, install HawkEars using pip:
 

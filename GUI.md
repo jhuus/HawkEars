@@ -19,7 +19,7 @@
 
 The HawkEars GUI provides a project-based workflow for analyzing recordings, reviewing detections, and exporting reports and labels.
 
-If you used the Windows installer, launch the GUI by double-clicking the shortcut. In this case the first launch will ask where HawkEars data should be installed, and will download the model checkpoints and other resources. If you installed HawkEars using `pip install hawkears`, once you have run `hawkears init` you can launch the GUI by typing `hawkears gui`. In this case, model checkpoints and other resources are downloaded by the `hawkears init` command.
+If you used the [Windows installer](https://github.com/jhuus/HawkEars/releases/download/2.3.0/HawkEars-2.3.0-Windows-x64.exe), launch the GUI by double-clicking the shortcut. In this case the first launch will ask where HawkEars data should be installed, and will download the model checkpoints and other resources. If you installed HawkEars using `pip install hawkears`, once you have run `hawkears init` you can launch the GUI by typing `hawkears gui`. In this case, model checkpoints and other resources are downloaded by the `hawkears init` command.
 
 A HawkEars project is stored in a `.hawkears` file. The project contains settings, analysis runs, detections, review queues and review history. It does not contain copies of the audio recordings, so do not move or delete the recordings after adding their directory to a project.
 
