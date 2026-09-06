@@ -19,7 +19,17 @@
 - [User Feedback](#user-feedback)
 
 ## Introduction
-HawkEars is a desktop program that scans audio recordings for bird or amphibian sounds and generates label files formatted for [Audacity](https://www.audacityteam.org/), [Raven](https://www.ravensoundsoftware.com/) or as a CSV file. This repository includes the source code and trained models for a list of 360 bird and 15 amphibian species found in Canada and the northern United States. The complete class list is found [here](https://github.com/jhuus/HawkEars/blob/main/install/canada/data/classes.csv). The repository does not include the raw data or spectrograms used to train the model.
+HawkEars is a desktop application for detecting bird and amphibian sounds in audio recordings and reviewing the results. Its trained models recognize 381 bird and 15 amphibian species found in Canada and the northern United States. See the [complete class list](install/canada/data/classes.csv) for supported species.
+
+The graphical interface provides a complete, project-based analysis workflow: select recordings and target species, run analysis, explore detections, and review them with spectrograms and audio playback. For larger datasets, saved review queues let you focus on a reproducible subset of detections. You can correct identifications and detection bounds, add notes, and export summary reports or audio labels. Projects retain analysis settings, results and review history so you can return to your work later.
+
+HawkEars provides three interfaces:
+
+- [Graphical user interface (GUI)](GUI.md) for managing projects, analyzing recordings, reviewing detections and exporting results.
+- [Command-line interface (CLI)](#analyzing-recordings) for batch analysis and scripted workflows, described below.
+- [Application programming interface (API)](#api) for integrating analysis into Python programs.
+
+This repository includes the source code and trained models, but not the raw data or spectrograms used to train them.
 
 If you use HawkEars for your acoustic analyses and research, please cite as:
 ```
@@ -44,7 +54,7 @@ HawkEars is distributed under the terms of the [MIT](https://spdx.org/licenses/M
 
 If you have a [CUDA-compatible NVIDIA GPU](https://developer.nvidia.com/cuda-gpus), such as a Geforce RTX, you can gain a major performance improvement by installing [CUDA](https://docs.nvidia.com/cuda/). If you have an Apple Metal processor, such as an M3 or M4, no CUDA installation is needed. If you have an Intel or AMD processor without a GPU, you can improve performance by installing Intel OpenVINO ("pip install openvino").
 
-It is best to install HawkEars in a virtual environment, such as a [Python venv](https://docs.python.org/3/library/venv.html). Once you have that set up, install HawkEars using pip, which is included in Python installations:
+To install the GUI on Windows, run this installer. For CLI installs, it is best to use a virtual environment, such as a [Python venv](https://docs.python.org/3/library/venv.html). Once you have that set up, install HawkEars using pip, which is included in Python installations:
 
 ```
 pip install hawkears
@@ -60,7 +70,11 @@ Once HawkEars is installed, initialize a working environment using the `init` co
 ```
 hawkears init
 ```
-This creates and populates several directories under the current working directory, and downloads the model checkpoint files. Use the --dest option to specify an alternative location.
+This creates and populates several directories under the current working directory, and downloads the model checkpoint files. Use the --dest option to specify an alternative location. You can then run the GUI from the command-line as follows:
+```
+hawkears-gui
+```
+CLI usage is described below.
 
 ## Analyzing Recordings
 ### Overview
@@ -142,6 +156,12 @@ The analyze command has the following options (only --input is required):
     * Path to text file listing common names of classes to include. If specified, exclude all other classes.
 * `--exclude <text file>`
     * Path to text file listing common names of classes to exclude. If specified, include all other species. Review the default file in data/exclude.txt, and be sure to specify classes such as Noise and Other, which should always be excluded.
+* `--seg <seconds>`
+    * Specify this if you want fixed-length output labels. Otherwise, variable-length labels are generated.
+* `--min-label-length <seconds>`
+    * Variable-length labels may be as short as .25 seconds. In some cases, labels that short have an above-average false positive rate. Use this option to filter them out.
+* `--max-label-length <seconds>`
+    * Use the option to limit the output label length. Longer labels are split, not excluded.
 * `--start <seconds>`
     * Specify this if you want analysis to start somewhere other than the start of the recording. For example, specify "--start 10" to start 10 seconds into the recording.
 * `--filelist <CSV file>`
@@ -159,7 +179,7 @@ The analyze command has the following options (only --input is required):
 * `--seg <seconds>`
     * By default, output labels are variable length. Specify a value here if you want fixed-length output labels.
 * `--models <value>`
-    * HawkEars analysis uses an ensemble of up to 9 main models (neural networks). Specify a smaller value here for faster performance but slightly reduced accuracy. With a GPU, the default is 9. Otherwise the default is 3.
+    * HawkEars analysis uses an ensemble of up to 6 main models (neural networks). Specify a smaller value here for faster performance but slightly reduced accuracy. With a GPU, the default is 6. Otherwise the default is 3.
 * `--label <value>`
     * Field used to identify species in output labels.
     * Valid values are "codes" (4-letter banding codes, the default), "names" (common names), "alt-codes" (6-letter banding codes) and "alt-names" (scientific names).
@@ -239,61 +259,7 @@ he.commands.analyze(
 )
 ```
 
-The analyze function is:
-
-```python
-analyze(
-    cfg_path: Optional[str] = None,
-    input_path: str = "",
-    output_path: str = "",
-    rtype: str = "audacity",
-    date: Optional[str] = None,
-    region: Optional[str] = None,
-    lat: Optional[float] = None,
-    lon: Optional[float] = None,
-    filelist: Optional[str] = None,
-    include: Optional[str] = None,
-    exclude: Optional[str] = None,
-    start_seconds: float = 0,
-    min_score: Optional[float] = None,
-    num_threads: Optional[int] = None,
-    segment_len: Optional[float] = None,
-    label_field: Optional[str] = None,
-    recurse: bool = False,
-    top: bool = False,
-    low_band: Optional[bool] = None,
-    quiet: bool = False,
-)
-```
-
-Parameters are:
-
-- `cfg_path (str, optional)`: Path to YAML configuration file defining model and inference settings.
-- `input_path (str)`: Path to input audio file or directory containing audio files.
-- `output_path (str)`: Path to output directory where results will be saved.
-- `rtype (str, optional)`: Output format type. Use "audacity", "csv", or "raven", or combine
-    with "+" (e.g., "audacity+csv"). Only first three characters needed. Default="audacity".
-- `date (str, optional)`: Date as YYYYMMDD, MMDD, or 'file'. Specifying 'file' extracts the date from the file name.
-- `region (str, optional)`: eBird region code, e.g. 'CA-AB' for Alberta. Use as an alternative to latitude/longitude.
-- `lat (float, optional)`: Latitude.
-- `lon (float, optional)`: Longitude.
-- `filelist (str, optional)`: Path to CSV file containing input file names, latitudes and longitudes
-    (or region codes) and recording dates.
-- `include (str, optional)`: Path to text file listing species to include. If specified,
-    exclude all other species. Defaults to value in config file.
-- `exclude (str, optional)`: Path to text file listing species to exclude.
-    Defaults to value in config file.
-- `start_seconds (float, optional)`: Where to start processing each recording, in seconds. Default=0.
-- `min_score (float, optional)`: Confidence threshold. Predictions below this value are excluded.
-- `num_threads (int, optional)`: Number of threads to use for processing.
-- `segment_len (float, optional)`: Fixed segment length in seconds. If specified, labels are
-    fixed-length; otherwise they are variable-length.
-- `label_field (str, optional)`: Type of label to output: "codes" (4-letter), "names" (common names),
-    "alt-codes" (6-letter), or "alt-names" (scientific names).
-- `recurse (bool, optional)`: If true, process sub-directories of the input directory.
-- `top (bool, optional)`: If true, show the top scores for the first spectrogram, then stop.
-- `low_band (bool, optional)`: If specified, override the default setting to enable or disable the low-band classifier.
-- `quiet (bool)`: If true, suppress most console messages.
+The analyze function is defined and documented in src/hawkears/commands/_analyze.py.
 
 ## User Feedback
 If you have any problems during installation or usage, please post an issue here. We would also appreciate any enhancement requests or examples of false positives or false negatives, which can also be posted as issues, or in an email to jhuus1 at gmail dot com.

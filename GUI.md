@@ -51,7 +51,7 @@ The Analyze page provides the main inference settings:
 
 Location and date information enables geographic occurrence filtering and location-specific heuristics. You can provide one location for all recordings using coordinates or an eBird region, or use a CSV file with per-recording values. The CSV file must include `filename`, `latitude`, `longitude` and `recording_date` columns.
 
-Click **Run analysis** to start a new run. If you click **Cancel**, recordings already in progress will finish and their detections will be saved, but no additional recordings will be started.
+If you click **Cancel** during an analysis run, recordings already in progress will finish and their detections will be saved, but no additional recordings will be started.
 
 You can also import Audacity or CSV output created by the HawkEars command-line interface using **Import analysis results**.
 
@@ -65,6 +65,10 @@ The location dialog is shown when you click **Configure location**:
   <img src="images/GUI-LocationDialog-FileList.png" width="500">
 </p>
 
+Clicking **Manage runs** lets you review, rename or delete your analysis runs:
+
+![](images/GUI-ManageAnalysisRuns.png)
+
 ## Results
 
 The Results page displays detections from an analysis run or review queue. **Time of day** is calculated from the recording timestamp, and is shown as `—` when no usable start time is available. **Detection offset** is the detection's position relative to the start of its recording. Results can be filtered by text, species and review status. Click a column heading to sort the table.
@@ -74,12 +78,6 @@ Click **Review displayed results** to review the results matching the current fi
 For a small analysis you may review all detections directly. For a large analysis, create a review queue to select a smaller, reproducible subset.
 
 ![](images/GUI-ResultsPage.png)
-
-## Managing Analysis Runs
-
-Clicking the Manage button opens a dialog that lets you rename or delete an analysis run.
-
-![](images/GUI-ManageAnalysisRuns.png)
 
 ## Review Queues
 
