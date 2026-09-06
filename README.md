@@ -72,7 +72,7 @@ hawkears init
 ```
 This creates and populates several directories under the current working directory, and downloads the model checkpoint files. Use the --dest option to specify an alternative location. You can then run the GUI from the command-line as follows:
 ```
-hawkears-gui
+hawkears gui
 ```
 CLI usage is described below.
 
