@@ -977,3 +977,40 @@ def test_spectrogram_selection_maps_to_time_and_frequency_bounds():
     finally:
         view.shutdown()
         app.processEvents()
+
+
+def test_review_short_window_scrolls_without_overlapping_spectrogram():
+    from hawkears.gui.ui.theme import STYLESHEET
+
+    app = QApplication.instance() or QApplication([])
+    previous_style = app.styleSheet()
+    app.setStyleSheet(STYLESHEET)
+    page = ReviewPage([])
+    try:
+        page.show()
+        for width, height in ((996, 500), (760, 420), (1400, 1100), (996, 500)):
+            page.resize(width, height)
+            app.processEvents()
+            app.processEvents()
+            plot = page.spectrogram.geometry()
+            for control in (
+                page.bounds_status,
+                page.clear_bounds_button,
+                page.apply_bounds_button,
+                page.play_context_button,
+            ):
+                assert plot.bottom() < control.geometry().top()
+            assert page.spectrogram.height() >= page.spectrogram.minimumHeight()
+            scrollbar = page.scroll_area.verticalScrollBar()
+            if height < 600:
+                assert scrollbar.maximum() > 0
+                page.scroll_area.ensureWidgetVisible(page.playback_gain)
+                app.processEvents()
+                assert scrollbar.value() > 0
+            else:
+                assert scrollbar.maximum() == 0
+    finally:
+        page.spectrogram.shutdown()
+        page.close()
+        app.setStyleSheet(previous_style)
+        app.processEvents()

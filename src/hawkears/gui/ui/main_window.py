@@ -1249,19 +1249,28 @@ class ResultsPage(QWidget):
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(page)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setWidget(page)
+        layout.addWidget(self.scroll_area)
 
-        sources = QHBoxLayout()
-        sources.addWidget(QLabel(self.tr("Analysis run")))
+        sources = QGridLayout()
+        sources.setColumnStretch(1, 1)
+        sources.setVerticalSpacing(outer.spacing())
+        sources.addWidget(QLabel(self.tr("Analysis run")), 0, 0)
         self.run = QComboBox()
         self._run_selection_initialized = False
         self.run.currentIndexChanged.connect(self._run_selected)
-        sources.addWidget(self.run, 1)
-        sources.addWidget(QLabel(self.tr("Review queue")))
+        sources.addWidget(self.run, 0, 1)
+        outer.addLayout(sources)
+        queue_sources = QHBoxLayout()
+        sources.addWidget(QLabel(self.tr("Review queue")), 1, 0)
         self.queue = QComboBox()
         self.queue.currentIndexChanged.connect(self._queue_selected)
-        sources.addWidget(self.queue, 1)
-        sources.addWidget(QLabel(self.tr("Review order")))
+        queue_sources.addWidget(self.queue, 1)
+        queue_options = QHBoxLayout()
+        sources.addWidget(QLabel(self.tr("Review status")), 2, 0)
         self.review_order = QComboBox()
         self.review_order.addItem(self.tr("Sampling order"), "queue")
         self.review_order.addItem(self.tr("Highest score first"), "score")
@@ -1276,7 +1285,6 @@ class ResultsPage(QWidget):
             )
         )
         self.review_order.currentIndexChanged.connect(self._review_order_selected)
-        sources.addWidget(self.review_order)
         self.create_queue_button = QPushButton(self.tr("Create queue…"))
         self.create_queue_button.setToolTip(
             self.tr(
@@ -1284,7 +1292,7 @@ class ResultsPage(QWidget):
             )
         )
         self.create_queue_button.clicked.connect(self.create_queue_requested)
-        sources.addWidget(self.create_queue_button)
+        queue_sources.addWidget(self.create_queue_button)
         self.delete_queue_button = QPushButton(self.tr("Delete queue…"))
         self.delete_queue_button.setToolTip(
             self.tr(
@@ -1294,8 +1302,9 @@ class ResultsPage(QWidget):
         )
         self.delete_queue_button.setEnabled(False)
         self.delete_queue_button.clicked.connect(self._delete_queue)
-        sources.addWidget(self.delete_queue_button)
-        outer.addLayout(sources)
+        queue_sources.addWidget(self.delete_queue_button)
+        sources.addLayout(queue_sources, 1, 1)
+        sources.addLayout(queue_options, 2, 1)
         self._queue_orders: dict[int, str] = {}
         self._queue_confirmation: dict[int, tuple[str, bool]] = {}
         self._queue_names: dict[int, str] = {}
@@ -1333,12 +1342,19 @@ class ResultsPage(QWidget):
                 "detections as skipped. Disabling this option restores them."
             )
         )
-        filters.addWidget(self.search, 2)
-        filters.addWidget(self.species)
-        filters.addWidget(QLabel(self.tr("Review status")))
-        filters.addWidget(self.review)
-        filters.addWidget(self.confirmation_toggle)
+        queue_options.addWidget(self.review)
+        queue_options.addWidget(QLabel(self.tr("Review order")))
+        queue_options.addWidget(self.review_order)
+        queue_options.addWidget(self.species, 1)
+        sources.addWidget(self.confirmation_toggle, 3, 1)
+        filters.addWidget(self.search)
         outer.addLayout(filters)
+        for combo in (self.run, self.queue, self.species):
+            combo.setSizeAdjustPolicy(
+                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+            )
+            combo.setMinimumContentsLength(16)
+            combo.currentTextChanged.connect(combo.setToolTip)
 
         self.guidance = QLabel()
         self.guidance.setObjectName("muted")
@@ -1346,6 +1362,8 @@ class ResultsPage(QWidget):
         outer.addWidget(self.guidance)
 
         self.table = QTableWidget(0, 8)
+        self.table.setWordWrap(False)
+        self.table.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.table.setHorizontalHeaderLabels(
             [
                 self.tr("Species"),
@@ -1358,6 +1376,7 @@ class ResultsPage(QWidget):
                 self.tr("Review"),
             ]
         )
+        self.table.setMinimumHeight(160)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -1367,8 +1386,12 @@ class ResultsPage(QWidget):
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setMinimumSectionSize(55)
+        header.setResizeContentsPrecision(200)
+        self._columns_user_sized = False
+        self._sizing_columns = False
         for column, width in enumerate((180, 75, 220, 130, 95, 140, 130, 105)):
             header.resizeSection(column, width)
+        header.sectionResized.connect(self._column_resized)
         self.table.doubleClicked.connect(self._open_current)
         outer.addWidget(self.table, 1)
 
@@ -1390,6 +1413,31 @@ class ResultsPage(QWidget):
         footer.addWidget(self.open_button)
         outer.addLayout(footer)
 
+    @staticmethod
+    def _update_combo_tooltips(combo: QComboBox) -> None:
+        combo.setToolTip(combo.currentText())
+        for index in range(combo.count()):
+            combo.setItemData(index, combo.itemText(index), Qt.ItemDataRole.ToolTipRole)
+
+    def _column_resized(self, _column: int, _old: int, _new: int) -> None:
+        if not self._sizing_columns:
+            self._columns_user_sized = True
+
+    def _size_result_columns(self) -> None:
+        """Fit typical values while keeping long filenames from consuming the table."""
+        if self._columns_user_sized or not self.table.rowCount():
+            return
+        self._sizing_columns = True
+        try:
+            self.table.resizeColumnsToContents()
+            header = self.table.horizontalHeader()
+            for column, minimum, maximum in ((0, 180, 280), (2, 260, 440), (5, 140, 240)):
+                header.resizeSection(
+                    column, max(minimum, min(maximum, header.sectionSize(column)))
+                )
+        finally:
+            self._sizing_columns = False
+
     def configure_runs(self, runs: list[AnalysisRunSummary]) -> None:
         current = self.run.currentData()
         self.run.blockSignals(True)
@@ -1409,6 +1457,7 @@ class ResultsPage(QWidget):
                 selected = 0
         self.run.setCurrentIndex(max(0, selected))
         self.run.blockSignals(False)
+        self._update_combo_tooltips(self.run)
 
     def _run_selected(self) -> None:
         run_id = self.current_run_id()
@@ -1442,6 +1491,7 @@ class ResultsPage(QWidget):
         selected = self.queue.findData(current)
         self.queue.setCurrentIndex(max(0, selected))
         self.queue.blockSignals(False)
+        self._update_combo_tooltips(self.queue)
         self._sync_review_order()
 
     def _queue_selected(self) -> None:
@@ -1546,6 +1596,7 @@ class ResultsPage(QWidget):
         selected_index = self.species.findText(selected_species)
         self.species.setCurrentIndex(max(0, selected_index))
         self.species.blockSignals(False)
+        self._update_combo_tooltips(self.species)
 
         for row, detection in enumerate(detections):
             score = "—" if detection.score is None else f"{detection.score:.3f}"
@@ -1578,8 +1629,10 @@ class ResultsPage(QWidget):
                     if column == 2
                     else QTableWidgetItem(value)
                 )
+                item.setToolTip(value)
                 item.setData(Qt.ItemDataRole.UserRole, detection.detection_id)
                 self.table.setItem(row, column, item)
+        self._size_result_columns()
         self.table.setSortingEnabled(not preserve_order)
         if not preserve_order:
             self.table.sortItems(1, Qt.SortOrder.DescendingOrder)
@@ -1602,6 +1655,7 @@ class ResultsPage(QWidget):
             for column, value in enumerate(values):
                 item = self.table.item(row, column)
                 item.setText(value)
+                item.setToolTip(value)
                 item.setData(Qt.ItemDataRole.UserRole, detection.detection_id)
                 if column == 2:
                     item.setData(
@@ -1614,6 +1668,7 @@ class ResultsPage(QWidget):
                     )
             if self.species.findText(detection.species_name) < 0:
                 self.species.addItem(detection.species_name)
+                self._update_combo_tooltips(self.species)
             self.table.setSortingEnabled(sorting_enabled)
             if sorting_enabled:
                 self.table.sortItems(sort_column, sort_order)
@@ -2132,6 +2187,32 @@ class SpectrogramView(QWidget):
         return f"{round(frequency)} Hz"
 
 
+class ReviewSplitter(QSplitter):
+    """Keep wrapped panel controls above their minimum usable height."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setChildrenCollapsible(False)
+        self.splitterMoved.connect(self._update_minimum_height)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._update_minimum_height()
+
+    def _update_minimum_height(self) -> None:
+        heights = []
+        for index in range(self.count()):
+            panel = self.widget(index)
+            layout = panel.layout()
+            heights.append(
+                max(
+                    layout.minimumSize().height(),
+                    layout.totalHeightForWidth(panel.width()),
+                )
+            )
+        self.setMinimumHeight(max(heights, default=0))
+
+
 class ReviewPage(QWidget):
     save_requested = Signal(int, object, str, str, bool)
     bounds_requested = Signal(int, int, int, int, int)
@@ -2149,9 +2230,13 @@ class ReviewPage(QWidget):
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(page)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setWidget(page)
+        layout.addWidget(self.scroll_area)
 
-        splitter = QSplitter()
+        splitter = ReviewSplitter()
         media_card, media = card_layout()
         self.detection_title = section_title(self.tr("No detection selected"))
         self.detection_meta = QLabel(
