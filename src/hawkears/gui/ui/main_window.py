@@ -99,6 +99,7 @@ from hawkears.gui.database.records import (
     ValidatedReport,
 )
 from hawkears.gui.recording_time import detection_time_of_day
+from hawkears.gui.ui.analysis_run_display import run_counts, run_details, run_label
 from hawkears.gui.diagnostics import diagnostic_directory
 from hawkears.gui.services.class_catalog import catalog_path, load_class_catalog
 from hawkears.gui.services.location_catalog import (
@@ -484,6 +485,8 @@ class ProjectPage(QWidget):
 
 
 class AnalysisPage(QWidget):
+    results_requested = Signal(int)
+    manage_run_requested = Signal(int)
     settings_changed = Signal(object)
     run_requested = Signal()
     resume_requested = Signal(int)
@@ -622,26 +625,28 @@ class AnalysisPage(QWidget):
         )
 
         run_card, run = card_layout()
-        self.run_heading = section_title(self.tr("Analysis scope incomplete"))
+        self.run_heading = section_title(self.tr("Start a new analysis"))
         run.addWidget(self.run_heading)
         self.scope_summary = QLabel()
         self.scope_summary.setWordWrap(True)
         run.addWidget(self.scope_summary)
         details = QLabel(
             self.tr(
-                "A new analysis run preserves these settings and its results, so later "
-                "runs can be compared without overwriting earlier work."
+                "Start a new run using the current settings on the left. "
+                "Previous runs and their results are preserved."
             )
         )
         details.setWordWrap(True)
         details.setObjectName("muted")
         run.addWidget(details)
-        run.addStretch()
         self.status = QLabel(self.tr("Not started"))
+        self.status.setWordWrap(True)
+        self.status.setVisible(False)
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self.run_button = QPushButton(self.tr("Run analysis"))
+        self.progress.setVisible(False)
+        self.run_button = QPushButton(self.tr("Start new run"))
         self.run_button.setProperty("primary", True)
         self.run_button.clicked.connect(self._start_run)
         self.resume_button = QPushButton(self.tr("Resume incomplete run"))
@@ -652,15 +657,58 @@ class AnalysisPage(QWidget):
         self.cancel_button = QPushButton(self.tr("Cancel"))
         self.cancel_button.setVisible(False)
         self.cancel_button.clicked.connect(self._request_cancel)
-        run.addWidget(self.status)
-        run.addWidget(self.progress)
         actions = QHBoxLayout()
         actions.addStretch()
         actions.addWidget(self.import_button)
         actions.addWidget(self.cancel_button)
-        actions.addWidget(self.resume_button)
         actions.addWidget(self.run_button)
         run.addLayout(actions)
+        self.activity_heading = section_title(self.tr("Current activity"))
+        self.activity_heading.hide()
+        run.addWidget(self.activity_heading)
+        run.addWidget(self.status)
+        run.addWidget(self.progress)
+
+        run.addSpacing(24)
+        run.addWidget(section_title(self.tr("Previous runs")))
+        self.previous_run = QComboBox()
+        self.previous_run.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.previous_run.setMinimumContentsLength(20)
+        self.previous_run.currentIndexChanged.connect(self._previous_run_changed)
+        run.addWidget(self.previous_run)
+        self.previous_summary = QLabel(self.tr("No previous runs."))
+        self.previous_summary.setWordWrap(True)
+        self.previous_summary.setTextFormat(Qt.TextFormat.PlainText)
+        run.addWidget(self.previous_summary)
+        self.resume_explanation = QLabel(
+            self.tr(
+                "Resume uses this run's original settings and skips completed "
+                "recordings. Only the worker-thread count uses the current setting."
+            )
+        )
+        self.resume_explanation.setWordWrap(True)
+        self.resume_explanation.hide()
+        run.addWidget(self.resume_explanation)
+        history_actions = QHBoxLayout()
+        self.view_results_button = QPushButton(self.tr("View results"))
+        self.view_results_button.clicked.connect(
+            lambda: self.results_requested.emit(int(self.previous_run.currentData()))
+        )
+        self.manage_run_button = QPushButton(self.tr("Manage run…"))
+        self.manage_run_button.setToolTip(
+            self.tr("View saved settings and errors, rename, or delete this run.")
+        )
+        self.manage_run_button.clicked.connect(
+            lambda: self.manage_run_requested.emit(int(self.previous_run.currentData()))
+        )
+        history_actions.addWidget(self.view_results_button)
+        history_actions.addWidget(self.manage_run_button)
+        history_actions.addStretch()
+        history_actions.addWidget(self.resume_button)
+        run.addLayout(history_actions)
+        run.addStretch()
         columns.addWidget(run_card, 3)
         outer.addLayout(columns, 1)
 
@@ -671,6 +719,8 @@ class AnalysisPage(QWidget):
         self._import_ready = False
         self._editable = False
         self._resumable_run_id: int | None = None
+        self._previous_runs: dict[int, AnalysisRunSummary] = {}
+        self.configure_runs([])
         self.threshold.valueChanged.connect(self._threshold_changed)
         self.models.valueChanged.connect(self._emit_settings)
         self.threads.valueChanged.connect(self._emit_settings)
@@ -732,11 +782,6 @@ class AnalysisPage(QWidget):
             and species_count > 0
             and editable
         )
-        self.run_heading.setText(
-            self.tr("Ready to analyze")
-            if scope_complete
-            else self.tr("Analysis scope incomplete")
-        )
         if missing:
             self.scope_summary.setText(
                 self.tr("Choose %1.").replace("%1", self.tr(" and ").join(missing))
@@ -771,16 +816,15 @@ class AnalysisPage(QWidget):
         }
 
     def configure_resume(self, run: ResumableAnalysisRun | None) -> None:
-        """Show the newest run that can continue from recording checkpoints."""
+        """Offer to continue the selected run from recording checkpoints."""
         self._resumable_run_id = run.id if run is not None else None
         self.resume_button.setVisible(run is not None)
+        self.resume_explanation.setVisible(run is not None)
         if run is None:
             return
         self.resume_button.setText(
-            self.tr("Resume run %1 (%2/%3 complete)")
+            self.tr("Resume run %1")
             .replace("%1", str(run.id))
-            .replace("%2", str(run.completed_recordings))
-            .replace("%3", str(run.total_recordings))
         )
         self.resume_button.setToolTip(
             self.tr(
@@ -790,6 +834,47 @@ class AnalysisPage(QWidget):
             )
         )
         self.resume_button.setEnabled(not self._running)
+
+    def configure_runs(
+        self, runs: list[AnalysisRunSummary], selected_run_id: int | None = None
+    ) -> None:
+        current = (
+            selected_run_id
+            if selected_run_id is not None
+            else self.previous_run.currentData()
+        )
+        self._previous_runs = {run.id: run for run in runs}
+        self.previous_run.blockSignals(True)
+        self.previous_run.clear()
+        for run in runs:
+            self.previous_run.addItem(run_label(run), run.id)
+        self.previous_run.setCurrentIndex(max(0, self.previous_run.findData(current)))
+        self.previous_run.blockSignals(False)
+        self._previous_run_changed()
+
+    def _previous_run_changed(self) -> None:
+        run = self._previous_runs.get(self.previous_run.currentData())
+        self.previous_summary.setText(
+            run_counts(run) if run is not None else self.tr("No previous runs.")
+        )
+        self.view_results_button.setEnabled(run is not None and not self._running)
+        self.manage_run_button.setEnabled(run is not None and not self._running)
+        self.configure_resume(
+            ResumableAnalysisRun(
+                run.id, run.status, run.completed_recordings, run.total_recordings
+            )
+            if run is not None and run.resumable
+            else None
+        )
+
+    def _set_activity_visible(self, visible: bool) -> None:
+        self.activity_heading.setVisible(visible)
+        self.status.setVisible(visible)
+        self.progress.setVisible(visible)
+        self.previous_run.setEnabled(not visible)
+        has_run = self.previous_run.currentData() is not None
+        self.view_results_button.setEnabled(has_run and not visible)
+        self.manage_run_button.setEnabled(has_run and not visible)
 
     def _update_location_summary(self) -> None:
         catalog = None
@@ -864,6 +949,8 @@ class AnalysisPage(QWidget):
         if not self._scope_ready or self._running:
             return
         self._running = True
+        self.activity_heading.setText(self.tr("Current activity · New run"))
+        self._set_activity_visible(True)
         self._run_started_at = time.monotonic()
         self.progress.setValue(0)
         self.status.setText(self.tr("Preparing models…"))
@@ -878,6 +965,12 @@ class AnalysisPage(QWidget):
         if self._resumable_run_id is None or self._running:
             return
         self._running = True
+        self.activity_heading.setText(
+            self.tr("Current activity · Resuming run %1").replace(
+                "%1", str(self._resumable_run_id)
+            )
+        )
+        self._set_activity_visible(True)
         self._run_started_at = time.monotonic()
         self.progress.setValue(0)
         self.status.setText(self.tr("Preparing models to resume…"))
@@ -899,6 +992,8 @@ class AnalysisPage(QWidget):
         if not path:
             return
         self._running = True
+        self.activity_heading.setText(self.tr("Current activity · Importing results"))
+        self._set_activity_visible(True)
         self._run_started_at = None
         self.progress.setRange(0, 0)
         self.status.setText(self.tr("Validating and importing analysis results…"))
@@ -953,20 +1048,23 @@ class AnalysisPage(QWidget):
     def analysis_completed(self, detection_count: int) -> None:
         self._running = False
         self._run_started_at = None
+        self._set_activity_visible(False)
         self.progress.setRange(0, 100)
-        self.progress.setValue(100)
+        self.progress.setValue(0)
         self.status.setText(self.tr("Complete · %n detections", None, detection_count))
         self.cancel_button.setVisible(False)
-        self.run_button.setText(self.tr("Run again"))
+        self.run_button.setText(self.tr("Start new run"))
         self.run_button.setEnabled(self._scope_ready)
         self.resume_button.setEnabled(self._resumable_run_id is not None)
         self.import_button.setEnabled(self._import_ready)
 
     def analysis_saving_results(self) -> None:
+        self._set_activity_visible(True)
         self.progress.setRange(0, 0)
         self.status.setText(self.tr("Saving detections…"))
 
     def analysis_loading_results(self) -> None:
+        self._set_activity_visible(True)
         self.progress.setRange(0, 0)
         self.status.setText(self.tr("Loading results…"))
 
@@ -975,8 +1073,9 @@ class AnalysisPage(QWidget):
     ) -> None:
         self._running = False
         self._run_started_at = None
+        self._set_activity_visible(False)
         self.progress.setRange(0, 100)
-        self.progress.setValue(100)
+        self.progress.setValue(0)
         format_label = "CSV" if format_name == "csv" else self.tr("Audacity labels")
         self.status.setText(
             self.tr("Imported %n detections", None, detection_count)
@@ -984,7 +1083,7 @@ class AnalysisPage(QWidget):
             + f" · {format_label}"
         )
         self.cancel_button.setVisible(False)
-        self.run_button.setText(self.tr("Run again"))
+        self.run_button.setText(self.tr("Start new run"))
         self.run_button.setEnabled(self._scope_ready)
         self.resume_button.setEnabled(self._resumable_run_id is not None)
         self.import_button.setEnabled(self._import_ready)
@@ -992,6 +1091,7 @@ class AnalysisPage(QWidget):
     def analysis_failed(self) -> None:
         self._running = False
         self._run_started_at = None
+        self._set_activity_visible(False)
         self.progress.setRange(0, 100)
         self.status.setText(self.tr("Analysis failed"))
         self.cancel_button.setVisible(False)
@@ -1002,13 +1102,14 @@ class AnalysisPage(QWidget):
     def analysis_cancelled(self, detection_count: int) -> None:
         self._running = False
         self._run_started_at = None
+        self._set_activity_visible(False)
         self.progress.setRange(0, 100)
-        self.progress.setValue(100)
+        self.progress.setValue(0)
         self.status.setText(
             self.tr("Cancelled · %n detections saved", None, detection_count)
         )
         self.cancel_button.setVisible(False)
-        self.run_button.setText(self.tr("Run again"))
+        self.run_button.setText(self.tr("Start new run"))
         self.run_button.setEnabled(self._scope_ready)
         self.resume_button.setEnabled(self._resumable_run_id is not None)
         self.import_button.setEnabled(self._import_ready)
@@ -1017,11 +1118,12 @@ class AnalysisPage(QWidget):
         """Reset transient analysis progress when the active project changes."""
         self._running = False
         self._run_started_at = None
+        self._set_activity_visible(False)
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.status.setText(self.tr("Not started"))
         self.cancel_button.setVisible(False)
-        self.run_button.setText(self.tr("Run analysis"))
+        self.run_button.setText(self.tr("Start new run"))
         self.run_button.setEnabled(self._scope_ready)
         self.resume_button.setEnabled(self._resumable_run_id is not None)
         self.import_button.setEnabled(self._import_ready)
@@ -1075,6 +1177,9 @@ class AnalysisRunsDialog(QDialog):
         self.run = QComboBox()
         self.run.currentIndexChanged.connect(self._selection_changed)
         layout.addWidget(self.run)
+        self.details = QTextBrowser()
+        self.details.setMinimumHeight(260)
+        layout.addWidget(self.details)
 
         actions = QHBoxLayout()
         self.rename_button = QPushButton(self.tr("Rename…"))
@@ -1093,19 +1198,14 @@ class AnalysisRunsDialog(QDialog):
     def configure_runs(
         self, runs: list[AnalysisRunSummary], selected_run_id: int | None = None
     ) -> None:
+        self._runs = {run.id: run for run in runs}
         current = (
             selected_run_id if selected_run_id is not None else self.run.currentData()
         )
         self.run.blockSignals(True)
         self.run.clear()
         for run in runs:
-            label = run.name or self.tr("Run %1").replace("%1", str(run.id))
-            self.run.addItem(
-                self.tr("%1 · %2 · %n detections", None, run.detection_count)
-                .replace("%1", label)
-                .replace("%2", run.created_at[:10]),
-                run.id,
-            )
+            self.run.addItem(f"{run_label(run)} · {run_counts(run)}", run.id)
         selected = self.run.findData(current)
         self.run.setCurrentIndex(max(0, selected))
         self.run.blockSignals(False)
@@ -1114,7 +1214,9 @@ class AnalysisRunsDialog(QDialog):
     def _selection_changed(self) -> None:
         enabled = self.run.currentData() is not None
         self.rename_button.setEnabled(enabled)
-        self.delete_button.setEnabled(enabled)
+        run = self._runs.get(self.run.currentData())
+        self.delete_button.setEnabled(enabled and run.status != "running")
+        self.details.setPlainText(run_details(run) if run else self.tr("No runs."))
 
     def _rename(self) -> None:
         if self.run.currentData() is not None:
@@ -1128,7 +1230,6 @@ class AnalysisRunsDialog(QDialog):
 class ResultsPage(QWidget):
     review_requested = Signal(int)
     run_changed = Signal(object)
-    manage_runs_requested = Signal()
     queue_changed = Signal(object)
     create_queue_requested = Signal()
     delete_queue_requested = Signal(int)
@@ -1153,11 +1254,6 @@ class ResultsPage(QWidget):
         self._run_selection_initialized = False
         self.run.currentIndexChanged.connect(self._run_selected)
         sources.addWidget(self.run, 1)
-        self.manage_runs_button = QPushButton(self.tr("Manage…"))
-        self.manage_runs_button.setToolTip(self.tr("Rename or delete analysis runs."))
-        self.manage_runs_button.setEnabled(False)
-        self.manage_runs_button.clicked.connect(self.manage_runs_requested)
-        sources.addWidget(self.manage_runs_button)
         sources.addWidget(QLabel(self.tr("Review queue")))
         self.queue = QComboBox()
         self.queue.currentIndexChanged.connect(self._queue_selected)
@@ -1296,14 +1392,7 @@ class ResultsPage(QWidget):
         self.run.blockSignals(True)
         self.run.clear()
         for run in runs:
-            label = run.name or self.tr("Run %1").replace("%1", str(run.id))
-            date = run.created_at[:10]
-            self.run.addItem(
-                self.tr("%1 · %2 · %n detections", None, run.detection_count)
-                .replace("%1", label)
-                .replace("%2", date),
-                run.id,
-            )
+            self.run.addItem(f"{run_label(run)} · {run_counts(run)}", run.id)
         self.run.addItem(self.tr("All detections"), None)
         if not runs:
             selected = 0
@@ -1317,7 +1406,6 @@ class ResultsPage(QWidget):
                 selected = 0
         self.run.setCurrentIndex(max(0, selected))
         self.run.blockSignals(False)
-        self.manage_runs_button.setEnabled(bool(runs))
 
     def _run_selected(self) -> None:
         run_id = self.current_run_id()
@@ -3004,13 +3092,7 @@ class ReportsPage(QWidget):
         self.run.blockSignals(True)
         self.run.clear()
         for run in runs:
-            label = run.name or self.tr("Run %1").replace("%1", str(run.id))
-            self.run.addItem(
-                self.tr("%1 · %2 · %n detections", None, run.detection_count)
-                .replace("%1", label)
-                .replace("%2", run.created_at[:10]),
-                run.id,
-            )
+            self.run.addItem(f"{run_label(run)} · {run_counts(run)}", run.id)
         self.run.addItem(self.tr("All detections"), None)
         if not runs:
             selected = 0
@@ -3358,7 +3440,6 @@ class MainWindow(QMainWindow):
         self.welcome.recent_open_requested.connect(self._open_project_path)
         self.results_page.review_requested.connect(self._start_review)
         self.results_page.run_changed.connect(self._results_run_changed)
-        self.results_page.manage_runs_requested.connect(self._manage_analysis_runs)
         self.results_page.queue_changed.connect(self._results_queue_changed)
         self.results_page.review_order_changed.connect(
             self._results_review_order_changed
@@ -3380,6 +3461,8 @@ class MainWindow(QMainWindow):
         self.project_page.recording_scope_changed.connect(self._save_recording_scope)
         self.project_page.edit_species_requested.connect(self._edit_species)
         self.analysis_page.settings_changed.connect(self._save_analysis_settings)
+        self.analysis_page.results_requested.connect(self._view_analysis_results)
+        self.analysis_page.manage_run_requested.connect(self._manage_analysis_runs)
         self.analysis_page.run_requested.connect(self._start_analysis)
         self.analysis_page.resume_requested.connect(self._resume_analysis)
         self.analysis_page.import_requested.connect(self._start_import)
@@ -3969,9 +4052,7 @@ class MainWindow(QMainWindow):
             editable=True,
             project_directory=self._database.path.parent,
         )
-        self.analysis_page.configure_resume(
-            self._database.analysis.latest_resumable_run()
-        )
+        self.analysis_page.configure_runs(self._database.analysis.list_runs())
         self._update_navigation()
 
     def _save_recording_scope(self, directory: Path | None, recurse: bool) -> None:
@@ -4192,7 +4273,7 @@ class MainWindow(QMainWindow):
         )
         self.project_page.configure_species_summary([], selection_enabled=False)
         self.analysis_page.reset_run_status()
-        self.analysis_page.configure_resume(None)
+        self.analysis_page.configure_runs([])
         self.results_page.configure_runs([])
         self.results_page.configure_queues([])
         self.results_page.set_detections([])
@@ -4258,6 +4339,7 @@ class MainWindow(QMainWindow):
             return
         runs = self._database.analysis.list_runs()
         self.results_page.configure_runs(runs)
+        self.analysis_page.configure_runs(runs, selected_run_id)
         queues = self._database.review_queues.list_queues()
         self.results_page.configure_queues(queues)
         if selected_run_id is not None:
@@ -4296,10 +4378,16 @@ class MainWindow(QMainWindow):
         self._load_results(selected_run_id=run_id)
         self.reports_page.configure_runs(self._database.analysis.list_runs())
 
-    def _manage_analysis_runs(self) -> None:
+    def _view_analysis_results(self, run_id: int) -> None:
+        self._load_results(selected_run_id=run_id)
+        self._show_page(3)
+
+    def _manage_analysis_runs(self, selected_run_id: int | None = None) -> None:
         if self._database is None:
             return
         dialog = AnalysisRunsDialog(self._database.analysis.list_runs(), self)
+        if selected_run_id is not None:
+            dialog.run.setCurrentIndex(dialog.run.findData(selected_run_id))
 
         def rename(run_id: int) -> None:
             run = next(
@@ -4411,9 +4499,7 @@ class MainWindow(QMainWindow):
         self.review_page.set_previous_enabled(False)
         self._load_results()
         self.reports_page.configure_runs(runs)
-        self.analysis_page.configure_resume(
-            self._database.analysis.latest_resumable_run()
-        )
+        self.analysis_page.configure_runs(self._database.analysis.list_runs())
 
     @Slot(str)
     def _analysis_run_delete_failed(self, message: str) -> None:

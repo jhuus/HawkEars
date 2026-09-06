@@ -362,10 +362,20 @@ class AnalysisRepository:
                     status=row["status"],
                     created_at=row["created_at"],
                     detection_count=row["detection_count"],
+                    completed_recordings=row["completed_recordings"],
+                    total_recordings=row["total_recordings"],
+                    error_message=row["error_message"],
+                    settings_json=row["settings_json"],
+                    imported=bool(row["imported"]),
                 )
                 for row in connection.execute("""
                     SELECT analysis_run.*,
-                           count(detection.id) AS detection_count
+                           count(detection.id) AS detection_count,
+                           count(DISTINCT CASE WHEN analysis_item.status = 'completed'
+                               THEN analysis_item.id END) AS completed_recordings,
+                           count(DISTINCT analysis_item.id) AS total_recordings,
+                           EXISTS(SELECT 1 FROM analysis_run_import
+                               WHERE analysis_run_id = analysis_run.id) AS imported
                     FROM analysis_run
                     LEFT JOIN analysis_item
                       ON analysis_item.analysis_run_id = analysis_run.id

@@ -406,6 +406,31 @@ def test_analysis_run_can_be_renamed_and_restored_to_default(tmp_path: Path):
         database.analysis.rename_run(run_id + 1, "Missing")
 
 
+def test_run_summary_preserves_failure_and_import_resume_eligibility(tmp_path: Path):
+    database = create_project(tmp_path)
+    recordings = [database.recordings.add(tmp_path / f"{i}.wav") for i in range(2)]
+    run_id = database.analysis.create_run(
+        "test",
+        {"min_score": 0.7},
+        species_ids=[],
+        recording_ids=[recording.id for recording in recordings],
+    )
+    item_id = database.analysis.item_ids(run_id)[recordings[0].id]
+    database.analysis.set_item_status(item_id, "completed")
+    database.analysis.set_run_status(
+        run_id, "failed", error_message="Cannot load 1.wav"
+    )
+    run = database.analysis.list_runs()[0]
+    assert (run.completed_recordings, run.total_recordings) == (1, 2)
+    assert run.resumable
+    assert run.error_message == "Cannot load 1.wav"
+    assert json.loads(run.settings_json) == {"min_score": 0.7}
+    batch_id = database.imports.create_batch("hawkears")
+    database.analysis.link_import(run_id, batch_id)
+    assert database.analysis.list_runs()[0].imported
+    assert not database.analysis.list_runs()[0].resumable
+
+
 def test_analysis_run_can_be_deleted_but_not_while_running(tmp_path: Path):
     database = create_project(tmp_path)
     recording = database.recordings.add(tmp_path / "night.wav")
@@ -680,6 +705,8 @@ def test_bulk_inference_detection_creation(tmp_path: Path):
     assert count == 2
     runs = database.analysis.list_runs()
     assert [(run.id, run.detection_count) for run in runs] == [(run_id, 2)]
+    assert runs[0].completed_recordings == 1
+    assert runs[0].total_recordings == 1
     results = database.detections.list_results(run_id)
     assert [result.species_name for result in results] == ["Marsh Wren"] * 2
     assert database.detections.get_result(results[0].detection_id) == results[0]

@@ -136,7 +136,7 @@ def test_analysis_page_offers_resume_with_current_thread_count(
     page.configure_resume(ResumableAnalysisRun(7, "failed", 3, 5))
 
     assert not page.resume_button.isHidden()
-    assert page.resume_button.text() == "Resume run 7 (3/5 complete)"
+    assert page.resume_button.text() == "Resume run 7"
     page._start_resume()
 
     assert resumed == [7]
@@ -303,7 +303,9 @@ def test_analysis_page_shows_post_inference_phases(tmp_path: Path, monkeypatch):
     page.analysis_completed(42)
     assert page.status.text() == "Complete · 42 detections"
     assert page.progress.maximum() == 100
-    assert page.progress.value() == 100
+    assert page.progress.isHidden()
+    assert page.status.isHidden()
+    assert page.run_button.text() == "Start new run"
     page.close()
     app.processEvents()
 
@@ -489,12 +491,10 @@ def test_results_defaults_to_latest_run_and_preserves_explicit_all_selection():
 
     page.configure_runs(runs)
     assert page.current_run_id() == 2
-    assert page.manage_runs_button.isEnabled()
     assert page.run.itemData(page.run.count() - 1) is None
     assert page.run.itemText(page.run.count() - 1) == "All detections"
 
     page.run.setCurrentIndex(page.run.findData(None))
-    assert page.manage_runs_button.isEnabled()
     page.configure_runs(runs)
     assert page.current_run_id() is None
 
@@ -505,18 +505,20 @@ def test_results_defaults_to_latest_run_and_preserves_explicit_all_selection():
     app.processEvents()
 
 
-def test_results_requests_analysis_run_management():
+def test_analysis_requests_selected_run_management(tmp_path):
     app = QApplication.instance() or QApplication([])
-    page = ResultsPage()
+    page = AnalysisPage(ApplicationPaths(tmp_path))
+    assert not page.manage_run_button.isEnabled()
     page.configure_runs(
         [AnalysisRunSummary(1, None, "completed", "2026-09-02T12:00:00", 3)]
     )
     requested = []
-    page.manage_runs_requested.connect(lambda: requested.append(True))
+    page.manage_run_requested.connect(requested.append)
 
-    page.manage_runs_button.click()
+    assert page.manage_run_button.text() == "Manage run…"
+    page.manage_run_button.click()
 
-    assert requested == [True]
+    assert requested == [1]
     page.close()
     app.processEvents()
 
@@ -552,6 +554,58 @@ def test_analysis_runs_dialog_offers_rename_and_delete_actions():
     assert not dialog.rename_button.isEnabled()
     assert not dialog.delete_button.isEnabled()
     dialog.close()
+    app.processEvents()
+
+
+def test_previous_runs_keep_status_and_resume_attached_to_selection(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    page = AnalysisPage(ApplicationPaths(tmp_path))
+    completed = AnalysisRunSummary(2, None, "completed", "2026-09-06", 3818, 46, 46)
+    failed = AnalysisRunSummary(
+        1,
+        None,
+        "failed",
+        "2026-09-06",
+        0,
+        1,
+        100,
+        "Cannot load empty.mp3",
+        '{"min_score": 0.7}',
+    )
+    page.configure_runs([completed, failed])
+    assert "Completed" in page.previous_run.currentText()
+    assert page.previous_summary.text() == (
+        "46/46 recordings completed · 3818 detections"
+    )
+    assert page.resume_button.isHidden()
+    assert page.progress.isHidden()
+    page.previous_run.setCurrentIndex(1)
+    assert "Failed" in page.previous_run.currentText()
+    assert page.previous_summary.text() == "1/100 recordings completed · 0 detections"
+    assert not page.resume_explanation.isHidden()
+    resumed = []
+    viewed = []
+    page.resume_requested.connect(resumed.append)
+    page.results_requested.connect(viewed.append)
+    page.view_results_button.click()
+    assert viewed == [1]
+    page.resume_button.click()
+    assert resumed == [1]
+    assert not page.progress.isHidden()
+    assert not page.previous_run.isEnabled()
+    page.analysis_cancelled(0)
+    assert page.progress.isHidden()
+    page.analysis_failed()
+    assert page.progress.isHidden()
+    page.configure_runs([completed, replace(failed, imported=True)])
+    assert page.resume_button.isHidden()
+    dialog = AnalysisRunsDialog([completed, failed])
+    dialog.run.setCurrentIndex(1)
+    assert "Cannot load empty.mp3" in dialog.details.toPlainText()
+    assert "Score threshold: 0.7" in dialog.details.toPlainText()
+    assert "1/100 recordings completed" in dialog.details.toPlainText()
+    dialog.close()
+    page.close()
     app.processEvents()
 
 

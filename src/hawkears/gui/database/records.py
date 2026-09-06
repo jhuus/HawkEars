@@ -167,6 +167,19 @@ class AnalysisRunSummary:
     status: str
     created_at: str
     detection_count: int
+    completed_recordings: int = 0
+    total_recordings: int = 0
+    error_message: Optional[str] = None
+    settings_json: str = "{}"
+    imported: bool = False
+
+    @property
+    def resumable(self) -> bool:
+        return (
+            not self.imported
+            and self.status in {"failed", "cancelled"}
+            and self.completed_recordings < self.total_recordings
+        )
 
 
 @dataclass(frozen=True)

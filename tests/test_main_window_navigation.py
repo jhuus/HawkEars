@@ -13,6 +13,31 @@ from hawkears.gui.services.spectrogram import ReviewSpectrogram
 from hawkears.gui.ui.main_window import MainWindow
 
 
+def test_analysis_history_opens_selected_results_and_clears_on_close(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    database = ProjectDatabase.create(tmp_path / "history.hawkears", "History")
+    older = database.analysis.create_run("test", {}, species_ids=[], recording_ids=[])
+    database.analysis.set_run_status(older, "failed", error_message="No recordings")
+    newer = database.analysis.create_run("test", {}, species_ids=[], recording_ids=[])
+    database.analysis.set_run_status(newer, "completed")
+    window = MainWindow(class_catalog=[], application_paths=ApplicationPaths(tmp_path))
+    window._activate_project("History", database=database)
+    page = window.analysis_page
+    assert page.previous_run.currentData() == newer
+    page.previous_run.setCurrentIndex(page.previous_run.findData(older))
+    page.view_results_button.click()
+    assert window.pages.currentWidget() is window.results_page
+    assert window.results_page.current_run_id() == older
+    assert "Failed" in window.results_page.run.currentText()
+    window._load_results(selected_run_id=newer)
+    assert page.previous_run.currentData() == newer
+    window._close_project()
+    assert page.previous_run.count() == 0
+    assert page.progress.isHidden()
+    window.close()
+    app.processEvents()
+
+
 @pytest.mark.parametrize("close_first", [False, True])
 def test_project_switch_clears_review_and_ignores_pending_spectrogram(
     tmp_path, monkeypatch, close_first
