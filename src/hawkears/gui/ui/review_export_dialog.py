@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from hawkears.gui.ui.export_selection import ExportSelection
+
 from hawkears.gui.database.records import ReviewQueueSummary, Species
 
 
@@ -21,6 +23,7 @@ class ReviewExportDialog(QDialog):
         queues: list[ReviewQueueSummary],
         *,
         parent: QWidget | None = None,
+        preview_counter=None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Export detections"))
@@ -38,16 +41,13 @@ class ReviewExportDialog(QDialog):
         layout.addWidget(explanation)
 
         form = QFormLayout()
-        form.addRow(self.tr("Analysis run"), QLabel(run_label))
+        scope = QLabel(run_label)
+        scope.setWordWrap(True)
+        form.addRow(self.tr("Analysis run"), scope)
 
-        self.outcome = QComboBox()
-        self.outcome.addItem(self.tr("Reviewed detections only"), "reviewed")
-        self.outcome.addItem(self.tr("All detections"), "all")
-        self.outcome.addItem(self.tr("Unreviewed detections"), "unreviewed")
-        self.outcome.addItem(self.tr("Accepted detections"), "accepted")
-        self.outcome.addItem(self.tr("Rejected detections"), "rejected")
-        self.outcome.addItem(self.tr("Uncertain detections"), "uncertain")
-        form.addRow(self.tr("Review state"), self.outcome)
+        self.selection = ExportSelection()
+        self.outcome = self.selection.outcome
+        form.addRow(self.tr("Detections to include"), self.selection)
 
         self.species = QComboBox()
         self.species.addItem(self.tr("All species"), None)
@@ -69,6 +69,12 @@ class ReviewExportDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self.save_button = buttons.button(QDialogButtonBox.StandardButton.Save)
+        self.selection.ready_changed.connect(self.save_button.setEnabled)
+        self.species.currentIndexChanged.connect(self.selection.refresh)
+        self.queue.currentIndexChanged.connect(self.selection.refresh)
+        if preview_counter is not None:
+            self.selection.configure_preview(preview_counter, self.values)
 
     def values(self) -> dict[str, object]:
         return {

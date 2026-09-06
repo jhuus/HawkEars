@@ -100,12 +100,13 @@ def test_detection_export_offers_all_and_reviewed_scopes():
     dialog = ReviewExportDialog("Run 1", [], [])
     try:
         assert dialog.windowTitle() == "Export detections"
-        assert dialog.outcome.currentData() == "reviewed"
+        assert dialog.outcome.currentData() == "not_rejected"
         options = {
             dialog.outcome.itemData(index)
             for index in range(dialog.outcome.count())
         }
         assert options == {
+            "not_rejected",
             "all",
             "reviewed",
             "unreviewed",

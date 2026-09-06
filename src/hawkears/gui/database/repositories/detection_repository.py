@@ -22,6 +22,28 @@ from hawkears.gui.database.records import (
 _UNCHANGED = object()
 
 
+def _review_filter(outcome: str, corrected: str) -> str:
+    """Use the same review-state definitions for both export formats."""
+    accepted = (
+        "(review.verdict = 'correct' OR "
+        f"(review.verdict = 'incorrect' AND ({corrected})))"
+    )
+    filters = {
+        "all": "1 = 1",
+        "not_rejected": (
+            f"({accepted} OR review.verdict IS NULL OR review.verdict = 'uncertain')"
+        ),
+        "reviewed": "review.verdict IS NOT NULL",
+        "unreviewed": "review.verdict IS NULL",
+        "accepted": accepted,
+        "rejected": f"(review.verdict = 'incorrect' AND NOT ({corrected}))",
+        "uncertain": "review.verdict = 'uncertain'",
+    }
+    if outcome not in filters:
+        raise ValueError(f"Unknown detection review state: {outcome}")
+    return filters[outcome]
+
+
 def _revision_from_row(row: sqlite3.Row) -> DetectionRevision:
     return DetectionRevision(
         id=row["id"],
@@ -1045,15 +1067,6 @@ class DetectionRepository:
         queue_id: Optional[int] = None,
     ) -> ReviewedDetectionExport:
         """Return detailed detections and review data using optional filters."""
-        if outcome not in {
-            "all",
-            "reviewed",
-            "unreviewed",
-            "accepted",
-            "rejected",
-            "uncertain",
-        }:
-            raise ValueError(f"Unknown detection review state: {outcome}")
         columns = (
             "detection_id",
             "analysis_run_id",
@@ -1109,16 +1122,7 @@ class DetectionRepository:
             "(review.verdict = 'correct' OR "
             f"(review.verdict = 'incorrect' AND {corrected}))"
         )
-        if outcome == "reviewed":
-            conditions.append("review.verdict IS NOT NULL")
-        elif outcome == "unreviewed":
-            conditions.append("review.verdict IS NULL")
-        elif outcome == "accepted":
-            conditions.append(accepted)
-        elif outcome == "rejected":
-            conditions.append(f"review.verdict = 'incorrect' AND NOT ({corrected})")
-        elif outcome == "uncertain":
-            conditions.append("review.verdict = 'uncertain'")
+        conditions.append(_review_filter(outcome, corrected))
         where_clause = " AND ".join(conditions)
         if where_clause:
             where_clause = "AND " + where_clause
@@ -1219,6 +1223,65 @@ class DetectionRepository:
         finally:
             connection.close()
 
+    def export_counts(
+        self,
+        *,
+        run_id: Optional[int] = None,
+        outcome: str = "not_rejected",
+        species_id: Optional[int] = None,
+        queue_id: Optional[int] = None,
+        revision_mode: Optional[str] = None,
+    ) -> tuple[int, Optional[int]]:
+        """Count export scope without loading detection rows into the GUI."""
+        if revision_mode not in {None, "current", "original"}:
+            raise ValueError(f"Unknown label export revision mode: {revision_mode}")
+        conditions = []
+        parameters = []
+        if run_id is not None:
+            conditions.append("analysis_item.analysis_run_id = ?")
+            parameters.append(run_id)
+        if species_id is not None:
+            conditions.append("current.species_id = ?")
+            parameters.append(species_id)
+        if queue_id is not None:
+            conditions.append(
+                "EXISTS (SELECT 1 FROM review_queue_item filter_queue "
+                "WHERE filter_queue.detection_id = detection.id "
+                "AND filter_queue.review_queue_id = ?)"
+            )
+            parameters.append(queue_id)
+        scope = " AND ".join(conditions) or "1 = 1"
+        joins = """
+            FROM detection
+            JOIN detection_revision AS original
+              ON original.detection_id = detection.id AND original.revision_number = 1
+            JOIN detection_revision AS current ON current.id = detection.current_revision_id
+            LEFT JOIN analysis_item ON analysis_item.id = detection.analysis_item_id
+            LEFT JOIN review ON review.detection_id = detection.id
+        """
+        review_filter = _review_filter(
+            "all" if revision_mode == "original" else outcome,
+            "original.species_id != current.species_id",
+        )
+        query = f"SELECT detection.id {joins} WHERE {scope} AND {review_filter}"
+        if revision_mode == "current":
+            additional_filter = _review_filter(outcome, "1")
+            query += f"""
+                UNION ALL SELECT detection.id {joins}
+                JOIN detection_additional_species
+                  ON detection_additional_species.detection_id = detection.id
+                WHERE {scope} AND {additional_filter}
+            """
+            parameters = parameters + parameters
+        connection = connect(self.database_path, readonly=True)
+        try:
+            row = connection.execute(
+                f"SELECT count(DISTINCT id), count(*) FROM ({query})", parameters
+            ).fetchone()
+            return row[0], row[1] if revision_mode is not None else None
+        finally:
+            connection.close()
+
     def reviewed_detection_export(
         self,
         *,
@@ -1244,10 +1307,14 @@ class DetectionRepository:
         include_unreviewed: bool = True,
         include_uncertain: bool = True,
         include_rejected: bool = False,
+        outcome: Optional[str] = None,
     ) -> tuple[LabelExportDetection, ...]:
         """Return normalized annotations for audio-label exports."""
         if revision_mode not in {"current", "original"}:
             raise ValueError(f"Unknown label export revision mode: {revision_mode}")
+
+        if outcome is not None:
+            _review_filter(outcome, "1")
 
         selected_join = (
             "JOIN detection_revision AS selected "
@@ -1275,7 +1342,11 @@ class DetectionRepository:
                     "(review.verdict = 'incorrect' "
                     "AND selected.species_id != original.species_id)"
                 )
-            conditions.append("(" + " OR ".join(review_conditions) + ")")
+            conditions.append(
+                _review_filter(outcome, "selected.species_id != original.species_id")
+                if outcome is not None
+                else "(" + " OR ".join(review_conditions) + ")"
+            )
         where_clause = ""
         if conditions:
             where_clause = "WHERE " + " AND ".join(conditions)
@@ -1332,7 +1403,11 @@ class DetectionRepository:
                 # Adding a species is an explicit accepted annotation even when
                 # the original primary identification was rejected.
                 additional_review.append("review.verdict = 'incorrect'")
-                additional_conditions.append("(" + " OR ".join(additional_review) + ")")
+                additional_conditions.append(
+                    _review_filter(outcome, "1")
+                    if outcome is not None
+                    else "(" + " OR ".join(additional_review) + ")"
+                )
                 additional_where = "WHERE " + " AND ".join(additional_conditions)
                 additional_query = f"""
                     SELECT detection.id AS detection_id,

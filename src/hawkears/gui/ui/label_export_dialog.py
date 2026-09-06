@@ -11,9 +11,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from hawkears.gui.ui.export_selection import ExportSelection
+
 
 class LabelExportDialog(QDialog):
-    def __init__(self, run_label: str, *, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, run_label: str, *, parent: QWidget | None = None, preview_counter=None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Export audio labels"))
         self.setMinimumWidth(500)
@@ -30,7 +34,9 @@ class LabelExportDialog(QDialog):
         layout.addWidget(explanation)
 
         form = QFormLayout()
-        form.addRow(self.tr("Analysis run"), QLabel(run_label))
+        scope = QLabel(run_label)
+        scope.setWordWrap(True)
+        form.addRow(self.tr("Analysis run"), scope)
         self.output_format = QComboBox()
         self.output_format.addItem(self.tr("Audacity labels"), "audacity")
         self.output_format.addItem(self.tr("Raven selection tables"), "raven")
@@ -49,15 +55,9 @@ class LabelExportDialog(QDialog):
         self.revision_mode.currentIndexChanged.connect(self._update_review_options)
         form.addRow(self.tr("Result version"), self.revision_mode)
 
-        self.include_unreviewed = QCheckBox(self.tr("Include unreviewed detections"))
-        self.include_unreviewed.setChecked(True)
-        form.addRow(self.tr("Review filters"), self.include_unreviewed)
-        self.include_uncertain = QCheckBox(self.tr("Include uncertain detections"))
-        self.include_uncertain.setChecked(True)
-        form.addRow("", self.include_uncertain)
-        self.include_rejected = QCheckBox(self.tr("Include rejected detections"))
-        self.include_rejected.setChecked(False)
-        form.addRow("", self.include_rejected)
+        self.selection = ExportSelection()
+        self.outcome = self.selection.outcome
+        form.addRow(self.tr("Detections to include"), self.selection)
         self.overwrite_existing = QCheckBox(self.tr("Overwrite existing labels"))
         self.overwrite_existing.setChecked(True)
         form.addRow(self.tr("Existing files"), self.overwrite_existing)
@@ -65,13 +65,14 @@ class LabelExportDialog(QDialog):
 
         note = QLabel(
             self.tr(
-                "Correct detections and corrected species are always included. "
-                "Rejected detections are omitted by default."
+                "Current audio labels include additional species annotations. "
+                "An additional species on a reviewed detection is accepted unless "
+                "the review is uncertain. One detection can produce several labels."
             )
         )
-        note.setObjectName("muted")
         note.setWordWrap(True)
         layout.addWidget(note)
+        self.additional_note = note
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save
@@ -80,20 +81,25 @@ class LabelExportDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self.save_button = buttons.button(QDialogButtonBox.StandardButton.Save)
+        self.selection.ready_changed.connect(self.save_button.setEnabled)
+        if preview_counter is not None:
+            self.selection.configure_preview(preview_counter, self.values)
 
     def _update_review_options(self) -> None:
-        enabled = self.revision_mode.currentData() == "current"
-        self.include_unreviewed.setEnabled(enabled)
-        self.include_uncertain.setEnabled(enabled)
-        self.include_rejected.setEnabled(enabled)
+        original = self.revision_mode.currentData() == "original"
+        self.selection.set_original(original)
+        self.additional_note.setVisible(not original)
 
     def values(self) -> dict[str, object]:
         return {
             "output_format": str(self.output_format.currentData()),
             "label_field": str(self.label_field.currentData()),
             "revision_mode": str(self.revision_mode.currentData()),
-            "include_unreviewed": self.include_unreviewed.isChecked(),
-            "include_uncertain": self.include_uncertain.isChecked(),
-            "include_rejected": self.include_rejected.isChecked(),
+            "outcome": (
+                "all"
+                if self.revision_mode.currentData() == "original"
+                else str(self.outcome.currentData())
+            ),
             "overwrite_existing": self.overwrite_existing.isChecked(),
         }

@@ -25,12 +25,13 @@ class LabelExportRunner(QObject):
         output_format: str,
         run_id: int | None,
         revision_mode: str,
-        include_unreviewed: bool,
-        include_uncertain: bool,
-        include_rejected: bool,
+        include_unreviewed: bool = True,
+        include_uncertain: bool = True,
+        include_rejected: bool = False,
         data_root: Path,
         label_field: str = "code",
         overwrite_existing: bool = True,
+        outcome: str | None = None,
     ) -> None:
         super().__init__()
         self.database_path = database_path
@@ -44,6 +45,7 @@ class LabelExportRunner(QObject):
         self.data_root = data_root
         self.label_field = label_field
         self.overwrite_existing = overwrite_existing
+        self.outcome = outcome
 
     @Slot()
     def run(self) -> None:
@@ -55,6 +57,7 @@ class LabelExportRunner(QObject):
             database = ProjectDatabase(self.database_path)
             detections = database.detections.label_export(
                 run_id=self.run_id,
+                outcome=self.outcome,
                 revision_mode=self.revision_mode,
                 include_unreviewed=self.include_unreviewed,
                 include_uncertain=self.include_uncertain,

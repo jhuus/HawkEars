@@ -77,6 +77,13 @@ def test_audacity_export_writes_one_file_per_recording(tmp_path: Path):
     no_overwrite_runner.run()
     assert "overwrite 2 existing label file(s)" in no_overwrite_failures[-1]
 
+    # The new explicit preset overrides the legacy include flags.
+    runner.outcome = "accepted"
+    runner.run()
+    assert not failures
+    assert completed[-1] == (0, 2, "audacity")
+    assert (output_directory / "marsh_scores.txt").read_text() == ""
+
 
 def test_audacity_export_can_use_common_or_scientific_names(tmp_path: Path):
     database = ProjectDatabase.create(tmp_path / "survey.hawkears", "Survey")

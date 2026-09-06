@@ -660,7 +660,6 @@ class AnalysisPage(QWidget):
         actions = QHBoxLayout()
         actions.addStretch()
         actions.addWidget(self.import_button)
-        actions.addWidget(self.cancel_button)
         actions.addWidget(self.run_button)
         run.addLayout(actions)
         self.activity_heading = section_title(self.tr("Current activity"))
@@ -668,6 +667,10 @@ class AnalysisPage(QWidget):
         run.addWidget(self.activity_heading)
         run.addWidget(self.status)
         run.addWidget(self.progress)
+        activity_actions = QHBoxLayout()
+        activity_actions.addStretch()
+        activity_actions.addWidget(self.cancel_button)
+        run.addLayout(activity_actions)
 
         run.addSpacing(24)
         run.addWidget(section_title(self.tr("Previous runs")))
@@ -4776,6 +4779,11 @@ class MainWindow(QMainWindow):
         if self._database is None:
             return
         run_id = self.reports_page.current_run_id()
+        repository = self._database.detections
+
+        def preview(values):
+            return repository.export_counts(run_id=run_id, **values)
+
         queues = [
             queue
             for queue in self._database.review_queues.list_queues()
@@ -4786,6 +4794,7 @@ class MainWindow(QMainWindow):
             self._database.species.list(),
             queues,
             parent=self,
+            preview_counter=preview,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -4827,7 +4836,21 @@ class MainWindow(QMainWindow):
     def _export_audio_labels(self) -> None:
         if self._database is None or self._export_thread is not None:
             return
-        dialog = LabelExportDialog(self.reports_page.current_run_label(), parent=self)
+        run_id = self.reports_page.current_run_id()
+        repository = self._database.detections
+
+        def preview(values):
+            return repository.export_counts(
+                run_id=run_id,
+                revision_mode=str(values["revision_mode"]),
+                outcome=str(values["outcome"]),
+            )
+
+        dialog = LabelExportDialog(
+            self.reports_page.current_run_label(),
+            parent=self,
+            preview_counter=preview,
+        )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         output_directory = QFileDialog.getExistingDirectory(
@@ -4845,9 +4868,7 @@ class MainWindow(QMainWindow):
             output_format=str(values["output_format"]),
             run_id=self.reports_page.current_run_id(),
             revision_mode=str(values["revision_mode"]),
-            include_unreviewed=bool(values["include_unreviewed"]),
-            include_uncertain=bool(values["include_uncertain"]),
-            include_rejected=bool(values["include_rejected"]),
+            outcome=str(values["outcome"]),
             data_root=self._application_paths.data_root,
             label_field=str(values["label_field"]),
             overwrite_existing=bool(values["overwrite_existing"]),

@@ -891,6 +891,15 @@ def test_validated_reports_include_confirmed_corrections(tmp_path: Path):
     )
     queue_reviews = database.detections.reviewed_detection_export(queue_id=queue_id)
     assert {row[0] for row in queue_reviews.rows} == {accepted.id, correction.id}
+    for species_id in (None, corrected.id, predicted.id):
+        filters = {
+            "run_id": run_id,
+            "queue_id": queue_id,
+            "species_id": species_id,
+            "outcome": "not_rejected",
+        }
+        rows = database.detections.detection_export(**filters).rows
+        assert database.detections.export_counts(**filters) == (len(rows), None)
 
 
 def test_label_export_applies_current_reviews_and_preserves_originals(tmp_path: Path):
@@ -975,12 +984,41 @@ def test_label_export_applies_current_reviews_and_preserves_originals(tmp_path: 
     additional_row = next(row for row in current if row.additional_species)
     assert additional_row.score is None
 
+    # Both formats select the same primary detections for every shared preset.
+    expected = {
+        "not_rejected": {accepted.id, correction.id, uncertain.id, unreviewed.id},
+        "accepted": {accepted.id, correction.id},
+        "reviewed": {accepted.id, correction.id, rejected.id, uncertain.id},
+        "unreviewed": {unreviewed.id},
+        "uncertain": {uncertain.id},
+        "rejected": {rejected.id},
+        "all": {accepted.id, correction.id, rejected.id, uncertain.id, unreviewed.id},
+    }
+    for outcome, expected_ids in expected.items():
+        csv_export = database.detections.detection_export(run_id=run_id, outcome=outcome)
+        labels = database.detections.label_export(run_id=run_id, outcome=outcome)
+        assert {row[0] for row in csv_export.rows} == expected_ids
+        assert {
+            row.detection_id for row in labels if not row.additional_species
+        } == expected_ids
+        extras = [row for row in labels if row.additional_species]
+        assert len(extras) == (
+            1 if outcome in {"not_rejected", "accepted", "reviewed", "all"} else 0
+        )
+        assert database.detections.export_counts(run_id=run_id, outcome=outcome) == (
+            len(csv_export.rows), None
+        )
+        assert database.detections.export_counts(
+            run_id=run_id, outcome=outcome, revision_mode="current"
+        ) == (len({row.detection_id for row in labels}), len(labels))
+
     original = database.detections.label_export(
         run_id=run_id,
         revision_mode="original",
         include_unreviewed=False,
         include_uncertain=False,
         include_rejected=False,
+        outcome="accepted",
     )
     assert {row.detection_id for row in original} == {
         accepted.id,
@@ -995,6 +1033,9 @@ def test_label_export_applies_current_reviews_and_preserves_originals(tmp_path: 
     assert original_correction.species_name == "Alder Flycatcher"
     assert original_correction.start_ms == 5_000
     assert original_correction.score == 0.74
+    assert database.detections.export_counts(
+        run_id=run_id, outcome="accepted", revision_mode="original"
+    ) == (5, 5)
 
 
 def test_review_queue_applies_score_spacing_and_recording_limit(tmp_path: Path):
