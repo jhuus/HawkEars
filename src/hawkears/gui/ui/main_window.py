@@ -2382,7 +2382,6 @@ class ReviewPage(QWidget):
         form.addRow(self.tr("Notes"), self.notes)
         review.addLayout(form)
         review.addStretch()
-        save_actions = QHBoxLayout()
         self.previous_button = QPushButton(self.tr("Previous detection"))
         self.previous_button.setToolTip(
             self.tr(
@@ -2403,9 +2402,6 @@ class ReviewPage(QWidget):
         self.save_button.setProperty("primary", True)
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(lambda: self._save(True))
-        navigation = QHBoxLayout()
-        navigation.addWidget(self.previous_button)
-        navigation.addStretch()
         self.next_button = QPushButton(self.tr("Next without saving"))
         self.next_button.setEnabled(False)
         self.next_button.setToolTip(
@@ -2416,11 +2412,29 @@ class ReviewPage(QWidget):
             )
         )
         self.next_button.clicked.connect(self.next_requested)
-        navigation.addWidget(self.next_button)
+
+        for buttons in (
+            (self.previous_button, self.next_button),
+            (self.save_stop_button, self.save_button),
+        ):
+            minimum_width = max(button.sizeHint().width() for button in buttons)
+            for button in buttons:
+                button.setMinimumWidth(minimum_width)
+
+        navigation_label = QLabel(self.tr("Navigation"))
+        navigation_label.setObjectName("muted")
+        review.addWidget(navigation_label)
+        navigation = QHBoxLayout()
+        navigation.addWidget(self.previous_button, 1)
+        navigation.addWidget(self.next_button, 1)
         review.addLayout(navigation)
-        save_actions.addStretch()
-        save_actions.addWidget(self.save_stop_button)
-        save_actions.addWidget(self.save_button)
+
+        save_label = QLabel(self.tr("Save review"))
+        save_label.setObjectName("muted")
+        review.addWidget(save_label)
+        save_actions = QHBoxLayout()
+        save_actions.addWidget(self.save_stop_button, 1)
+        save_actions.addWidget(self.save_button, 1)
         review.addLayout(save_actions)
         splitter.addWidget(review_card)
         splitter.setSizes([700, 330])
