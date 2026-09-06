@@ -515,7 +515,7 @@ def test_analysis_requests_selected_run_management(tmp_path):
     requested = []
     page.manage_run_requested.connect(requested.append)
 
-    assert page.manage_run_button.text() == "Manage run…"
+    assert page.manage_run_button.text() == "Manage runs…"
     page.manage_run_button.click()
 
     assert requested == [1]

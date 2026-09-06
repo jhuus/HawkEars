@@ -699,7 +699,7 @@ class AnalysisPage(QWidget):
         self.view_results_button.clicked.connect(
             lambda: self.results_requested.emit(int(self.previous_run.currentData()))
         )
-        self.manage_run_button = QPushButton(self.tr("Manage run…"))
+        self.manage_run_button = QPushButton(self.tr("Manage runs…"))
         self.manage_run_button.setToolTip(
             self.tr("View saved settings and errors, rename, or delete this run.")
         )
