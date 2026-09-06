@@ -52,25 +52,27 @@ HawkEars is distributed under the terms of the [MIT](https://spdx.org/licenses/M
 
 ## Installation
 
-If you have a [CUDA-compatible NVIDIA GPU](https://developer.nvidia.com/cuda-gpus), such as a Geforce RTX, you can gain a major performance improvement by installing [CUDA](https://docs.nvidia.com/cuda/). If you have an Apple Metal processor, such as an M3 or M4, no CUDA installation is needed. If you have an Intel or AMD processor without a GPU, you can improve performance by installing Intel OpenVINO ("pip install openvino").
+HawkEars can use a [CUDA-compatible NVIDIA GPU](https://developer.nvidia.com/cuda/gpus) with a CUDA-enabled PyTorch installation, or Apple Metal acceleration on Apple silicon Macs such as those with M3 or M4 chips. For CPU-based inference in a pip installation, you can install OpenVINO with `pip install openvino` to improve performance.
 
-To install the GUI on Windows, run this installer. For CLI installs, it is best to use a virtual environment, such as a [Python venv](https://docs.python.org/3/library/venv.html). Once you have that set up, install HawkEars using pip, which is included in Python installations:
+To install the GUI on Windows, run this installer. Launch HawkEars using its shortcut; the first launch will ask where to store model data and download the required resources. See the [GUI guide](GUI.md) for the project workflow.
+
+For a pip installation on Windows, macOS or Linux, use a virtual environment, such as a [Python venv](https://docs.python.org/3/library/venv.html). This installs the GUI, CLI and API. Once you have the environment set up, install HawkEars using pip:
 
 ```
 pip install hawkears
 ```
-In Windows environments, you then need to uninstall and reinstall PyTorch:
+For NVIDIA GPU acceleration in a Windows pip installation, install the CUDA-enabled PyTorch packages. The following command uses the [official PyTorch 2.8.0 CUDA 12.6 wheels](https://pytorch.org/get-started/previous-versions/):
 ```
 pip uninstall -y torch torchvision torchaudio
 pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu126
 ```
 Note that cu126 refers to CUDA 12.6.
 
-Once HawkEars is installed, initialize a working environment using the `init` command:
+After installing with pip, initialize a working directory using the `init` command:
 ```
 hawkears init
 ```
-This creates and populates several directories under the current working directory, and downloads the model checkpoint files. Use the --dest option to specify an alternative location. You can then run the GUI from the command-line as follows:
+This creates and populates several directories under the current working directory, and downloads the model checkpoint files. Use `--dest <path>` to specify an alternative location, then change to that directory before running CLI analysis. You can launch the GUI from the command-line as follows:
 ```
 hawkears gui
 ```
@@ -96,17 +98,17 @@ The input path can be a directory or a reference to a single audio file, but the
 hawkears analyze recordings
 ```
 
-This will analyze the recording(s) included in the recordings directory. The default output format is Audacity. So this example will generate a label file that you can view by opening the recording in Audacity, clicking File / Import / Labels and selecting the generated label file.
+This will analyze the recording(s) included in the recordings directory. The default output format is [Audacity](https://www.audacityteam.org/). So this example will generate a label file that you can view by opening the recording in Audacity, clicking File / Import / Labels and selecting the generated label file.
 
 ### Output Format
 
-The --rtype option lets you specify Audacity, Raven, CSV or a combination. For example, to get Raven and CSV output, specify "--rtype raven+csv".
+The `--rtype` option lets you specify Audacity, [Raven](https://www.ravensoundsoftware.com/), CSV or a combination. For example, to get Raven and CSV output, specify "--rtype raven+csv".
 
-By default, species are identified using [4-letter banding codes](https://www.birdpop.org/pages/birdSpeciesCodes.php), but common names can be shown instead using the "--label names" option. You can also specify "--label alt-names" for scientific names and "--label alt-codes" for 6-letter codes. The numeric suffix on each label is a score, which is similar to a probability.
+By default, species are identified using [4-letter banding codes](https://www.birdpop.org/pages/birdSpeciesCodes.php), but common names can be shown instead using the "--label names" option. You can also specify "--label alt-names" for scientific names and "--label alt-codes" for 6-letter codes. The numeric suffix on each label is a confidence score; higher scores indicate stronger model predictions.
 
 ### Including or Excluding Species
 
-By default, labels are generated for birds only. This is because amphibians, mammals and other classes are listed in data/exclude.txt. You can use the --include or --exclude options to control which classes are included in the output. For example, if you are only interested in Ovenbirds and Tennessee Warblers, create a file called, for example, data/my_include.txt with those two names (one per line), and specify "--include data/my_include.txt".
+By default, labels are generated for birds only. This is because amphibians, mammals and other classes are listed in `data/exclude.txt`, initialized from the [packaged exclusion list](install/canada/data/exclude.txt). You can use the --include or --exclude options to control which classes are included in the output. For example, if you are only interested in Ovenbirds and Tennessee Warblers, create a file called, for example, data/my_include.txt with those two names (one per line), and specify "--include data/my_include.txt".
 
 ### Location and Date Processing
 
@@ -114,21 +116,21 @@ When possible, you should provide locations and dates to the analyze command. In
 
 ### Specifying Ensemble Size
 
-The --models option lets you set the number of models in the main ensemble. This is described in more detail [below](#control-of-inference-speed).
+The `--models` option lets you set the number of models in the main ensemble, from 1 to 6. Fewer models make analysis faster but may reduce accuracy. The default is all six models with CUDA, or three with CPU or Apple Metal acceleration. See [command-line options](#command-line-options) for details.
 
 ### Enabling or Disabling the Low-band Classifier
 
-HawkEars uses a separate classifier to identify low-frequency Ruffed Grouse and Spruce Grouse sounds. If you aren't interested in those, you can make inference run a little faster by specifying `--no-low-band` to disable the low-band classifier. If you are running with no GPU, and not on a Mac, the low-band classifier is disabled by default. In that case you can enable it by specifying `--low-band`.
+HawkEars uses a separate classifier to identify low-frequency Ruffed Grouse and Spruce Grouse sounds. If you aren't interested in those, you can make inference run a little faster by specifying `--no-low-band` to disable the low-band classifier. The low-band classifier is disabled by default for CPU inference and enabled for CUDA or Apple Metal inference. Use `--low-band` to enable it for CPU inference.
 
 ## Summarizing Analysis Output
 
-Installing HawkEars installs many dependencies, including BriteKit. After running inference, you can use the following BriteKit command to generate summary reports:
+The GUI provides [reports and exports](GUI.md#reports-and-exports) for analysis and reviewed results. For CLI output, use the following BriteKit command to generate summary reports. BriteKit is installed as a HawkEars dependency:
 
 ```
 britekit rpt-labels --labels <label directory> --output <output directory> --min_score <threshold>
 ```
 
-Specifying --min_score is optional, and ignores labels with lower scores. The output directory will contain three files:
+The optional `--min_score` argument excludes labels with lower scores. If omitted, the command uses BriteKit's configured threshold, which may differ from the threshold used for analysis. The output directory will contain three files:
 
 * `classes.csv` with a `class` column and a `seconds` column, showing the number of seconds per class (species).
 * `recordings.csv` with a `recording` column and a `classes` column, showing a list of classes (species) per recording.
@@ -137,7 +139,7 @@ Specifying --min_score is optional, and ignores labels with lower scores. The ou
 To use this command, the label directory must include either CSV or Audacity output.
 
 ## Command-line Options
-The analyze command has the following options (only --input is required):
+The `analyze` command requires an input path, supplied either as a positional argument or with `--input`. Its options are:
 
 * `--input <directory or file name>`
     * Path to input directory or recording.
@@ -159,27 +161,25 @@ The analyze command has the following options (only --input is required):
 * `--seg <seconds>`
     * Specify this if you want fixed-length output labels. Otherwise, variable-length labels are generated.
 * `--min-label-length <seconds>`
-    * Variable-length labels may be as short as .25 seconds. In some cases, labels that short have an above-average false positive rate. Use this option to filter them out.
+    * Exclude variable-length labels shorter than this duration, including short pieces created by `--max-label-length`. Must be a positive multiple of 0.25 seconds and cannot exceed `--max-label-length`. Cannot be combined with `--seg`.
 * `--max-label-length <seconds>`
-    * Use the option to limit the output label length. Longer labels are split, not excluded.
+    * Limit variable-length labels to this positive duration in seconds. Longer labels are split consecutively. Cannot be combined with `--seg`.
 * `--start <seconds>`
-    * Specify this if you want analysis to start somewhere other than the start of the recording. For example, specify "--start 10" to start 10 seconds into the recording.
+    * Specify this if you want analysis to start somewhere other than the start of the recording. For example, specify `--start 10` to start 10 seconds into the recording. Time notation is also accepted: `--start 1:11` skips the first 71 seconds.
 * `--filelist <CSV file>`
-    * In the CSV file, provide four columns: filename, latitude, longitude and recording_date, where the latter is in YYYY-MM-DD format.
+    * Provide CSV columns `filename`, `latitude`, `longitude` and `recording_date` (YYYY-MM-DD), or use `region` instead of the coordinate columns. File paths may be absolute or relative to the input directory. Bare filenames must be unique within the input; use `./filename` to select a file at the input root when its name is ambiguous. Only recordings listed in the CSV are analyzed.
 * `--region <code>`
     * The code can be any eBird county code or prefix. For example, CA-ON-OT is Ottawa, CA-ON is Ontario and CA is Canada. It's best to provide a specific county when possible.
 * `--lat <value>`
-    * The latitude. This requires that longitude and date are also specified, and that region is not specified.
+    * The latitude. Supply `--lon` as well. A supplied `--region` takes precedence over coordinates. Add `--date` for seasonal filtering.
 * `--lon <value>`
-    * The longitude. This requires that latitude and date are also specified, and that region is not specified.
+    * The longitude. Supply `--lat` as well. A supplied `--region` takes precedence over coordinates. Add `--date` for seasonal filtering.
 * `--date <argument>`
-    * The argument can be a date in YYYYMMDD or MMDD format, or the word "file". If the latter is specified, HawkEars will get dates from the file names, where the date can occur anywhere in the file name in YYYY-MM-DD or YYYYMMDD format.
+    * The argument can be a date in YYYY-MM-DD, YYYYMMDD or MMDD format, or the word "file". If the latter is specified, HawkEars will get dates from the file names, where the date can occur anywhere in the file name in YYYY-MM-DD or YYYYMMDD format.
 * `--threads <value>`
     * Number of recordings that will be processed at the same time. Defaults to 3.
-* `--seg <seconds>`
-    * By default, output labels are variable length. Specify a value here if you want fixed-length output labels.
 * `--models <value>`
-    * HawkEars analysis uses an ensemble of up to 6 main models (neural networks). Specify a smaller value here for faster performance but slightly reduced accuracy. With a GPU, the default is 6. Otherwise the default is 3.
+    * HawkEars analysis uses an ensemble of up to 6 main models (neural networks). Specify a smaller value here for faster performance but slightly reduced accuracy. The default is 6 with CUDA, or 3 with CPU or Apple Metal acceleration.
 * `--label <value>`
     * Field used to identify species in output labels.
     * Valid values are "codes" (4-letter banding codes, the default), "names" (common names), "alt-codes" (6-letter banding codes) and "alt-names" (scientific names).
@@ -198,22 +198,24 @@ The following are "flag" options, which are used with no corresponding parameter
     * If specified, disable the low-band classifier used to detect low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats.
 * `--quiet`
     * If specified, suppress most console output.
+* `--help`
+    * Show command usage and available options, then exit.
 
 ## Configuration
-HawkEars is based on [BriteKit](https://github.com/jhuus/BriteKit/) and extends its [YAML](https://yaml.org/)-based configuration system. The analyze command reads default parameters from yaml/default.yaml. In a Linux or Windows environment, if no GPU is detected, analyze then reads yaml/default-cpu.yaml to apply additional overrides. In a Mac environment it reads yaml/default-mps.yaml and applies those overrides.
+HawkEars is based on [BriteKit](https://github.com/jhuus/BriteKit/) and extends its [YAML](https://yaml.org/)-based configuration system. The `analyze` command reads `yaml/default.yaml` from the working directory, falling back to the [packaged defaults](install/canada/yaml/default.yaml). It then applies [CPU overrides](install/canada/yaml/default-cpu.yaml) for CPU inference or [Apple Metal overrides](install/canada/yaml/default-mps.yaml) for Metal inference, again preferring files in the working directory.
 
 Any parameters in the audio, infer or misc groups override corresponding BriteKit defaults. The hawkears group contains HawkEars-specific parameters.
 
-For settings in the audio, infer and misc sections, refer to the [BriteKit documentation](https://github.com/jhuus/BriteKit/blob/master/config-reference.md). The HawkEars-specific settings are in a hawkears section, which contains the following:
+For settings in the audio, infer and misc sections, refer to the [BriteKit documentation](https://github.com/jhuus/BriteKit/blob/master/config-reference.md). Common HawkEars-specific settings are listed below. See [HawkEarsConfig](src/hawkears/core/config.py) for all fields; the YAML files override its base defaults.
 
 * `filelist`
-    * Default value for the --filelist option. CSV file with filename, latitude, longitude, recording_date.
+    * Default value for `--filelist`; see its CSV format under [command-line options](#command-line-options).
 * `date`
-    * Default value for the --date option. YYYYMMDD, MMDD or "file" to extract from file names.
+    * Default value for `--date`. YYYY-MM-DD, YYYYMMDD, MMDD or "file" to extract from file names.
 * `latitude`
-    * Default value for the --latitude option.
+    * Default value for the `--lat` option.
 * `longitude`
-    * Default value for the --longitude option.
+    * Default value for the `--lon` option.
 * `region`
     * Default value for the --region option. eBird county code or prefix, e.g. CA-ON (Ontario) or CA-ON-OT (Ottawa).
 * `min_occurrence`
@@ -223,11 +225,15 @@ For settings in the audio, infer and misc sections, refer to the [BriteKit docum
 * `exclude_list`
     * Default value for the --exclude option.
 * `save_rarities`
-    * If true, create a rarities output directory and save labels for low-occurrence classes. Default = false.
+    * If true, save low-occurrence detections separately when occurrence filtering is active: Audacity labels in a `rarities` directory and CSV detections in `rarities.csv`. The supplied YAML defaults set this to true.
 * `low_band_classifier`
-    * If true, use the low-band classifier in addition to the main classifier. The low-band classifier detects low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats. Default = false.
+    * If true, use the low-band classifier in addition to the main classifier. The low-band classifier detects low-frequency Ruffed Grouse drumming and Spruce Grouse wing beats. Enabled by default for CUDA and Apple Metal; disabled for CPU inference.
+* `min_label_length`
+    * Default value for `--min-label-length`. Default = null (no minimum).
+* `max_label_length`
+    * Default value for `--max-label-length`. Default = null (no maximum).
 
-You should not make changes to any of the default YAML files described above. To apply your own overrides, create a file such as yaml/settings.yaml. Then in the analyze command specify `--cfg yaml/settings.yaml`. For example, you could use a custom YAML file like this so you do not have to set these options at the command-line every time:
+You should not make changes to any of the default YAML files described above. To apply your own overrides, create a file such as yaml/settings.yaml. Then in the analyze command specify `--cfg yaml/settings.yaml`. Explicit command-line options take precedence over YAML settings. For example, you could use a custom YAML file like this so you do not have to set these options at the command-line every time:
 
 ```
 infer:
@@ -248,18 +254,16 @@ import britekit as bk
 import hawkears as he
 
 print(f"HawkEars version={he.__version__}")
-cfg = he.get_config()
-cfg.infer.max_models = 3
-
 bk.util.set_logging(level=logging.INFO, timestamp=False)
 he.commands.analyze(
     input_path="my_input_dir",
     output_path="my_output_dir",
+    max_models=3,
     quiet=True,
 )
 ```
 
-The analyze function is defined and documented in src/hawkears/commands/_analyze.py.
+The [analyze function](src/hawkears/commands/_analyze.py) documents all parameters. Pass `return_results=True` to receive an [AnalysisResult](src/hawkears/core/analysis_result.py) containing structured detections, and `rtype=None` to disable label-file output. A `progress_callback` can receive progress updates. Use `data_root` to select an initialized working directory explicitly; otherwise analysis uses the current directory.
 
 ## User Feedback
-If you have any problems during installation or usage, please post an issue here. We would also appreciate any enhancement requests or examples of false positives or false negatives, which can also be posted as issues, or in an email to jhuus1 at gmail dot com.
+If you have any problems during installation or usage, please [open an issue](https://github.com/jhuus/HawkEars/issues). We would also appreciate any enhancement requests or examples of false positives or false negatives, which can also be posted as issues, or in an email to jhuus1 at gmail dot com.
