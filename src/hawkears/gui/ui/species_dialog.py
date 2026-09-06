@@ -1,4 +1,4 @@
-"""Dialog for choosing a project's HawkEars target classes."""
+"""Dialog for choosing a project's HawkEars target species."""
 
 # mypy: disable-error-code="union-attr"
 
@@ -38,7 +38,7 @@ class SpeciesDialog(QDialog):
         heading = QLabel(self.tr("Target species"))
         heading.setObjectName("pageTitle")
         description = QLabel(
-            self.tr("Select the classes HawkEars should include in this project.")
+            self.tr("Select the species HawkEars should include in this project.")
         )
         description.setObjectName("pageSubtitle")
         description.setWordWrap(True)
