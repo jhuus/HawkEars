@@ -13,6 +13,84 @@ from hawkears.gui.services.spectrogram import ReviewSpectrogram
 from hawkears.gui.ui.main_window import MainWindow
 
 
+@pytest.mark.parametrize("use_queue", [False, True])
+def test_review_next_without_saving_and_stable_session_position(
+    tmp_path, monkeypatch, use_queue
+):
+    app = QApplication.instance() or QApplication([])
+    definition = SpeciesDefinition(
+        "hawkears:CONI", "Common Nighthawk", "Common Nighthawk", None, "CONI", None, 0
+    )
+    database = ProjectDatabase.create(tmp_path / "navigation.hawkears", "Navigation")
+    species = database.species.ensure_catalog_species(definition)
+    recording = database.recordings.add(tmp_path / "night.wav")
+    run_id = database.analysis.create_run(
+        "test", {}, species_ids=[species.id], recording_ids=[recording.id]
+    )
+    item_id = database.analysis.item_ids(run_id)[recording.id]
+    for index in range(3):
+        database.detections.create_inferred(
+            recording.id, item_id, species.id, index * 3000, (index + 1) * 3000, 0.9
+        )
+    window = MainWindow(
+        class_catalog=[definition], application_paths=ApplicationPaths(tmp_path)
+    )
+    page = window.review_page
+    monkeypatch.setattr(page.spectrogram, "_start_load", lambda _: None)
+    try:
+        window._activate_project("Navigation", database=database)
+        if use_queue:
+            queue_id = database.review_queues.create(
+                "Review sample", run_id, species.id, min_score=0,
+                max_per_recording=10, min_spacing_ms=0, ordering="chronological"
+            )
+            window._load_results(selected_queue_id=queue_id)
+        window.results_page.select_unreviewed()
+        ids = window.results_page.visible_detection_ids()
+        window._start_review(ids[0])
+        assert page.position.text() == "Detection 1 of 3 in this review session"
+        assert page.next_button.isEnabled()
+        assert not page.save_button.isEnabled()
+        page.correct_button.click()
+        page.notes.setPlainText("Unsaved notes")
+        page.next_button.click()
+        assert page._detection_id == ids[1]
+        assert page.position.text() == "Detection 2 of 3 in this review session"
+        assert database.detections.get_result(ids[0]).review_verdict is None
+        assert database.detections.get_result(ids[0]).review_notes == ""
+        page.previous_button.click()
+        assert page._detection_id == ids[0]
+        assert page.notes.toPlainText() == ""
+        assert page.verdict_group.checkedButton() is None
+        page.correct_button.click()
+        page.save_button.click()
+        assert page._detection_id == ids[1]
+        assert page.position.text() == "Detection 2 of 3 in this review session"
+        assert not window.results_page.is_detection_visible(ids[0])
+        page.previous_button.click()
+        assert page._detection_id == ids[0]
+        page.uncertain_button.click()
+        page.next_button.click()
+        assert (
+            database.detections.get_result(ids[0]).review_verdict
+            is ReviewVerdict.CORRECT
+        )
+        page.next_button.click()
+        assert page._detection_id == ids[2]
+        assert page.next_button.text() == "Finish without saving"
+        page.next_button.click()
+        assert window.pages.currentWidget() is window.results_page
+        assert page._detection_id is None
+        assert not page.next_button.isEnabled()
+        assert window._review_sequence == []
+        assert database.detections.get_result(ids[1]).review_verdict is None
+        assert database.detections.get_result(ids[2]).review_verdict is None
+    finally:
+        page.spectrogram.shutdown()
+        window.close()
+        app.processEvents()
+
+
 def test_analysis_history_opens_selected_results_and_clears_on_close(tmp_path):
     app = QApplication.instance() or QApplication([])
     database = ProjectDatabase.create(tmp_path / "history.hawkears", "History")

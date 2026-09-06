@@ -1766,12 +1766,15 @@ class ResultsPage(QWidget):
             return int(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole))
         return self.first_visible_detection_id()
 
-    def next_visible_detection_id(self, detection_id: int) -> int | None:
-        visible_ids = [
+    def visible_detection_ids(self) -> list[int]:
+        return [
             int(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole))
             for row in range(self.table.rowCount())
             if not self.table.isRowHidden(row)
         ]
+
+    def next_visible_detection_id(self, detection_id: int) -> int | None:
+        visible_ids = self.visible_detection_ids()
         try:
             current_index = visible_ids.index(detection_id)
         except ValueError:
@@ -2217,6 +2220,7 @@ class ReviewPage(QWidget):
     save_requested = Signal(int, object, str, str, bool)
     bounds_requested = Signal(int, int, int, int, int)
     previous_requested = Signal()
+    next_requested = Signal()
     help_requested = Signal(str)
 
     def __init__(self, class_catalog: list[SpeciesDefinition]) -> None:
@@ -2316,6 +2320,14 @@ class ReviewPage(QWidget):
 
         review_card, review = card_layout()
         review.addWidget(section_title(self.tr("Your review")))
+        self.position = QLabel(self.tr("No review session"))
+        self.position.setToolTip(
+            self.tr(
+                "Position in the results selected when this review session started. "
+                "This is not the number of detections reviewed."
+            )
+        )
+        review.addWidget(self.position)
         review.addWidget(QLabel(self.tr("Is the predicted label correct?")))
         verdicts = QGridLayout()
         self.correct_button = QPushButton(self.tr("✓  Correct"))
@@ -2391,7 +2403,21 @@ class ReviewPage(QWidget):
         self.save_button.setProperty("primary", True)
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(lambda: self._save(True))
-        save_actions.addWidget(self.previous_button)
+        navigation = QHBoxLayout()
+        navigation.addWidget(self.previous_button)
+        navigation.addStretch()
+        self.next_button = QPushButton(self.tr("Next without saving"))
+        self.next_button.setEnabled(False)
+        self.next_button.setToolTip(
+            self.tr(
+                "Discard unsaved review edits and move on without marking the "
+                "detection as reviewed or skipped. Previously saved changes remain. "
+                "(Alt+Right)"
+            )
+        )
+        self.next_button.clicked.connect(self.next_requested)
+        navigation.addWidget(self.next_button)
+        review.addLayout(navigation)
         save_actions.addStretch()
         save_actions.addWidget(self.save_stop_button)
         save_actions.addWidget(self.save_button)
@@ -2437,6 +2463,7 @@ class ReviewPage(QWidget):
             ("Ctrl+Return", lambda: self._save(True)),
             ("Ctrl+Shift+Return", lambda: self._save(False)),
             ("Alt+Left", self.previous_button.click),
+            ("Alt+Right", self.next_button.click),
         )
         self._review_shortcuts: list[QShortcut] = []
         for key, callback in shortcuts:
@@ -2452,6 +2479,7 @@ class ReviewPage(QWidget):
             self.correction,
             self.notes,
             self.previous_button,
+            self.next_button,
             self.save_stop_button,
             self.save_button,
             self.play_context_button,
@@ -2505,9 +2533,24 @@ class ReviewPage(QWidget):
         """Enable navigation to the previously opened detection."""
         self.previous_button.setEnabled(enabled)
 
+    def set_navigation_position(self, index: int, total: int, has_next: bool) -> None:
+        self.position.setText(
+            self.tr("Detection %1 of %2 in this review session")
+            .replace("%1", str(index))
+            .replace("%2", str(total))
+        )
+        self.next_button.setEnabled(True)
+        self.next_button.setText(
+            self.tr("Next without saving")
+            if has_next
+            else self.tr("Finish without saving")
+        )
+
     def clear_detection(self) -> None:
         """Discard the current review before leaving its project or results."""
         self._detection_id = None
+        self.position.setText(self.tr("No review session"))
+        self.next_button.setEnabled(False)
         self._displayed_species_name = None
         self._original_species_name = None
         self.cleanup_playback_file()
@@ -3489,6 +3532,7 @@ class MainWindow(QMainWindow):
         self._class_catalog = class_catalog
         self._page_help_dialog: PageHelpDialog | None = None
         self._review_history: list[int] = []
+        self._review_sequence: list[int] = []
 
         root = QWidget()
         root.setObjectName("appRoot")
@@ -3546,6 +3590,7 @@ class MainWindow(QMainWindow):
         self.review_page.save_requested.connect(self._save_review)
         self.review_page.bounds_requested.connect(self._apply_detection_bounds)
         self.review_page.previous_requested.connect(self._open_previous_review)
+        self.review_page.next_requested.connect(self._next_without_saving)
         self.project_page.recording_scope_changed.connect(self._save_recording_scope)
         self.project_page.edit_species_requested.connect(self._edit_species)
         self.analysis_page.settings_changed.connect(self._save_analysis_settings)
@@ -3866,9 +3911,15 @@ class MainWindow(QMainWindow):
                     "species different from the original detected species, or leave Correct "
                     "species blank when the correct identification is unknown.</p>"
                     "<p><b>Save and next</b> stores the review and advances according to the "
-                    "current visible Results ordering. <b>Save and stop</b> stores it and "
+                    "Results ordering selected at the start of the session. "
+                    "<b>Save and stop</b> stores it and "
                     "returns without advancing. <b>Previous detection</b> returns to the "
                     "detection you previously opened without saving current unsaved edits. "
+                    "<b>Next without saving</b> discards unsaved review edits and moves "
+                    "forward without changing the stored review or marking it skipped. "
+                    "At the end, <b>Finish without saving</b> returns to Results. "
+                    "The position indicator counts the initial session selection, not "
+                    "completed reviews; filtered-out detections are bypassed. "
                     "Reviews and corrections append revision "
                     "history; original inference values remain available for reporting.</p>"
                     "<h3>Keyboard workflow</h3>"
@@ -3878,7 +3929,8 @@ class MainWindow(QMainWindow):
                     "field. Selecting a corrected species then moves focus to Save and next; "
                     "you can also leave it blank and use the save shortcut.</p>"
                     "<p>Use <b>Ctrl+Enter</b> to save and advance, <b>Ctrl+Shift+Enter</b> to "
-                    "save and stop, and <b>Alt+Left</b> for the previous detection. "
+                    "save and stop, <b>Alt+Left</b> for the previous detection, and "
+                    "<b>Alt+Right</b> to move on without saving. "
                     "<b>Space</b> plays or stops the detection unless you are typing in Notes, "
                     "choosing a species, or using a focused button. Tab moves through verdicts, "
                     "review details, save actions, and then playback controls.</p>"
@@ -4584,6 +4636,7 @@ class MainWindow(QMainWindow):
         if self._run_management_dialog is not None:
             self._run_management_dialog.configure_runs(runs)
         self._review_history.clear()
+        self._review_sequence.clear()
         self.review_page.set_previous_enabled(False)
         self._load_results()
         self.reports_page.configure_runs(runs)
@@ -4809,6 +4862,7 @@ class MainWindow(QMainWindow):
             )
             return
         self._review_history.clear()
+        self._review_sequence.clear()
         self.review_page.set_previous_enabled(False)
         self._load_results(
             selected_run_id=self.results_page.current_run_id(),
@@ -5000,11 +5054,14 @@ class MainWindow(QMainWindow):
 
     def _clear_review(self) -> None:
         self._review_history.clear()
+        self._review_sequence.clear()
         self.review_page.clear_detection()
 
     def _start_review(self, detection_id: int) -> None:
         """Start a new review navigation history from a Results selection."""
         self._review_history.clear()
+        self._review_sequence.clear()
+        self._review_sequence = self.results_page.visible_detection_ids()
         self._open_review(detection_id)
 
     def _open_review(self, detection_id: int, *, record_history: bool = True) -> None:
@@ -5045,7 +5102,37 @@ class MainWindow(QMainWindow):
         ):
             self._review_history.append(detection_id)
         self.review_page.set_previous_enabled(len(self._review_history) > 1)
+        if not self._review_sequence:
+            self._review_sequence = self.results_page.visible_detection_ids()
+        if detection_id not in self._review_sequence:
+            self._review_sequence.append(detection_id)
+        self.review_page.set_navigation_position(
+            self._review_sequence.index(detection_id) + 1,
+            len(self._review_sequence),
+            self._next_review_detection_id(detection_id) is not None,
+        )
         self._show_page(4)
+
+    def _next_review_detection_id(self, detection_id: int) -> int | None:
+        if detection_id not in self._review_sequence:
+            return self.results_page.next_visible_detection_id(detection_id)
+        visible = set(self.results_page.visible_detection_ids())
+        index = self._review_sequence.index(detection_id)
+        return next(
+            (item for item in self._review_sequence[index + 1:] if item in visible),
+            None,
+        )
+
+    def _next_without_saving(self) -> None:
+        detection_id = self.review_page._detection_id
+        if detection_id is None:
+            return
+        next_id = self._next_review_detection_id(detection_id)
+        if next_id is not None:
+            self._open_review(next_id)
+        else:
+            self._clear_review()
+            self._show_page(3)
 
     def _open_previous_review(self) -> None:
         """Return to the preceding detection in the current review history."""
@@ -5144,9 +5231,7 @@ class MainWindow(QMainWindow):
         selected_queue_id = self.results_page.current_queue_id()
         next_detection_id = None
         if advance:
-            next_detection_id = self.results_page.next_visible_detection_id(
-                detection_id
-            )
+            next_detection_id = self._next_review_detection_id(detection_id)
         try:
             target_species_id = original_species.id
             revision_notes = (
@@ -5188,9 +5273,7 @@ class MainWindow(QMainWindow):
                 and next_detection_id is not None
                 and not self.results_page.is_detection_visible(next_detection_id)
             ):
-                next_detection_id = self.results_page.first_visible_detection_id(
-                    excluding=detection_id
-                )
+                next_detection_id = self._next_review_detection_id(detection_id)
         if advance and next_detection_id is not None:
             self._open_review(next_detection_id)
         else:
