@@ -26,7 +26,7 @@ The graphical interface provides a complete, project-based analysis workflow: se
 HawkEars provides three interfaces:
 
 - [Graphical user interface (GUI)](GUI.md) for managing projects, analyzing recordings, reviewing detections and exporting results.
-- [Command-line interface (CLI)](#analyzing-recordings) for batch analysis and scripted workflows, described below.
+- [Command-line interface (CLI)](#analyzing-recordings) for batch analysis and scripted workflows.
 - [Application programming interface (API)](#api) for integrating analysis into Python programs.
 
 This repository includes the source code and trained models, but not the raw data or spectrograms used to train them.
@@ -54,12 +54,16 @@ HawkEars is distributed under the terms of the [MIT](https://spdx.org/licenses/M
 
 HawkEars can use a [CUDA-compatible NVIDIA GPU](https://developer.nvidia.com/cuda/gpus) with a CUDA-enabled PyTorch installation, or Apple Metal acceleration on Apple silicon Macs such as those with M3 or M4 chips. For CPU-based inference in a pip installation, you can install OpenVINO with `pip install openvino` to improve performance.
 
-To install the GUI on Windows, run [this installer](https://github.com/jhuus/HawkEars/releases/download/2.3.0/HawkEars-2.3.0-Windows-x64.exe). Launch HawkEars using its shortcut; the first launch will ask where to store model data and download the required resources. See the [GUI guide](GUI.md) for the project workflow. Note that the Windows installer does not install the CLI or API; just the GUI.
+To install the GUI on Windows, run [this installer](https://github.com/jhuus/HawkEars/releases/download/2.3.0/HawkEars-2.3.0-Windows-x64.exe). Launch HawkEars using its shortcut; the first launch will ask where to store model data and download the required resources. See the [GUI guide](GUI.md) for the project workflow. Note that the Windows installer does not install the CLI or API - just the GUI.
 
-For a pip installation on Windows, macOS or Linux, use a virtual environment, such as a [Python venv](https://docs.python.org/3/library/venv.html). This installs the GUI, CLI and API. Once you have the environment set up, install HawkEars using pip:
+For a pip installation on Windows, macOS or Linux, use a virtual environment, such as a [Python venv](https://docs.python.org/3/library/venv.html). Once you have the environment set up, install HawkEars using pip (this installs the CLI, GUI and API):
 
 ```
 pip install hawkears
+```
+To upgrade an existing installation, type:
+```
+pip install --upgrade hawkears
 ```
 For NVIDIA GPU acceleration in a Windows pip installation, install the CUDA-enabled PyTorch packages. The following command uses the [official PyTorch 2.8.0 CUDA 12.6 wheels](https://pytorch.org/get-started/previous-versions/):
 ```
@@ -68,19 +72,19 @@ pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https
 ```
 Note that cu126 refers to CUDA 12.6.
 
-After installing with pip, initialize a working directory using the `init` command:
+After installing with pip, either for a new or upgraded installation, initialize a working directory using the `init` command:
 ```
 hawkears init
 ```
-This creates and populates several directories under the current working directory, and downloads the model checkpoint files. Use `--dest <path>` to specify an alternative location, then change to that directory before running CLI analysis. You can launch the GUI from the command-line as follows:
+This creates and populates several directories under the current working directory, and downloads the model checkpoint files. For an upgrade, this replaces the old model checkpoint files with new ones. Use `--dest <path>` to specify an alternative location, then change to that directory before running CLI analysis.
+
+You can launch the GUI from the command-line on Windows, macOS or Linux as follows:
 ```
 hawkears gui
 ```
-CLI usage is described below.
-
 ## Analyzing Recordings
 ### Overview
-To run analysis (aka inference), type:
+To run analysis (aka inference) with the CLI, type:
 
 ```
 hawkears analyze <input path> -o <output path> <additional options>
@@ -116,7 +120,7 @@ When possible, you should provide locations and dates to the analyze command. In
 
 ### Specifying Ensemble Size
 
-The `--models` option lets you set the number of models in the main ensemble, from 1 to 6. Fewer models make analysis faster but may reduce accuracy. The default is all six models with CUDA, or three with CPU or Apple Metal acceleration. See [command-line options](#command-line-options) for details.
+The `--models` option lets you set the number of models in the main ensemble, from 1 to 6. Fewer models make analysis faster but may reduce accuracy. The default is all six models with CUDA, or three with CPU or Apple Metal acceleration.
 
 ### Enabling or Disabling the Low-band Classifier
 
@@ -161,7 +165,7 @@ The `analyze` command requires an input path, supplied either as a positional ar
 * `--seg <seconds>`
     * Specify this if you want fixed-length output labels. Otherwise, variable-length labels are generated.
 * `--min-label-length <seconds>`
-    * Exclude variable-length labels shorter than this duration, including short pieces created by `--max-label-length`. Must be a positive multiple of 0.25 seconds and cannot exceed `--max-label-length`. Cannot be combined with `--seg`.
+    * Exclude variable-length labels shorter than this duration. Must be a positive multiple of 0.25 seconds and cannot exceed `--max-label-length`. Cannot be combined with `--seg`.
 * `--max-label-length <seconds>`
     * Limit variable-length labels to this positive duration in seconds. Longer labels are split consecutively. Cannot be combined with `--seg`.
 * `--start <seconds>`
@@ -237,7 +241,7 @@ You should not make changes to any of the default YAML files described above. To
 
 ```
 infer:
-  max_models: 6
+  max_models: 2
 hawkears:
   low_band_classifier: false
   latitude: 45.4321

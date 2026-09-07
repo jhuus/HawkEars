@@ -151,7 +151,7 @@ The Review page displays a 10-second spectrogram around the detection. You can:
 * Drag on the spectrogram and click **Apply bounds** to revise the time and frequency bounds.
 * Mark the identification Correct, Incorrect or Uncertain.
 * Select a corrected species when the predicted species is wrong.
-* Add optional notes, then save and stop or save and advance to the next visible result.
+* Add optional notes, then save and stop or save and advance to the next result.
 
 Edits create a new detection revision. The original species and bounds remain available for reporting and export.
 
