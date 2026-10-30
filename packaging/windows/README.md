@@ -51,6 +51,17 @@ installer:
 
 ## Validation order
 
+Windows model downloads use `truststore` and Windows native certificate-chain
+validation. The standalone build explicitly includes this dependency, and its
+smoke test constructs a verifying TLS context. Rebuild the application as well
+as the installer when updating this download behavior.
+
+If setup reports `CERTIFICATE_VERIFY_FAILED`, retry the rebuilt application on
+the affected Windows machine. Windows must trust the download server's chain,
+including any organization-managed HTTPS inspection certificate. Never disable
+certificate verification to work around this error. The packaging smoke test
+does not perform a network download, so first-run setup remains a required check.
+
 1. Run `HawkEars.exe` directly from `HawkEars.dist`.
 2. Complete first-run setup in a new data directory.
 3. Analyze a short recording with CUDA.

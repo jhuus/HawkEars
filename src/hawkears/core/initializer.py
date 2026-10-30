@@ -9,6 +9,8 @@ import json
 import logging
 from pathlib import Path
 import shutil
+import ssl
+import sys
 import tempfile
 from typing import Callable, Iterator, Mapping
 import urllib.request
@@ -191,7 +193,7 @@ def download_and_extract(
         archive_path = Path(temporary.name)
     try:
         logging.info("Downloading %s ...", url)
-        urllib.request.urlretrieve(
+        _download_archive(
             url,
             archive_path,
             reporthook=_download_reporter(
@@ -244,6 +246,35 @@ def download_and_extract(
         archive_path.unlink(missing_ok=True)
         if staging_directory.exists():
             shutil.rmtree(staging_directory)
+
+
+def _download_archive(url: str, destination: Path, *, reporthook) -> None:
+    """Use Windows certificate-chain validation for Windows downloads."""
+    if sys.platform != "win32":
+        urllib.request.urlretrieve(url, destination, reporthook=reporthook)
+        return
+
+    # Native validation can fetch missing intermediates and uses Windows-managed
+    # trust, including organization certificates. Keep this context local rather
+    # than replacing SSL behavior process-wide.
+    import truststore
+
+    context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    with urllib.request.urlopen(url, context=context) as response:
+        size_header = response.headers.get("Content-Length")
+        total = int(size_header) if size_header is not None else -1
+        completed = 0
+        reporthook(0, 1, total)
+        with destination.open("wb") as output:
+            while chunk := response.read(64 * 1024):
+                output.write(chunk)
+                completed += len(chunk)
+                reporthook(completed, 1, total)
+        if total >= 0 and completed < total:
+            raise urllib.error.ContentTooShortError(
+                f"Download incomplete: received {completed} of {total} bytes",
+                None,
+            )
 
 
 def _extract_zip(archive_path: Path, destination: Path) -> None:

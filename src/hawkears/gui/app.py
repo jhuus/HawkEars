@@ -147,6 +147,7 @@ def _initial_project_path(arguments: list[str]) -> Path | None:
 def _run_packaging_smoke_test() -> int:
     """Import inference dependencies and required packaged resources."""
     import importlib
+    import ssl
     import sys
 
     import torch
@@ -169,6 +170,13 @@ def _run_packaging_smoke_test() -> int:
     from hawkears.core.initializer import installation_resources
     from hawkears.core.config_loader import get_config
     from hawkears.gui.ui.resources import brand_icon_path
+
+    if sys.platform == "win32":
+        import truststore
+
+        context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        if not context.check_hostname or context.verify_mode != ssl.CERT_REQUIRED:
+            raise RuntimeError("Model download certificate verification is disabled.")
 
     model_modules = (bknet, dla, effnet, gernet, hgnet, nfnet, timm_model, vovnet)
     if not callable(model_loader.load_from_checkpoint) or not all(model_modules):
