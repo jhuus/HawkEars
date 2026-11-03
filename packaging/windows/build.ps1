@@ -32,9 +32,9 @@ if (-not (Test-Path $Python)) {
 & $Python -m pip install --upgrade pip
 Assert-LastExitCode "Upgrading pip"
 & $Python -m pip install `
-    torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 `
-    --index-url https://download.pytorch.org/whl/cu126
-Assert-LastExitCode "Installing CUDA 12.6 PyTorch"
+    torch==2.8.0+cu128 torchvision==0.23.0+cu128 torchaudio==2.8.0+cu128 `
+    --index-url https://download.pytorch.org/whl/cu128
+Assert-LastExitCode "Installing CUDA 12.8 PyTorch"
 & $Python -m pip install openvino==2026.2.1
 Assert-LastExitCode "Installing OpenVINO"
 
@@ -58,7 +58,7 @@ if ($AppVersion -notmatch "^(\d+)\.(\d+)\.(\d+)") {
 $WindowsVersion = "$($Matches[1]).$($Matches[2]).$($Matches[3]).0"
 
 New-Item -ItemType Directory -Force $BuildRoot | Out-Null
-$EnvironmentLock = Join-Path $BuildRoot "requirements-windows-cu126.txt"
+$EnvironmentLock = Join-Path $BuildRoot "requirements-windows-cu128.txt"
 (& $Python -m pip freeze) | Set-Content -Encoding UTF8 $EnvironmentLock
 Assert-LastExitCode "Recording the Windows build environment"
 

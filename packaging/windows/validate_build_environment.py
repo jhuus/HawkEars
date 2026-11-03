@@ -16,9 +16,9 @@ def main() -> None:
     for package, (expected, installed) in expected_versions.items():
         if not installed.startswith(expected):
             raise RuntimeError(f"Expected {package} {expected}, but found {installed}.")
-    if torch.version.cuda != "12.6":
+    if torch.version.cuda != "12.8":
         raise RuntimeError(
-            f"Expected the CUDA 12.6 PyTorch build, but found {torch.version.cuda}."
+            f"Expected the CUDA 12.8 PyTorch build, but found {torch.version.cuda}."
         )
     if platform.architecture()[0] != "64bit":
         raise RuntimeError("The HawkEars Windows build requires 64-bit Python.")

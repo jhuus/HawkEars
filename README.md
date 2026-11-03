@@ -61,12 +61,12 @@ For a pip installation on Windows, macOS or Linux, use a virtual environment, su
 ```
 pip install hawkears
 ```
-For NVIDIA GPU acceleration in a Windows pip installation, install the CUDA-enabled PyTorch packages. The following command uses the [official PyTorch 2.8.0 CUDA 12.6 wheels](https://pytorch.org/get-started/previous-versions/):
+For NVIDIA GPU acceleration in a Windows pip installation, install the CUDA-enabled PyTorch packages. The following command uses the [official PyTorch 2.8.0 CUDA 12.8 wheels](https://pytorch.org/get-started/previous-versions/):
 ```
 pip uninstall -y torch torchvision torchaudio
-pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu126
+pip install torch==2.8.0+cu128 torchvision==0.23.0+cu128 torchaudio==2.8.0+cu128 --index-url https://download.pytorch.org/whl/cu128
 ```
-Note that cu126 refers to CUDA 12.6.
+Note that cu128 refers to CUDA 12.8.
 
 After installing with pip, initialize a working directory using the `init` command:
 ```
