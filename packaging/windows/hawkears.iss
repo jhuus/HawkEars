@@ -30,6 +30,9 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+DiskSpanning=yes
+DiskSliceSize=1500000000
+SlicesPerDisk=1
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
