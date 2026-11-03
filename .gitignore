@@ -98,6 +98,7 @@ _temp_*
 /recordings/
 /reports/
 /yaml/
+/yaml-2.3/
 /run.sh
 /packaging/windows/.venv/
 /packaging/windows/build/
