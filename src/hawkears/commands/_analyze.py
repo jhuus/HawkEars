@@ -519,6 +519,7 @@ def _analyze_cmd(
 
     if debug:
         util.set_logging(level=logging.DEBUG, timestamp=True)
+        logging.getLogger("torio._extension.utils").setLevel(logging.WARNING)
     else:
         util.set_logging(level=logging.INFO, timestamp=False)
 
