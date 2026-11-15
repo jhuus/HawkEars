@@ -85,6 +85,12 @@ class LowBandHeuristics:
         _, low_band_frame_map, _ = self.predictor.get_recording_scores(
             recording_path, start_seconds, use_loaded_audio=True
         )
+        if low_band_frame_map is None:
+            logging.warning(
+                "No low-band predictions for %s; using main model scores",
+                recording_path,
+            )
+            return
 
         # shape = (num_frames, num_classes) and occasionally the two maps
         # differ by one or two frames
