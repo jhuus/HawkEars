@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from pathlib import Path
 from collections import namedtuple
 from types import MethodType, SimpleNamespace
@@ -15,8 +16,9 @@ from hawkears.core.analysis_result import (
 from hawkears.core.analyzer import Analyzer
 
 
+@pytest.mark.parametrize("skip_unreadable", [False, True])
 def test_audio_load_failure_does_not_report_recording_as_completed(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, skip_unreadable
 ):
     recording = tmp_path / "corrupt.wav"
     recording.write_bytes(b"not audio")
@@ -27,6 +29,7 @@ def test_audio_load_failure_does_not_report_recording_as_completed(
     predictor = SimpleNamespace(
         audio=audio,
         get_overlapping_scores=lambda path, start_times: None,
+        save_manifest=lambda output_path: None,
     )
     monkeypatch.setattr(
         "hawkears.core.analyzer.Predictor", lambda *args, **kwargs: predictor
@@ -47,13 +50,19 @@ def test_audio_load_failure_does_not_report_recording_as_completed(
     analyzer._total_recordings = 1
     progress: list[AnalysisProgress] = []
 
-    with pytest.raises(InferenceError, match="Could not decode audio"):
+    expected = (
+        nullcontext()
+        if skip_unreadable
+        else pytest.raises(InferenceError, match="Could not decode audio")
+    )
+    with expected:
         analyzer._process_recordings(
             [str(recording)],
             str(tmp_path),
             0,
             1,
             progress_callback=progress.append,
+            skip_unreadable=skip_unreadable,
         )
 
     assert progress == []
@@ -154,6 +163,8 @@ def test_analyzer_resolves_relative_filelist_paths_for_cli_and_api(
         file_sizes,
         progress_callback,
         cancellation_callback,
+        *,
+        skip_unreadable=False,
     ):
         captured_paths.extend(recording_paths)
 
@@ -290,6 +301,8 @@ def test_analyzer_returns_structured_results_and_progress(tmp_path: Path):
         file_sizes,
         progress_callback,
         cancellation_callback,
+        *,
+        skip_unreadable=False,
     ):
         for recording_path in recording_paths:
             if cancellation_callback is not None and cancellation_callback():

@@ -86,6 +86,7 @@ def analyze(
     include_names: Optional[Collection[str]] = None,
     raise_errors: bool = False,
     data_root: Path | str | None = None,
+    skip_unreadable: bool = False,
 ) -> AnalysisResult | None:
     """
     Run inference on audio recordings to detect and classify sounds.
@@ -143,6 +144,7 @@ def analyze(
     - raise_errors: Re-raise inference and validation errors for application callers.
     - data_root: Explicit HawkEars data directory. If omitted, legacy
       current-directory discovery is retained.
+    - skip_unreadable: Log and skip recordings that fail to decode.
     """
 
     # defer slow imports to improve --help performance
@@ -314,6 +316,7 @@ def analyze(
             cancellation_callback=cancellation_callback,
             recording_paths_override=recording_paths,
             occurrence_metadata=occurrence_metadata,
+            skip_unreadable=skip_unreadable,
         )
 
         if not quiet:
@@ -568,6 +571,7 @@ def _analyze_cmd(
             max_label_length=max_label_length,
             min_label_length=min_label_length,
             cancellation_callback=cancel_requested.is_set,
+            skip_unreadable=os.path.isdir(input_path) and not top,
         )
     finally:
         signal.signal(signal.SIGINT, previous_sigint_handler)

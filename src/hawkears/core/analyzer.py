@@ -124,6 +124,8 @@ class Analyzer:
         file_sizes=None,
         progress_callback=None,
         cancellation_callback=None,
+        *,
+        skip_unreadable=False,
     ):
         """
         This runs on its own thread and processes all recordings in the given list.
@@ -220,14 +222,17 @@ class Analyzer:
                     predictor.audio.seconds(),
                     audio_error,
                 )
-                if audio_error is not None:
+                if audio_error is not None and not skip_unreadable:
                     raise InferenceError(
                         f'Could not load recording "{recording_path}": '
                         f"{audio_error or 'unknown audio decoding error'}"
                     )
                 if progress is not None:
                     progress.advance(task_id, file_sizes.get(recording_path, 0))
-                elif not self.quiet:
+                if audio_error is not None:
+                    logger.warning("Skipping unreadable recording %s", recording_path)
+                    continue
+                if progress is None and not self.quiet:
                     logging.info(
                         f"No predictions generated for {recording_path} (length = {predictor.audio.seconds():.2f} seconds)"
                     )
@@ -614,6 +619,7 @@ class Analyzer:
         cancellation_callback: Optional[Callable[[], bool]] = None,
         recording_paths_override: Optional[Sequence[Path]] = None,
         occurrence_metadata: Optional[Mapping[str, Mapping[str, object]]] = None,
+        skip_unreadable: bool = False,
     ) -> AnalysisResult | None:
         """
         Run inference.
@@ -636,6 +642,7 @@ class Analyzer:
           discovering them from input_path.
         - occurrence_metadata: Immutable location and date values keyed by recording
           path. When supplied, these values take precedence over a configured file list.
+        - skip_unreadable: Log and skip recordings that fail to decode.
 
         If recording stems collide, output files follow the input directory layout
         and retain audio extensions (e.g. site/bird.wav_scores.txt). CSV recording
@@ -760,6 +767,7 @@ class Analyzer:
                     file_sizes,
                     progress_callback,
                     cancellation_callback,
+                    skip_unreadable=skip_unreadable,
                 )
             elif num_threads > 1:
                 recordings_per_thread = self._split_list(recording_paths, num_threads)
@@ -777,6 +785,7 @@ class Analyzer:
                             file_sizes,
                             progress_callback,
                             cancellation_callback,
+                            skip_unreadable=skip_unreadable,
                         )
                         for i in range(num_threads)
                     ]
