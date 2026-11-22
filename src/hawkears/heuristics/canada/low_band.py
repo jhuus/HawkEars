@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from typing import cast, Optional
 
-from britekit import Audio, Predictor
+from britekit import Audio
 import numpy as np
 from omegaconf import OmegaConf
 
@@ -13,6 +13,7 @@ from hawkears.core.config import HawkEarsBaseConfig
 from hawkears.core.class_manager import ClassManager
 from hawkears.core.occurrence_manager import OccurrenceManager
 from hawkears.core.config_loader import load_auxiliary_config, resolve_config_paths
+from hawkears.core.worker_models import Predictor
 
 
 class LowBandHeuristics:

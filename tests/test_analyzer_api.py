@@ -303,6 +303,7 @@ def test_analyzer_returns_structured_results_and_progress(tmp_path: Path):
         cancellation_callback,
         *,
         skip_unreadable=False,
+        worker_models=None,
     ):
         for recording_path in recording_paths:
             if cancellation_callback is not None and cancellation_callback():

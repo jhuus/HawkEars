@@ -13,7 +13,6 @@ import polars as pl
 import pandas as pd
 
 from britekit import util
-from britekit import Predictor
 from britekit.core.exceptions import InferenceError
 
 from hawkears.core.config import HawkEarsBaseConfig
@@ -26,6 +25,7 @@ from hawkears.core.analysis_result import (
 )
 from hawkears.core.occurrence_manager import OccurrenceManager
 from hawkears.core.raven import write_raven_selection_table
+from hawkears.core.worker_models import Predictor, WorkerModelCache
 from hawkears.heuristics.base import HeuristicsManager
 
 logger = logging.getLogger(__name__)
@@ -126,6 +126,7 @@ class Analyzer:
         cancellation_callback=None,
         *,
         skip_unreadable=False,
+        worker_models: WorkerModelCache | None = None,
     ):
         """
         This runs on its own thread and processes all recordings in the given list.
@@ -140,8 +141,9 @@ class Analyzer:
         - task_id: Task ID for the progress bar.
         - file_sizes (dict, optional): Mapping of recording_path to file size in bytes.
         """
-        predictor = Predictor(self.cfg.misc.ckpt_folder, cfg=self.cfg)
-        heuristics_manager = self._load_heuristics_manager(predictor.audio)
+        with worker_models.startup() if worker_models is not None else nullcontext():
+            predictor = Predictor(self.cfg.misc.ckpt_folder, cfg=self.cfg)
+            heuristics_manager = self._load_heuristics_manager(predictor.audio)
 
         # Initial_start_times is a list of seed values for the spectrogram start times.
         # For example, suppose initial_start_times = [0, 1.0, 2.0] with 3 models.
@@ -771,24 +773,35 @@ class Analyzer:
                 )
             elif num_threads > 1:
                 recordings_per_thread = self._split_list(recording_paths, num_threads)
+                worker_models = (
+                    WorkerModelCache(num_threads)
+                    if util.get_device().startswith("cuda")
+                    else None
+                )
                 with ThreadPoolExecutor(max_workers=num_threads) as executor:
-                    futures = [
-                        executor.submit(
-                            self._process_recordings,
-                            recordings_per_thread[i],
-                            output_path,
-                            start_seconds,
-                            i + 1,
-                            top,
-                            progress,
-                            task_id,
-                            file_sizes,
-                            progress_callback,
-                            cancellation_callback,
-                            skip_unreadable=skip_unreadable,
-                        )
-                        for i in range(num_threads)
-                    ]
+                    try:
+                        futures = [
+                            executor.submit(
+                                self._process_recordings,
+                                recordings_per_thread[i],
+                                output_path,
+                                start_seconds,
+                                i + 1,
+                                top,
+                                progress,
+                                task_id,
+                                file_sizes,
+                                progress_callback,
+                                cancellation_callback,
+                                skip_unreadable=skip_unreadable,
+                                worker_models=worker_models,
+                            )
+                            for i in range(num_threads)
+                        ]
+                    except BaseException as error:
+                        if worker_models is not None:
+                            worker_models.abort(error)
+                        raise
 
         for future in futures:
             future.result()
