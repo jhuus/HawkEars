@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
-from britekit.core.base_config import BaseConfig
+from britekit.core.base_config import BaseConfig, InferenceConfig
 
 """
 HawkEarsConfig is embedded in HawkEarsBaseConfig, which inherits from the
@@ -55,5 +55,11 @@ class HawkEarsConfig:
 
 
 @dataclass
+class HawkEarsInferenceConfig(InferenceConfig):
+    staggered_hop_seconds: Optional[float] = 2.5
+
+
+@dataclass
 class HawkEarsBaseConfig(BaseConfig):
+    infer: HawkEarsInferenceConfig = field(default_factory=HawkEarsInferenceConfig)
     hawkears: HawkEarsConfig = field(default_factory=HawkEarsConfig)
